@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::py;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelProfile {
     /// The `model` every response reports (decider: `"decider-" + version`).
     pub name: String,

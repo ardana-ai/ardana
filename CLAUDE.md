@@ -34,9 +34,15 @@ Contracts are binding, its Requirements are the definition of done.
   `crates/ardana-core/tests/data/decider/` by running decider@23579f7 from `tmp/src/decider`.
 - `cargo xtask e2e <suite>` runs an end-to-end suite: `smoke`, or `rust` (`cargo test --workspace --
   --include-ignored`, the real-model tests included).
-- `ardana run --gguf <file> --tokenizer <tokenizer.json> [--config <decider_config.json>] [--layout plain|chat]
-  --request <file> [--gpu-layers -1|0] [--n-ctx N]` prints one `/v1/systemone` response as JSON; `--layout chat`
-  reads the chat template next to the tokenizer, and without `--config` the model gets the stock profile.
+- `ardana pull <ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model in
+  `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo); refs are `hf.co/<org>/<repo>[:<quant>]`
+  (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]` (read in place from
+  `$OLLAMA_MODELS`) and local GGUF paths; `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only.
+  `ardana list`, `ardana show <name>` (JSON) and `ardana rm <name>` (the entry only, never model files) manage it.
+- `ardana run <name> --request <file>` answers with a registry model; `ardana run --gguf <file> --tokenizer
+  <tokenizer.json> [--config <decider_config.json>] [--layout plain|chat] --request <file>` with explicit files; both
+  take `[--gpu-layers -1|0] [--n-ctx N]` and print one `/v1/systemone` response as JSON. `--layout chat` reads the
+  chat template next to the tokenizer, and without `--config` the model gets the stock profile.
 - Before reporting work: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo build --workspace`, `cargo test --workspace`, plus the item's Verify command.
 

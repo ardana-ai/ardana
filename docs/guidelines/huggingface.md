@@ -45,10 +45,28 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
   `HF_HOME=tmp/hf` no token file exists, and every Step 1 repo is ungated.
 
 ### Offline mode
-- Read `HF_HUB_OFFLINE` in `ardana-registry` yourself: treat `1`, `ON`, `YES`, `TRUE` (case-insensitive) as true,
-  like the Python client, and pass `.local_files_only(true)` on every download call when it is set.
+- Read `HF_HUB_OFFLINE` in `ardana-registry` yourself (`ardana_registry::hub::offline`): treat `1`, `ON`, `YES`,
+  `TRUE` (case-insensitive) as true, like the Python client, and pass `.local_files_only(true)` on every download call
+  when it is set.
 - In offline mode never call metadata endpoints (`info`, `list_tree`, `file_exists`); resolve everything through
-  `download_file().local_files_only(true)`.
+  `local_files_only(true)`: `snapshot_download().local_files_only(true)` returns the cached `main` snapshot directory
+  (its name is the commit), whose files stand for the repository's file list, and
+  `download_file().revision(<commit>).local_files_only(true)` returns each file.
+
+### `ardana pull` (`ardana-registry`)
+- Online, list a repository once with `model(org, repo).info().send()` (`sha` is the `main` commit, `siblings` the
+  files) and download every file at that commit, so the files of one pull come from one commit.
+- `hf.co/<org>/<repo>:<quant>` picks the one GGUF whose stem ends in `-<quant>` or `.<quant>` case-insensitively
+  (`Q4_K_M` without a quant, Ollama's `hf.co/` default); none or several is an error listing the repository's GGUFs.
+  `hf.co/<org>/<repo>:<file>.gguf` names the file.
+- A tokenizer repository contributes `tokenizer.json` plus `tokenizer_config.json` and `chat_template.jinja` when it
+  has them, all at one commit, so the chat template sits next to the tokenizer in `snapshots/<commit>/`.
+- `decider_config.json` in the weights repository gives the profile (plain layout); without it the model gets
+  `ModelProfile::stock` named after the entry, in the chat layout. `--tokenizer`, `--name` and `--layout` override.
+- Record snapshot paths and local paths absolute but unresolved (`std::path::absolute`, never `canonicalize`): a
+  snapshot path resolves to `blobs/<hash>`, whose directory holds neither the chat template nor `decider_config.json`.
+- A missing repository answers 401 "Authentication required" without a token, like a gated one; report the `hf.co/`
+  ref with the error.
 
 > Plan note: `hf-hub` 1.0.0 does not read `HF_HUB_OFFLINE` (its env constants are `HF_ENDPOINT`, `HF_TOKEN`,
 > `HF_TOKEN_PATH`, `HF_HOME`, `HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, `XDG_CACHE_HOME`,

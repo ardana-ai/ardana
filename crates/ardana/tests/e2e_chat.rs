@@ -29,17 +29,6 @@ fn run_chat(gguf: (&str, &str), tokenizer: &str, request: PathBuf) -> Result<Val
     common::ardana_run(args)
 }
 
-/// `positive` sentiment and a happy customer; returns the `happy` probability.
-fn check_sentiment(resp: &Value) -> Result<f64> {
-    let sentiment = &resp["answers"]["sentiment"];
-    assert_eq!(sentiment["choice"], "positive", "{sentiment}");
-    let happy = resp["answers"]["happy"]["noul"]
-        .as_f64()
-        .context("happy noul")?;
-    assert!(happy > 0.5, "happy {happy}");
-    Ok(happy)
-}
-
 #[test]
 #[ignore = "e2e: ggml-org/Qwen3.5-0.8B-GGUF Q4_0 and the Qwen/Qwen3.5-0.8B tokenizer in tmp/hf (cargo xtask fetch)"]
 fn qwen35_0_8b() -> Result<()> {
@@ -48,9 +37,7 @@ fn qwen35_0_8b() -> Result<()> {
         QWEN35_TOKENIZER,
         common::request("sentiment.json"),
     )?;
-    check_sentiment(&resp)?;
-    let sum = common::probability_sum(&resp["answers"]["sentiment"])?;
-    assert!((sum - 1.0).abs() <= 0.001, "probabilities sum to {sum}");
+    common::check_sentiment(&resp)?;
     Ok(())
 }
 
@@ -62,7 +49,7 @@ fn smollm3_3b() -> Result<()> {
         SMOLLM3_TOKENIZER,
         common::request("sentiment.json"),
     )?;
-    check_sentiment(&resp)?;
+    common::check_sentiment(&resp)?;
     Ok(())
 }
 

@@ -22,8 +22,10 @@ publish = false
 ardana-api = { path = "crates/ardana-api" }
 ardana-core = { path = "crates/ardana-core" }
 ardana-llama = { path = "crates/ardana-llama" }
+ardana-registry = { path = "crates/ardana-registry" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+hf-hub = "=1.0.0"
 indexmap = { version = "2", features = ["serde"] }
 llama-cpp-2 = { version = "=0.1.157", default-features = false }
 minijinja = { version = "2.24.0", features = ["loop_controls"] }
@@ -34,4 +36,5 @@ tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"
 leptos = { version = "0.8", features = ["csr"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+tokio = "1"
 toml = "1"

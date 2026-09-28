@@ -30,7 +30,9 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   `cargo check -p ardana-api --target wasm32-unknown-unknown`.
 - Current third-party pins: `anyhow` 1, `thiserror` 2 (library error enums), `indexmap` 2 with `serde` (ordered wire
   maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts), `clap` 4
-  with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), plus the library pins in their own guidelines.
+  with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
+  `tokio` 1 (the `ardana` binary runs `pull` on a current-thread runtime with `rt`, `net`, `time`; the server adds
+  its own features), plus the library pins in their own guidelines.
 - Commit `Cargo.lock`: Ardana ships a binary, and the lockfile is also the source of the wasm-bindgen version that
   `xtask/fetch.toml` reads via `cargo-lock:wasm-bindgen`. Pass `--locked` in xtask steps that must not re-resolve.
 
@@ -53,6 +55,8 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Derive `Debug` on public types; derive `Clone`, `PartialEq`, `Eq`, `Default` where they make sense, because
   downstream crates cannot add them later.
 - Keep `unsafe` confined to `ardana-llama` FFI edges (if any) with a `// SAFETY:` comment per block.
+- `thiserror` treats a field named `source` as the error's source; name a field holding a model reference
+  `reference` in error variants (`RegistryError`), even where the data type calls it `source` (`ResolvedModel`).
 
 ### Errors
 - Library crates expose typed error enums callers can match on: `DecideError` (`Invalid { loc, msg }`,
@@ -79,7 +83,8 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - End-to-end tests use the official models from `xtask/fetch.toml` (decider-2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B,
   Ollama `llama3.2`), resolved from `tmp/hf`; never replace a real model with an invented fixture.
 - Put test temp files under `$ARDANA_TMP` (or `std::env::temp_dir()`, which `[env]` points at `tmp/sys`); never under
-  the real home.
+  the real home. Tests that run `ardana pull` give each child its own `ARDANA_HOME` under `$ARDANA_TMP/<test>` (tests
+  run in parallel) and `HF_HUB_OFFLINE=1`, so they read `tmp/hf` and never the network.
 - Prefer tests returning `anyhow::Result<()>` with `?` over chains of `unwrap()`.
 - Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice. The decider goldens in
   `crates/ardana-core/tests/data/decider/` are regenerated only by `cargo xtask export-decider`.

@@ -44,7 +44,12 @@ llama.cpp.
 - Treat `--gpu-layers 0` as "no layers on the GPU", not "no GPU at all": llama.cpp documents that the GPU may still
   accelerate some work at `-ngl 0`. The CPU check (R2.7) compares argmaxes, not exact probabilities.
 - Turn `LlamaModelLoadError` into an error that names the ref and path (R4.4: an unloadable Ollama blob suggests an
-  `hf.co/` source); never unwrap.
+  `hf.co/` source); never unwrap. `ardana-registry`'s `ResolvedModel::load` adds the ref and, for `ollama:` refs, the
+  suggestion.
+- At `26394b4` a GGUF llama.cpp cannot load comes back as `LlamaModelLoadError::NullResult` ("null result from llama
+  cpp"), not an abort: checked on a truncated header, an architecture without its hyperparameter keys, random bytes
+  after the magic, absurd tensor and key counts, and Ollama's own `gemma3:12b` blob. With logs silenced the reason
+  (`key not found ...`) is not in the error.
 
 > Plan note: `LlamaModelParams::with_n_gpu_layers` takes a `u32` in 0.1.157, so `LoadOptions { gpu_layers: -1 }`
 > cannot be passed through as-is; use the mapping above.
