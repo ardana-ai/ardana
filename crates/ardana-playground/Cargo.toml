@@ -18,13 +18,23 @@ serde_json = { workspace = true, features = ["float_roundtrip"] }
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 web-sys = { workspace = true, features = [
+    "Clipboard",
+    "Document",
+    "Element",
     "Headers",
+    "HtmlElement",
+    "HtmlInputElement",
     "KeyboardEvent",
     "Location",
+    "MediaQueryList",
+    "Navigator",
     "Performance",
     "Request",
     "RequestInit",
     "Response",
+    "ScrollBehavior",
+    "ScrollIntoViewOptions",
+    "ScrollLogicalPosition",
     "UrlSearchParams",
     "Window",
 ] }

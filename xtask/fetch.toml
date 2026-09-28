@@ -101,6 +101,12 @@ source = "npm"
 path = "e2e/playground"
 
 [[tool]]
+name = "@typesafe-ai/sdk"
+version = "0.6.0"
+source = "npm"
+path = "e2e/playground"
+
+[[tool]]
 name = "impeccable"
 version = "0.1.5"
 source = "local-copy"

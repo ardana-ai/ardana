@@ -1,0 +1,49 @@
+{
+  "model": "jev-latest",
+  "state": {
+    "channel": "web chat",
+    "note": "Illustrative transcript for the playground preset",
+    "order": "A-2291",
+    "messages": [
+      {
+        "from": "customer",
+        "text": "Hi, my order A-2291 was supposed to arrive Monday and tracking hasn't moved in four days."
+      },
+      {
+        "from": "agent",
+        "text": "Thanks for reaching out. Let me check that order for you."
+      },
+      {
+        "from": "agent",
+        "text": "I can see the parcel is stuck at the regional depot. I'm sorry about the delay, that's not the experience we want you to have."
+      },
+      {
+        "from": "customer",
+        "text": "Can you just send a replacement? I need it for Friday."
+      },
+      {
+        "from": "agent",
+        "text": "I've asked the warehouse team to ship a replacement by express. They confirm dispatch within 24 hours, and I'll email you the new tracking number."
+      },
+      {
+        "from": "customer",
+        "text": "OK, thanks."
+      }
+    ]
+  },
+  "questions": {
+    "apologized": {
+      "type": "noul",
+      "instructions": "Did the agent apologize to the customer?"
+    },
+    "status": {
+      "type": "choice",
+      "instructions": "What is the status of the customer's issue at the end of the chat?",
+      "criteria": {
+        "resolved": "The issue is fixed or fully handled; nothing is left to do",
+        "escalated": "Handed to another team or a follow-up action is pending",
+        "open": "No fix or next step was agreed"
+      }
+    }
+  }
+}

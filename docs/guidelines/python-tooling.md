@@ -68,7 +68,8 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
   passing `--results`, `--ledger` and `--raw-dir` paths under `tmp/evals/jevbench/`.
 - The SDK check (`xtask/scripts/sdk_ticket.py`, run with `tmp/py/sdk/bin/python`) sets `TYPESAFE_BASE_URL` to the
   local server and uses model `jev-latest`; the SDK refuses to start without some `TYPESAFE_API_KEY`, so it gets a
-  placeholder the open server ignores. Never point it at the hosted TypeSafe API and never put a real API key in env,
+  placeholder the open server ignores. The playground's `snippets` case (Playwright) runs the Python snippet with the same
+  interpreter, `TYPESAFE_BASE_URL` and placeholder key. Never point it at the hosted TypeSafe API and never put a real API key in env,
   files or logs.
 - `cargo xtask e2e jevbench` empties `tmp/evals/jevbench/` first (JevBench opens results, ledger and raw files
   exclusively), runs `run --adapter typesafe --key-env ""` over `datasets/public/{easy,original,hard}.jsonl`, writes

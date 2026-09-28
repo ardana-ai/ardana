@@ -1,8 +1,14 @@
 //! The playground's state: the editors, the picked model, the share link that loaded them and the last run.
 
+use std::collections::HashMap;
+
 use leptos::prelude::*;
 
+use ardana_api::{QuestionType, SystemOneRequest};
+use serde_json::Value;
+
 use crate::api::{ApiClient, Exchange};
+use crate::builder::{self, KindMemory};
 use crate::request::{self, Questions, Reply};
 use crate::share::SharePayload;
 
@@ -17,11 +23,25 @@ pub struct Deck {
     pub questions_text: RwSignal<String>,
     pub questions: RwSignal<Questions>,
     pub questions_error: RwSignal<Option<String>>,
+    /// The question whose builder is open.
+    pub editing: RwSignal<Option<String>>,
     pub model: RwSignal<String>,
     /// Why the URL's share link could not be loaded.
     pub share_error: RwSignal<Option<String>>,
+    /// Both editors as they were before a preset load or a removed question, until the next edit.
+    pub previous: RwSignal<Option<(String, String)>>,
+    /// Each question's criteria per type it has had, so switching its type back restores them.
+    kinds: StoredValue<HashMap<String, KindMemory>>,
+    /// A polite announcement when an input turns invalid or valid again.
+    pub notice: RwSignal<String>,
     pub runner: Action<String, Exchange>,
     pub last: Memo<Option<LastRun>>,
+    /// The request the last run sent, read back from its exact body.
+    pub sent: Memo<Option<SystemOneRequest>>,
+    /// Whether the state or the model differs from the last run's.
+    pub inputs_changed: Memo<bool>,
+    /// Whether anything RUN would send differs from the last run's request.
+    pub stale: Memo<bool>,
 }
 
 /// The last `POST /v1/systemone`: what went over the wire, and the reply read from it (`Err` when no response came).
@@ -52,16 +72,53 @@ impl Deck {
                 number: version.get(),
             })
         });
+        let sent = Memo::new(move |_| {
+            last.with(|last| {
+                let run = last.as_ref()?;
+                serde_json::from_str::<SystemOneRequest>(&run.exchange.request).ok()
+            })
+        });
+        let state_text = RwSignal::new(String::new());
+        let model = RwSignal::new(DEFAULT_MODEL.to_string());
+        let questions = RwSignal::new(Questions::new());
+        let inputs_changed = Memo::new(move |_| {
+            sent.with(|sent| {
+                sent.as_ref().is_some_and(|sent| {
+                    sent.model.as_deref() != Some(model.read().as_str())
+                        || sent.state != request::state_value(&state_text.read())
+                })
+            })
+        });
+        let stale = Memo::new(move |_| {
+            inputs_changed.get()
+                || sent.with(|sent| {
+                    sent.as_ref()
+                        .is_some_and(|sent| questions.with(|q| *q != sent.questions))
+                })
+        });
         Deck {
-            state_text: RwSignal::new(String::new()),
+            state_text,
             questions_text: RwSignal::new(String::new()),
-            questions: RwSignal::new(Questions::new()),
+            questions,
             questions_error: RwSignal::new(None),
-            model: RwSignal::new(DEFAULT_MODEL.to_string()),
+            editing: RwSignal::new(None),
+            model,
             share_error: RwSignal::new(None),
+            previous: RwSignal::new(None),
+            kinds: StoredValue::new(HashMap::new()),
+            notice: RwSignal::new(String::new()),
             runner,
             last,
+            sent,
+            inputs_changed,
+            stale,
         }
+    }
+
+    /// Replaces the state text, as typing does.
+    pub fn set_state_text(&self, text: String) {
+        self.previous.set(None);
+        self.state_text.set(text);
     }
 
     /// Replaces the questions text; the map follows when the text parses. Empty text is an empty map.
@@ -71,28 +128,137 @@ impl Deck {
         } else {
             request::parse_questions(&text)
         };
+        let was_invalid = self.questions_error.with_untracked(Option::is_some);
         match parsed {
             Ok(map) => {
                 self.questions.set(map);
                 self.questions_error.set(None);
+                if was_invalid {
+                    self.notice.set("Questions JSON is valid again".into());
+                }
             }
-            Err(err) => self.questions_error.set(Some(err)),
+            Err(err) => {
+                if !was_invalid {
+                    self.notice.set(err.clone());
+                }
+                self.questions_error.set(Some(err));
+            }
         }
         self.questions_text.set(text);
+        self.previous.set(None);
+    }
+
+    /// Applies a builder edit to the questions map and rewrites the questions text from it. A failed edit changes
+    /// nothing.
+    pub fn edit(
+        &self,
+        change: impl FnOnce(&mut Questions) -> Result<(), String>,
+    ) -> Result<(), String> {
+        let mut questions = self.questions.get_untracked();
+        change(&mut questions)?;
+        self.set_questions_text(request::questions_text(&questions));
+        Ok(())
+    }
+
+    /// Applies a builder edit to one question.
+    pub fn edit_question(
+        &self,
+        id: &str,
+        change: impl FnOnce(&mut Value) -> Result<(), String>,
+    ) -> Result<(), String> {
+        self.edit(|questions| change(questions.get_mut(id).ok_or("no such question")?))
+    }
+
+    /// Switches a question's type, restoring the criteria it had under that type before.
+    pub fn switch_kind(&self, id: &str, kind: QuestionType) {
+        let _ = self.edit_question(id, |spec| {
+            self.kinds.update_value(|kinds| {
+                builder::switch_kind(spec, kind, kinds.entry(id.to_string()).or_default())
+            });
+            Ok(())
+        });
+    }
+
+    /// Renames a question; its remembered criteria and its open builder follow it.
+    pub fn rename_question(&self, old: &str, new: &str) -> Result<(), String> {
+        self.edit(|questions| builder::rename_question(questions, old, new))?;
+        self.kinds.update_value(|kinds| {
+            if let Some(memory) = kinds.remove(old) {
+                kinds.insert(new.to_string(), memory);
+            }
+        });
+        self.editing.set(Some(new.to_string()));
+        Ok(())
+    }
+
+    /// Removes a question, keeping both editors as they were for Restore previous. Returns the id of the question
+    /// that now holds its place, if any.
+    pub fn remove_question(&self, id: &str) -> Option<String> {
+        let mut next = None;
+        self.keep_previous(|| {
+            let _ = self.edit(|questions| {
+                if let Some(index) = questions.get_index_of(id) {
+                    questions.shift_remove_index(index);
+                    next = questions.get_index(index).map(|(id, _)| id.clone());
+                }
+                Ok(())
+            });
+        });
+        self.kinds.update_value(|kinds| {
+            kinds.remove(id);
+        });
+        self.editing.set(None);
+        next
+    }
+
+    /// Loads a preset into both editors, keeping them as they were for Restore previous.
+    pub fn load_preset(&self, state_text: String, questions_text: String) {
+        self.keep_previous(|| self.load(state_text, questions_text));
+    }
+
+    /// Puts back both editors as they were before the last preset load or removed question.
+    pub fn restore_previous(&self) {
+        if let Some((state, questions)) = self.previous.get_untracked() {
+            self.load(state, questions);
+        }
+    }
+
+    /// Runs `change`, then offers the editors as they were before it for Restore previous.
+    fn keep_previous(&self, change: impl FnOnce()) {
+        let before = (
+            self.state_text.get_untracked(),
+            self.questions_text.get_untracked(),
+        );
+        change();
+        self.previous.set(Some(before));
+    }
+
+    /// Loads both editors, as a share link or a preset does.
+    pub fn load(&self, state_text: String, questions_text: String) {
+        self.set_state_text(state_text);
+        self.set_questions_text(questions_text);
+        self.kinds.set_value(HashMap::new());
+        self.editing.set(None);
     }
 
     pub fn load_share(&self, share: Result<SharePayload, String>) {
         match share {
             Ok(payload) => {
-                self.state_text.set(payload.document_text);
-                self.set_questions_text(payload.prompts_text);
-                if let Some(model) = payload.selected_models.into_iter().next() {
-                    self.model.set(model);
-                }
+                self.load(payload.document_text, payload.prompts_text);
+                let model = payload.selected_models.into_iter().next();
+                self.model
+                    .set(model.unwrap_or_else(|| DEFAULT_MODEL.to_string()));
                 self.share_error.set(None);
             }
             Err(err) => self.share_error.set(Some(err)),
         }
+    }
+
+    /// The request RUN would send now.
+    pub fn request(&self) -> SystemOneRequest {
+        self.questions.with(|questions| {
+            request::request(&self.model.get(), &self.state_text.read(), questions)
+        })
     }
 
     /// Whether RUN can send: the questions parse and no run is in flight.
@@ -100,20 +266,12 @@ impl Deck {
         self.questions_error.with(Option::is_none) && !self.runner.pending().get()
     }
 
-    /// Sends the editors as they are now.
+    /// Sends the editors as they are now; does nothing while RUN is held.
     pub fn run(&self) {
-        let blocked = self.questions_error.with_untracked(Option::is_some)
-            || self.runner.pending().get_untracked();
-        if blocked {
+        if !untrack(|| self.can_run()) {
             return;
         }
-        let body = self.questions.with_untracked(|questions| {
-            request::body(
-                &self.model.get_untracked(),
-                &self.state_text.get_untracked(),
-                questions,
-            )
-        });
+        let body = untrack(|| request::body(&self.request()));
         self.runner.dispatch(body);
     }
 }

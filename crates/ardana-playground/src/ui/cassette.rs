@@ -22,7 +22,7 @@ pub fn Cassette(deck: Deck) -> impl IntoView {
                     <label for="state">"State"</label>
                 </h2>
                 <p class="mode-lamps">
-                    <span class="visually-hidden">
+                    <span class="visually-hidden" data-testid="state-mode">
                         {move || if sent_as_json.get() { "Sent as JSON" } else { "Sent as text" }}
                     </span>
                     <span class="mode-lamp" class:on=move || !sent_as_json.get() aria-hidden="true">
@@ -42,7 +42,7 @@ pub fn Cassette(deck: Deck) -> impl IntoView {
                     spellcheck="false"
                     placeholder="Paste the state: a ticket, a transcript, a resume or a JSON record."
                     prop:value=move || deck.state_text.get()
-                    on:input=move |event| deck.state_text.set(event_target_value(&event))
+                    on:input=move |event| deck.set_state_text(event_target_value(&event))
                     on:keydown=run_shortcut(deck)
                 ></textarea>
             </div>

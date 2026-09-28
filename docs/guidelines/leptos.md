@@ -13,9 +13,10 @@ design workflow that gates every UI change (Q23, Q27).
 - `binaryen` version_133 — `wasm-opt` for release trunk builds; trunk 0.21.9's default `version_116` rejects rustc 1.97 output
 - `lz-str` 0.2 — Rust port of lz-string's `compressToEncodedURIComponent` codec for Jev share links (docs.rs shows 0.2.1)
 - `web-sys`, `js-sys` 0.3 and `wasm-bindgen-futures` 0.4 — the versions leptos already resolves (no new crates);
-  the playground names them for `fetch`, `performance.now()` and `URLSearchParams`, with only the `web-sys` features
-  it calls (`Headers`, `KeyboardEvent`, `Location`, `Performance`, `Request`, `RequestInit`, `Response`,
-  `UrlSearchParams`, `Window`)
+  the playground names them for `fetch`, `performance.now()`, `URLSearchParams` and the clipboard, with only the
+  `web-sys` features it calls (`Clipboard`, `Document`, `Element`, `Headers`, `HtmlElement`, `HtmlInputElement`,
+  `KeyboardEvent`, `Location`, `MediaQueryList`, `Navigator`, `Performance`, `Request`, `RequestInit`, `Response`,
+  `ScrollBehavior`, `ScrollIntoViewOptions`, `ScrollLogicalPosition`, `UrlSearchParams`, `Window`)
 - `serde_json` with `float_roundtrip` in the playground — numbers read from a response keep their exact `f64`, so a
   re-serialised `data-value` equals the API's JSON text
 
@@ -35,7 +36,29 @@ design workflow that gates every UI change (Q23, Q27).
   `.get()` for small `Copy` values.
 - The builder and the raw questions JSON share one source of truth: a parsed `ardana_api` questions map plus the
   raw text. Builder edits reserialize the text; valid text edits replace the map; invalid JSON sets an inline error
-  and leaves the map untouched (R7.1).
+  and leaves the map untouched (R7.1). Builder edits go through `Deck::edit`/`Deck::edit_question` with the pure
+  operations of `builder.rs`, which change only the keys they edit (a list of choice names stays a list until an
+  option gets a description; a `{"0": ..}` score legend becomes a list once a level is edited; JSON structure in a
+  field is shown read only). The text is `serde_json::to_string_pretty`, Jev's `JSON.stringify(q, null, 2)`.
+- Type switches go through `Deck::switch_kind`, which keeps each question's criteria per type (`builder::KindMemory`)
+  so a round trip through another type restores them. Preset loads and Remove question go through
+  `Deck::load_preset` / `Deck::remove_question`, which keep both editors in `Deck::previous` for the console's
+  Restore previous key until the next edit.
+- Stale results: `Deck::sent` parses the exact body the last run sent; `inputs_changed` (state or model) and `stale`
+  (anything) compare it with what RUN would send now; a channel is stale when its answer came from a different
+  state, model or spec. Figures stay exact; only the labels, the Changed lamp and the winner underline change.
+- Focus is never dropped: RUN is held with `aria-disabled` (a guard in `Deck::run`), never `disabled`; after a
+  rename, a removal or Restore previous, `ui::focus_later(id)` focuses the next control on the next animation
+  frame, once the re-keyed view exists. Element ids of a question come from `ui::dom_id`.
+- Announcements: two polite `role="status"` regions rendered empty from load (`run-status`: the run's outcome;
+  `notice`: an input turning invalid or valid again). Field errors are text tied with `aria-describedby`, never
+  `role="alert"`, so they do not repeat on every keystroke.
+- Anything in `view!` that uses `<`, `>`, `<=` or `>=` in an attribute goes in braces:
+  `disabled=move || { count.get() >= max }`. Unbraced, the macro ends the tag at `>` and turns the rest of the
+  attribute into child nodes, running handler bodies at render.
+- Lists whose rows hold inputs are keyed by something the input's own edits do not change (the channel by question
+  id, renamed on `change` only; option and level rows by index), and each row's values are reactive closures over a
+  `Memo` of its question, so typing never recreates the focused input.
 - State text that parses as a JSON object or array is sent as JSON; every other text is sent as a string (R7.2).
 - All network access goes through one `ApiClient { base_url }` module with typed methods (`models()`, `systemone(req)`)
   using `ardana_api` request/response types. Construct it with the page origin; never hard-code a host, never call
@@ -50,21 +73,25 @@ design workflow that gates every UI change (Q23, Q27).
 - Every displayed API value carries the raw value in `data-value` (serialized from the response, unformatted) next
   to its formatted text: probabilities as percent with one decimal, confidence, noul and score with two decimals,
   token counts equal to `usage` (R6.5).
-- Keep pure logic (share codec, state-mode detection, number formatting, snippet generation) in plain Rust modules
-  with no DOM access, so it is unit-testable and reusable by the snippet and share code.
-- Layout of `crates/ardana-playground/src`: `api.rs` (`ApiClient`, the only network code), `share.rs`, `request.rs`
-  (state mode, questions parsing, the request body, reading replies into typed answers or raw JSON and error
-  `detail`s), `format.rs`, `deck.rs` (`Deck`: every signal of the page, `Copy`, passed whole to components, plus the
+- Keep pure logic (share codec, state-mode detection, number formatting, builder edits, presets, snippet generation)
+  in plain Rust modules with no DOM access, so it is unit-testable and reusable by the snippet and share code.
+- Layout of `crates/ardana-playground/src`: `api.rs` (`ApiClient`, the only network code), `share.rs` (decode and
+  `link`), `request.rs` (state mode, questions parsing, the request and its body, editor texts, reading replies into
+  typed answers or raw JSON and error `detail`s), `builder.rs` (question edits on raw specs), `presets.rs` (the three
+  presets, request files in `presets/` plus `tests/fixtures/requests/ticket.json`), `snippets.rs` (curl, Python and
+  TypeScript), `format.rs`, `deck.rs` (`Deck`: every signal of the page, `Copy`, passed whole to components, plus the
   `Action` that runs and the `Memo` of the last run) and `ui/` with one module per region: `rail` (model switch,
-  counters, RUN), `cassette` (state), `channels` (one channel per question, the questions JSON editor, faults),
-  `exchange` (raw request/response), `figure` (the `data-value` figures). New editors (the W7 builder, presets,
-  snippets, share output) are new `ui/` modules over the same `Deck`.
+  counters, RUN), `console` (preset keys, share link), `cassette` (state), `channels` (one channel per question with
+  its type toggle and Edit key, the questions JSON editor, faults), `builder` (a channel's builder fields),
+  `exchange` (raw request/response), `snippets`, `controls` (the chrome toggle and the copy key) and `figure` (the
+  `data-value` figures).
 - Figures: every API value on screen is a `ui::figure` element with `data-field` (a JSON pointer into the response),
   `data-value` (the raw value: a number as the shortest JSON text, a string as is) and `data-format` (`percent`,
   `fixed2`, `verbatim`). Formatting rounds the number's decimal text half up (`format::round_decimal`), never the
   binary value, so `0.1235` shows `12.4%` on every platform; the Playwright helpers apply the same rule with BigInt.
 - The model picker offers `jev-latest` (the server's default model, as Jev's share links name it) and then every
-  `/v1/models` name; a share link naming another model adds it. `?autorun=1` runs once after `/v1/models` answers.
+  `/v1/models` name; a share link naming another model adds it. A `jev-*` option reads "(server default)" until a run sent
+  under it is answered, then "→ <the response's `model`>"; the page never guesses the default from `/v1/models`. `?autorun=1` runs once after `/v1/models` answers.
 - Per-run visuals (the ladder climb) restart because `For` keys each channel by id, spec, run number and answer.
 - Set dynamic CSS custom properties with a style tuple, `style=("--level", value.to_string())`; the rules that read
   them live in `.css`.
@@ -77,6 +104,9 @@ design workflow that gates every UI change (Q23, Q27).
   `String::from_utf16` and treat `None`, invalid UTF-16 or bad JSON as a visible share-link error, never a panic.
 - Read the hash on load and on `hashchange`; `location.hash` includes the leading `#`. `?autorun=1` runs the loaded
   share once after models load (R6.2 URLs).
+- `selectedModels` is optional when reading (a docs link has none); the model is then `jev-latest`.
+- The playground writes its own link with `share::link(origin, &SharePayload::new(state, questions, model))`, keys in
+  Jev's order; the share key opens it, recomputed from the editors while open, with a copy key.
 - Round-trip test: the playground's own link must decode with lz-string 1.5.0 in Playwright (R7.4).
 
 ## Build: trunk, wasm-bindgen, wasm-opt
@@ -99,7 +129,8 @@ design workflow that gates every UI change (Q23, Q27).
 
 ## CSS and design
 - Styles live only in plain `.css` files under `crates/ardana-playground/styles/` (`fonts.css`, `base.css` for
-  tokens and materials, `rail.css`, `deck.css`), linked with `<link data-trunk rel="css">`. No inline style strings,
+  tokens and materials, `rail.css`, `controls.css` for plate keys, the chrome toggle and paper fields, `deck.css`),
+  linked with `<link data-trunk rel="css">`. No inline style strings,
   no CSS-in-Rust crates, no Tailwind: the /impeccable design hook scans `.css`, `.html`, `.ts`, `.js`, not `.rs`.
 - Fonts are self-hosted: the Google Fonts latin woff2 subsets of Barlow Condensed, Barlow Semi Condensed, IBM Plex
   Mono and Doto (SIL OFL, `assets/fonts/OFL.txt`) live in `crates/ardana-playground/assets/fonts/`, copied to
@@ -149,3 +180,4 @@ design workflow that gates every UI change (Q23, Q27).
 - https://docs.rs/lz-str/0.2 — `compress_to_encoded_uri_component`, `decompress_from_encoded_uri_component`, UTF-16 output
 - https://developer.mozilla.org/en-US/docs/Web/API/Window/hashchange_event — `hashchange`, `location.hash` with `#`
 - https://developer.mozilla.org/en-US/docs/Web/API/Performance/now — monotonic request timing
+- https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText — the copy keys, a promise that may reject

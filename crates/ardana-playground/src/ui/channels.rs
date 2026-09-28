@@ -1,12 +1,16 @@
-//! The channels: one row per question, with its engraved id, type, and an amber ladder per option that climbs
-//! to the probability the API returned. Below them, the `questions` JSON the channels are read from.
+//! The channels: one module per question, with its engraved id, its type toggle, its builder (opened by its Edit
+//! key) and an amber ladder per option that climbs to the probability the API returned. Below them, the
+//! `questions` JSON the channels are read from.
 
 use ardana_api::{Answer, ChoiceAnswer, NoulAnswer, ScoreAnswer};
 use leptos::prelude::*;
 use serde_json::Value;
 
+use super::builder::Program;
+use super::controls::Toggle;
 use super::figure::{Format, Number, Verbatim, pointer};
-use super::run_shortcut;
+use super::{dom_id, run_shortcut};
+use crate::builder::{self, KINDS, kind_name};
 use crate::deck::Deck;
 use crate::request::{Detail, Reply, Shown};
 
@@ -18,36 +22,19 @@ const EXAMPLE: &str = r#"Example:
   }
 }"#;
 
-/// What one channel shows: its question, and its answer from the last run when there is one.
-#[derive(Debug, Clone, PartialEq)]
-struct Item {
-    id: String,
-    spec: Value,
-    answer: Option<Shown>,
-    run: usize,
-}
-
 #[component]
 pub fn Channels(deck: Deck) -> impl IntoView {
-    let items = move || {
-        let (answers, run) = deck.last.with(|last| match last {
-            Some(run) => match &run.reply {
-                Ok(Reply::Answered { answers, .. }) => (Some(answers.clone()), run.number),
-                _ => (None, run.number),
-            },
-            None => (None, 0),
+    let ids = move || {
+        deck.questions
+            .with(|q| q.keys().cloned().collect::<Vec<_>>())
+    };
+    let add = move |_| {
+        let mut added = None;
+        let _ = deck.edit(|questions| {
+            added = Some(builder::add_question(questions));
+            Ok(())
         });
-        deck.questions.with(|questions| {
-            questions
-                .iter()
-                .map(|(id, spec)| Item {
-                    id: id.clone(),
-                    spec: spec.clone(),
-                    answer: answers.as_ref().and_then(|a| a.get(id).cloned()),
-                    run,
-                })
-                .collect::<Vec<_>>()
-        })
+        deck.editing.set(added);
     };
     view! {
         <section class="channels" aria-labelledby="channels-title">
@@ -62,23 +49,24 @@ pub fn Channels(deck: Deck) -> impl IntoView {
                     view! {
                         <div class="channels-empty">
                             <p>
-                                "No channels yet. Write a questions map below, one entry per question: "
-                                <code>"noul"</code> " for a yes/no probability, " <code>"choice"</code>
-                                " for named options, " <code>"score"</code>
-                                " for ordered levels. Or open a Jev share link."
+                                "No channels yet. Add a question and set its type: " <code>"noul"</code>
+                                " for a yes/no probability, " <code>"choice"</code> " for named options, "
+                                <code>"score"</code>
+                                " for ordered levels. Or load a preset, write the questions JSON below, or open a Jev share link."
                             </p>
                         </div>
                     }
                 }
             >
                 <ol class="channel-list">
-                    <For
-                        each=items
-                        key=|item| (item.id.clone(), item.spec.to_string(), item.run, item.answer.is_some())
-                        children=|item| view! { <Channel item=item /> }
-                    />
+                    <For each=ids key=|id| id.clone() children=move |id| view! { <Channel deck=deck id=id /> } />
                 </ol>
             </Show>
+            <div class="channels-foot">
+                <button type="button" id="add-question" class="plate-key" on:click=add>
+                    "Add question"
+                </button>
+            </div>
             <div class="program">
                 <label class="legend program-legend" for="questions">"Questions JSON"</label>
                 <textarea
@@ -92,7 +80,7 @@ pub fn Channels(deck: Deck) -> impl IntoView {
                     on:input=move |event| deck.set_questions_text(event_target_value(&event))
                     on:keydown=run_shortcut(deck)
                 ></textarea>
-                <p id="questions-error" class="fault-line" role="alert">
+                <p id="questions-error" class="fault-line">
                     {move || deck.questions_error.get()}
                 </p>
             </div>
@@ -140,7 +128,7 @@ fn Fault(deck: Deck) -> impl IntoView {
                 }
             };
             Some(view! {
-                <div class="fault" role="alert" data-testid="fault">
+                <div class="fault" data-testid="fault">
                     <p class="fault-title">
                         <span class="fault-lamp" aria-hidden="true"></span>
                         {title}
@@ -154,29 +142,163 @@ fn Fault(deck: Deck) -> impl IntoView {
 }
 
 #[component]
-fn Channel(item: Item) -> impl IntoView {
-    let Item {
-        id, spec, answer, ..
-    } = item;
-    let kind = match &answer {
-        Some(Shown::Typed(typed)) => match **typed {
-            Answer::Choice(_) => "choice".to_string(),
-            Answer::Score(_) => "score".to_string(),
-            Answer::Noul(_) => "noul".to_string(),
-        },
-        Some(Shown::Raw(raw)) => raw["type"].as_str().unwrap_or("unknown").to_string(),
-        None => spec["type"].as_str().unwrap_or("unknown").to_string(),
-    };
-    let instructions = match &spec["instructions"] {
+fn Channel(deck: Deck, id: String) -> impl IntoView {
+    let key = StoredValue::new(id.clone());
+    let spec = Memo::new(move |_| {
+        key.with_value(|id| {
+            deck.questions
+                .with(|q| q.get(id).cloned().unwrap_or(Value::Null))
+        })
+    });
+    // This question's answer in the last run, and the run's number, so each run's ladders are drawn afresh.
+    let shown = Memo::new(move |_| {
+        deck.last.with(|last| match last {
+            Some(run) => {
+                let answer = match &run.reply {
+                    Ok(Reply::Answered { answers, .. }) => {
+                        key.with_value(|id| answers.get(id).cloned())
+                    }
+                    _ => None,
+                };
+                (answer, run.number)
+            }
+            None => (None, 0),
+        })
+    });
+    let kind = Memo::new(move |_| spec.with(builder::kind));
+    let open = Memo::new(move |_| {
+        key.with_value(|id| deck.editing.with(|e| e.as_deref() == Some(id.as_str())))
+    });
+    let dom = dom_id(&id);
+    let instructions = move || match spec.with(|s| s["instructions"].clone()) {
         Value::Null => None,
-        Value::String(text) => Some(text.clone()),
+        Value::String(text) => Some(text),
         other => Some(other.to_string()),
     };
-    let body = match answer {
+    let pick = move |kind| key.with_value(|id| deck.switch_kind(id, kind));
+    // Whether this channel's answer came from a request whose state, model or question differs from now.
+    let changed = Memo::new(move |_| {
+        deck.inputs_changed.get()
+            || deck.sent.with(|sent| {
+                sent.as_ref().is_some_and(|sent| {
+                    key.with_value(|id| spec.with(|spec| sent.questions.get(id) != Some(spec)))
+                })
+            })
+    });
+    let stale = Memo::new(move |_| shown.with(|(answer, _)| answer.is_some()) && changed.get());
+    // The last run's 422 issues that name this question, while the question is as it was sent.
+    let faults = Memo::new(move |_| {
+        if changed.get() {
+            return Vec::new();
+        }
+        deck.last
+            .with(|last| match last.as_ref().map(|run| &run.reply) {
+                Some(Ok(Reply::Failed {
+                    detail: Detail::Validation(issues),
+                    ..
+                })) => key.with_value(|id| {
+                    issues
+                        .iter()
+                        .filter(|issue| {
+                            issue.loc.len() >= 3
+                                && issue.loc[0] == "body"
+                                && issue.loc[1] == "questions"
+                                && issue.loc[2] == *id
+                        })
+                        .map(|issue| issue.msg.clone())
+                        .collect()
+                }),
+                _ => Vec::new(),
+            })
+    });
+    let toggle_edit = move |_| {
+        deck.editing
+            .set((!open.get_untracked()).then(|| key.get_value()));
+    };
+    let answer_id = id.clone();
+    let edit_id = format!("{dom}-edit");
+    view! {
+        <li
+            class="channel"
+            class:editing=open
+            class:stale=move || stale.get()
+            class:faulted=move || faults.with(|f| !f.is_empty())
+            data-testid="channel"
+            data-question=id.clone()
+        >
+            <div class="channel-head">
+                <div class="channel-title">
+                    <h3 class="channel-id">{id.clone()}</h3>
+                    {move || instructions().map(|text| view! { <p class="channel-instructions">{text}</p> })}
+                    {move || {
+                        stale
+                            .get()
+                            .then(|| {
+                                view! {
+                                    <p class="stale-note" data-testid="stale">
+                                        "From last run · inputs changed"
+                                    </p>
+                                }
+                            })
+                    }}
+                </div>
+                <div class="channel-controls">
+                    <Toggle
+                        legend="Type"
+                        group=format!("{dom}-type")
+                        options=KINDS.map(|k| (k, kind_name(k))).to_vec()
+                        checked=move |k| kind.get() == Some(k)
+                        pick=pick
+                        testid="type"
+                    />
+                    <button
+                        type="button"
+                        id=edit_id
+                        class="plate-key edit-key"
+                        aria-expanded=move || open.get().to_string()
+                        aria-controls=format!("{dom}-program")
+                        aria-label=format!("Edit question {id}")
+                        on:click=toggle_edit
+                    >
+                        "Edit"
+                    </button>
+                </div>
+            </div>
+            {move || {
+                faults
+                    .with(|faults| {
+                        faults
+                            .iter()
+                            .map(|msg| {
+                                view! {
+                                    <p class="channel-fault" data-testid="channel-fault">
+                                        <span class="fault-lamp" aria-hidden="true"></span>
+                                        {msg.clone()}
+                                    </p>
+                                }
+                            })
+                            .collect_view()
+                    })
+            }}
+            <Show when=move || open.get()>
+                <Program deck=deck id=key dom=dom.clone() spec=spec />
+            </Show>
+            {move || {
+                let (answer, _) = shown.get();
+                spec.with(|spec| answer_view(&answer_id, answer, spec))
+            }}
+        </li>
+    }
+}
+
+/// The channel's readout: the answer's ladders and figures, raw JSON for an answer of an unknown type, or the
+/// question's options on dark ladders before a run.
+fn answer_view(id: &str, answer: Option<Shown>, spec: &Value) -> AnyView {
+    match answer {
         Some(Shown::Typed(typed)) => match *typed {
-            Answer::Choice(a) => choice(&id, a).into_any(),
-            Answer::Score(a) => score(&id, a).into_any(),
-            Answer::Noul(a) => noul(&id, a).into_any(),
+            Answer::Choice(a) => choice(id, a).into_any(),
+            Answer::Score(a) => score(id, a).into_any(),
+            Answer::Noul(a) => noul(id, a).into_any(),
         },
         Some(Shown::Raw(raw)) => view! {
             <div class="raw-answer">
@@ -187,31 +309,7 @@ fn Channel(item: Item) -> impl IntoView {
             </div>
         }
         .into_any(),
-        None => idle(&kind, &spec).into_any(),
-    };
-    view! {
-        <li class="channel" data-testid="channel" data-question=id.clone()>
-            <div class="channel-head">
-                <div class="channel-title">
-                    <h3 class="channel-id">{id.clone()}</h3>
-                    {instructions.map(|text| view! { <p class="channel-instructions">{text}</p> })}
-                </div>
-                <TypeIndicator kind=kind />
-            </div>
-            {body}
-        </li>
-    }
-}
-
-/// The question's type, engraved beside its id; the questions JSON is where it is changed.
-#[component]
-fn TypeIndicator(kind: String) -> impl IntoView {
-    view! {
-        <p class="type-legend" data-testid="type">
-            <span class="type-key">"Type"</span>
-            " "
-            <span class="type-name">{kind}</span>
-        </p>
+        None => idle(spec["type"].as_str().unwrap_or("unknown"), spec).into_any(),
     }
 }
 

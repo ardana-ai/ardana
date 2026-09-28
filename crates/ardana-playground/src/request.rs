@@ -15,23 +15,53 @@ pub fn state_value(text: &str) -> Value {
     }
 }
 
-/// Parses the `questions` editor: a JSON object of question specs.
+/// Parses the `questions` editor: a JSON object of question specs. Errors say where the text goes wrong in plain
+/// words.
 pub fn parse_questions(text: &str) -> Result<Questions, String> {
     match serde_json::from_str::<Value>(text) {
         Ok(Value::Object(map)) => Ok(map.into_iter().collect()),
-        Ok(_) => Err("questions must be a JSON object of question id to question".into()),
-        Err(err) => Err(format!("questions are not valid JSON: {err}")),
+        Ok(_) => Err("Questions JSON must be an object of question ids to questions".into()),
+        Err(err) => {
+            let at = format!("line {}, column {}", err.line(), err.column());
+            Err(match err.classify() {
+                serde_json::error::Category::Eof => format!("Questions JSON ends early at {at}"),
+                _ => {
+                    let what = err.to_string();
+                    let what = what.split(" at line ").next().unwrap_or_default();
+                    format!("Questions JSON has an error at {at}: {what}")
+                }
+            })
+        }
+    }
+}
+
+/// The request the editors describe.
+pub fn request(model: &str, state_text: &str, questions: &Questions) -> SystemOneRequest {
+    SystemOneRequest {
+        model: Some(model.to_string()),
+        state: state_value(state_text),
+        questions: questions.clone(),
     }
 }
 
 /// The exact body the playground sends, pretty-printed so the raw panel reads well.
-pub fn body(model: &str, state_text: &str, questions: &Questions) -> String {
-    let request = SystemOneRequest {
-        model: Some(model.to_string()),
-        state: state_value(state_text),
-        questions: questions.clone(),
+pub fn body(request: &SystemOneRequest) -> String {
+    serde_json::to_string_pretty(request).expect("a request of JSON values serialises")
+}
+
+/// The editor texts of a request, as Jev writes them into a share link: the state as it is when it is a string,
+/// else pretty-printed JSON, and the questions pretty-printed.
+pub fn editor_texts(request: &SystemOneRequest) -> (String, String) {
+    let state = match &request.state {
+        Value::String(text) => text.clone(),
+        other => serde_json::to_string_pretty(other).expect("JSON values serialise"),
     };
-    serde_json::to_string_pretty(&request).expect("a request of JSON values serialises")
+    (state, questions_text(&request.questions))
+}
+
+/// The questions editor text of a map: pretty-printed with two-space indents, as `JSON.stringify(q, null, 2)`.
+pub fn questions_text(questions: &Questions) -> String {
+    serde_json::to_string_pretty(questions).expect("JSON values serialise")
 }
 
 /// One answer as the playground shows it: typed when it is one of the three Jev types, else its raw JSON.
@@ -158,18 +188,45 @@ mod tests {
     fn questions_keep_their_order() {
         let q = parse_questions(r#"{"z": {"type": "noul"}, "a": {"type": "choice"}}"#).unwrap();
         assert_eq!(q.keys().collect::<Vec<_>>(), ["z", "a"]);
-        assert!(parse_questions("[]").is_err());
-        assert!(parse_questions("{").unwrap_err().contains("not valid JSON"));
+        assert!(
+            parse_questions("[]")
+                .unwrap_err()
+                .contains("must be an object")
+        );
+        assert_eq!(
+            parse_questions(r#"{"refund": "#).unwrap_err(),
+            "Questions JSON ends early at line 1, column 11"
+        );
+        assert_eq!(
+            parse_questions("{\n  \"a\" 1}").unwrap_err(),
+            "Questions JSON has an error at line 2, column 7: expected `:`"
+        );
     }
 
     #[test]
     fn body_is_the_request() {
         let q = parse_questions(r#"{"r": {"type": "noul", "instructions": "Refund?"}}"#).unwrap();
-        let sent: Value = serde_json::from_str(&body("jev-latest", "Hi", &q)).unwrap();
+        let sent: Value = serde_json::from_str(&body(&request("jev-latest", "Hi", &q))).unwrap();
         assert_eq!(
             sent,
             json!({"model": "jev-latest", "state": "Hi", "questions": {"r": {"type": "noul", "instructions": "Refund?"}}})
         );
+    }
+
+    #[test]
+    fn editor_texts_are_jev_texts() {
+        let req: SystemOneRequest = serde_json::from_str(
+            r#"{"state":{"chat":[1]},"questions":{"b":{"type":"noul"},"a":{"type":"noul"}}}"#,
+        )
+        .unwrap();
+        let (state, questions) = editor_texts(&req);
+        assert_eq!(state, "{\n  \"chat\": [\n    1\n  ]\n}");
+        assert!(questions.starts_with("{\n  \"b\": {\n    \"type\": \"noul\"\n  },"));
+        let text = SystemOneRequest {
+            state: json!("plain"),
+            ..req
+        };
+        assert_eq!(editor_texts(&text).0, "plain");
     }
 
     #[test]

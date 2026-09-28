@@ -1,0 +1,20 @@
+{
+  "model": "jev-latest",
+  "state": "SAMPLE RESUME (illustrative, not a real person)\n\nAlex Sample\nBackend engineer · alex.sample@example.com · Lisbon, Portugal\n\nSUMMARY\nBackend engineer with six years of experience building payment and logistics services. Comfortable owning a service from design to on-call.\n\nEXPERIENCE\nSenior Backend Engineer, Example Freight (2022 to present)\n- Rewrote the shipment-tracking ingest in Rust; p99 latency fell from 900 ms to 120 ms.\n- Designed an idempotent event pipeline on Kafka processing 40 million events a day.\n- Led a team of four through the migration from a monolith to six services.\n\nBackend Engineer, Sample Payments (2019 to 2022)\n- Built the refunds service in Go and PostgreSQL, handling 2 million refunds a month.\n- Introduced contract tests between services; cut integration incidents by half.\n\nJunior Developer, Demo Retail (2018 to 2019)\n- Maintained the order API (Python, Django) and its nightly reporting jobs.\n\nSKILLS\nRust, Go, Python, PostgreSQL, Kafka, Kubernetes, gRPC, observability with OpenTelemetry\n\nEDUCATION\nBSc Computer Science, 2018",
+  "questions": {
+    "fit": {
+      "type": "score",
+      "instructions": "How well does this candidate fit a senior backend engineer role building high-throughput services in Rust?",
+      "criteria": [
+        "No fit: lacks backend experience",
+        "Weak fit: backend experience, but not at scale or in Rust",
+        "Good fit: solid backend experience at scale, some Rust",
+        "Strong fit: senior, ships high-throughput services in Rust"
+      ]
+    },
+    "five_years": {
+      "type": "noul",
+      "instructions": "Does the candidate have at least five years of professional software experience?"
+    }
+  }
+}

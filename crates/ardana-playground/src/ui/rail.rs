@@ -46,20 +46,40 @@ pub fn Rail(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>) -
                     value=move || usage(deck, |_, o| o, "output_tokens")
                 />
             </div>
-            <button
-                type="button"
-                class="run-key"
-                aria-keyshortcuts="Control+Enter Meta+Enter"
-                aria-busy=move || pending.get().to_string()
-                disabled=move || !deck.can_run()
-                on:click=move |_| deck.run()
-            >
-                <span class="run-led" aria-hidden="true"></span>
-                <svg class="run-glyph" viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M4 2.5v11l9-5.5z" />
-                </svg>
-                <span class="run-legend">{move || if pending.get() { "Running" } else { "Run" }}</span>
-            </button>
+            <div class="transport">
+                // `aria-disabled`, not `disabled`: a key that disables itself while focused drops focus to the page.
+                <button
+                    type="button"
+                    class="run-key"
+                    aria-keyshortcuts="Control+Enter Meta+Enter"
+                    aria-busy=move || pending.get().to_string()
+                    aria-disabled=move || (!deck.can_run()).to_string()
+                    aria-describedby="run-note"
+                    on:click=move |_| deck.run()
+                >
+                    <span class="run-led" aria-hidden="true"></span>
+                    <svg class="run-glyph" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M4 2.5v11l9-5.5z" />
+                    </svg>
+                    <span class="run-legend">{move || if pending.get() { "Running" } else { "Run" }}</span>
+                </button>
+                <p class="changed" class:on=move || deck.stale.get() data-testid="changed">
+                    <span class="lamp" aria-hidden="true"></span>
+                    <span class="legend">"Changed"</span>
+                    <span class="visually-hidden">
+                        {move || {
+                            if deck.stale.get() {
+                                ": the inputs differ from the last run"
+                            } else {
+                                ": nothing since the last run"
+                            }
+                        }}
+                    </span>
+                </p>
+            </div>
+            <p id="run-note" class="run-note">
+                {move || deck.questions_error.with(Option::is_some).then_some("Questions JSON has an error")}
+            </p>
         </header>
     }
 }
@@ -131,6 +151,16 @@ fn ModelSwitch(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>
         }
         names
     };
+    // A `jev-*` alias means the server's default model, which only a response names: the alias it was sent as and
+    // the model the last answer reported.
+    let answered_alias = move || -> Option<(String, String)> {
+        let sent = deck.sent.with(|sent| sent.as_ref()?.model.clone())?;
+        deck.last
+            .with(|last| match last.as_ref().map(|run| &run.reply) {
+                Some(Ok(Reply::Answered { model, .. })) => Some((sent, model.clone())),
+                _ => None,
+            })
+    };
     let failure = move || match models.get() {
         Some(Err(err)) => Some(view! { <p class="fault-line" role="alert">{err}</p> }),
         _ => None,
@@ -145,13 +175,14 @@ fn ModelSwitch(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>
                     on:change=move |event| deck.model.set(event_target_value(&event))
                 >
                     {move || {
+                        let answered = answered_alias();
                         names()
                             .into_iter()
                             .map(|name| {
-                                let label = if name == DEFAULT_MODEL {
-                                    format!("{name} (default model)")
-                                } else {
-                                    name.clone()
+                                let label = match &answered {
+                                    _ if !name.starts_with("jev-") => name.clone(),
+                                    Some((sent, model)) if *sent == name => format!("{name} → {model}"),
+                                    _ => format!("{name} (server default)"),
                                 };
                                 let selected = deck.model.get_untracked() == name;
                                 view! { <option value=name selected=selected>{label}</option> }
@@ -173,6 +204,17 @@ fn ModelSwitch(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>
                             <p class="answered" data-testid="answered-by">
                                 <span class="legend">"Answered by"</span>
                                 <Verbatim field="/model".to_string() value=model class="answered-model" />
+                                {move || {
+                                    deck.stale
+                                        .get()
+                                        .then(|| {
+                                            view! {
+                                                <span class="stale-note" data-testid="stale">
+                                                    "From last run · inputs changed"
+                                                </span>
+                                            }
+                                        })
+                                }}
                             </p>
                         }
                     })

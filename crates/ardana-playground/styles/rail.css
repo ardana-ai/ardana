@@ -2,7 +2,7 @@
 
 .rail {
   display: grid;
-  grid-template-columns: auto minmax(12rem, 22rem) 1fr auto;
+  grid-template-columns: auto minmax(0, 22rem) minmax(0, 1fr) auto;
   grid-template-areas: "maker switch counters run";
   align-items: center;
   gap: var(--space-4) var(--space-6);
@@ -114,6 +114,7 @@
 /* Counters: dot-matrix figures behind smoked glass. */
 .counters {
   grid-area: counters;
+  flex-wrap: wrap;
   display: flex;
   justify-content: flex-end;
   gap: var(--space-4);
@@ -189,8 +190,51 @@
 }
 
 /* RUN: a chrome transport key with its LED strip; pressed, it sits lower and the strip burns amber. */
-.run-key {
+/* The transport: RUN and, beneath it, the Changed lamp that is lit while the inputs differ from the last run. */
+.transport {
   grid-area: run;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+}
+
+.changed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.changed .legend {
+  color: var(--ink-soft);
+}
+
+.changed.on .legend {
+  color: var(--ink);
+}
+
+/* Why RUN is held, under the rail's right edge; it describes the key. */
+.run-note {
+  grid-column: 1 / -1;
+  justify-self: end;
+  color: var(--fault-ink);
+  font-weight: 500;
+}
+
+.run-note:empty {
+  display: none;
+}
+
+.stale-note {
+  font-family: var(--font-legend);
+  font-weight: 600;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.run-key {
   position: relative;
   display: grid;
   justify-items: center;
@@ -238,11 +282,11 @@
   text-transform: uppercase;
 }
 
-.run-key:hover:not(:disabled) {
+.run-key:hover:not([aria-disabled="true"]) {
   background: linear-gradient(180deg, #ffffff, #e2e6e9 45%, #bcc2c7);
 }
 
-.run-key:active:not(:disabled),
+.run-key:active:not([aria-disabled="true"]),
 .run-key[aria-busy="true"] {
   transform: translateY(3px);
   box-shadow:
@@ -253,17 +297,17 @@
 }
 
 .run-key[aria-busy="true"] .run-led,
-.run-key:active:not(:disabled) .run-led {
+.run-key:active:not([aria-disabled="true"]) .run-led {
   background: linear-gradient(180deg, #ffe08a, var(--amber) 60%);
   border-color: var(--amber-dim);
 }
 
-.run-key:disabled {
+.run-key[aria-disabled="true"] {
   cursor: not-allowed;
   color: var(--ink-soft);
 }
 
-.run-key:disabled:not([aria-busy="true"]) {
+.run-key[aria-disabled="true"]:not([aria-busy="true"]) {
   background: linear-gradient(180deg, #e3e6e9, #c9ced2);
 }
 

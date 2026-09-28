@@ -4,13 +4,12 @@ import {
   expectFiguresMatch,
   fixture,
   isSystemOne,
+  runKey,
   screenshot,
   shareHash,
   type Json,
   type Request,
 } from './helpers';
-
-const runKey = (page: import('@playwright/test').Page) => page.getByRole('button', { name: /^Run/ });
 
 test('embedded_binary', async ({ page }, testInfo) => {
   const index = await page.request.get('/');
@@ -57,6 +56,9 @@ test('answers_match_api', async ({ page }, testInfo) => {
   await expect(page.getByRole('textbox', { name: 'State' })).toHaveValue(ticket.state as string);
   await expect(page.getByTestId('channel')).toHaveCount(Object.keys(ticket.questions).length);
   await expect(page.locator('#model')).toHaveValue('jev-latest');
+  // The alias names no model until a response does.
+  const alias = page.locator('#model option[value="jev-latest"]');
+  await expect(alias).toHaveText('jev-latest (server default)');
   await screenshot(page, testInfo, 'answers_match_api', 'loaded');
 
   const replied = page.waitForResponse((r) => isSystemOne(r.url()));
@@ -68,9 +70,15 @@ test('answers_match_api', async ({ page }, testInfo) => {
   const timing = (await finished).timing();
 
   await expect(page.getByTestId('fault')).toHaveCount(0);
+  await expect(alias).toHaveText(`jev-latest → ${(json as unknown as { model: string }).model}`);
+  // Focus stays on RUN, and the polite status region reads the outcome.
+  await expect(runKey(page)).toBeFocused();
+  await expect(page.getByTestId('run-status')).toHaveText(
+    new RegExp(`^Answered by ${(json as unknown as { model: string }).model}: 2 questions, \\d+ ms$`),
+  );
   for (const [id, answer] of Object.entries(json.answers)) {
     const channel = page.locator(`[data-testid="channel"][data-question="${id}"]`);
-    await expect(channel.getByTestId('type')).toContainText(`Type ${answer.type}`);
+    await expect(channel.getByTestId('type').getByRole('radio', { name: answer.type as string, exact: true })).toBeChecked();
     if (answer.type === 'choice' || answer.type === 'score') {
       const options = Object.keys(answer.probabilities as Record<string, number>);
       await expect(channel.getByTestId('ladder')).toHaveCount(options.length);
@@ -151,6 +159,7 @@ test('picker_raw_errors', async ({ page, baseURL }, testInfo) => {
   await expect(page.getByTestId('fault')).toContainText('HTTP 413');
   await expect(page.getByTestId('fault-message')).toHaveText(tooLarge.detail.message);
   await expect(page.getByTestId('raw-status')).toHaveText('HTTP 413');
+  await expect(page.getByTestId('run-status')).toHaveText('HTTP 413, not answered');
   await screenshot(page, testInfo, 'picker_raw_errors', '413');
 
   // An answer type the page does not know renders as raw JSON. The server only returns the three Jev types, so
@@ -191,6 +200,15 @@ test('picker_raw_errors', async ({ page, baseURL }, testInfo) => {
   }
   await expect(page.getByTestId('raw-status')).toHaveText('HTTP 422');
   await expect(page.getByTestId('raw-response')).toHaveJSProperty('textContent', await response.text());
+  // Each issue that names a question marks that channel with its message.
+  const named = rejected.detail.filter((issue) => issue.loc[0] === 'body' && issue.loc[1] === 'questions');
+  expect(named.length).toBeGreaterThan(0);
+  for (const issue of named) {
+    const faulted = page.locator(`[data-testid="channel"][data-question="${issue.loc[2]}"]`);
+    await expect(faulted).toHaveClass(/faulted/);
+    await expect(faulted.getByTestId('channel-fault')).toContainText(issue.msg);
+  }
+  await expect(page.locator('[data-testid="channel"].faulted')).toHaveCount(new Set(named.map((i) => i.loc[2])).size);
 
   // Every request the page made stayed on its origin, and every call it made beyond loading its own wasm went to
   // /v1/*.

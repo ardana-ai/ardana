@@ -5,6 +5,7 @@ colors:
   amber: "#ffb000"
   amber-dim: "#cc7a00"
   amber-off: "#3d2e0d"
+  amber-rim: "#6e4300"
   amber-ghost: "#282010"
   fault-ink: "#8f1d17"
   fault-lamp: "#e0301e"
@@ -14,6 +15,8 @@ colors:
   alu-hi: "#e4e7ea"
   alu: "#c7ccd1"
   alu-lo: "#a9afb5"
+  field-edge: "#676d73"
+  field-edge-top: "#4f5459"
   chrome-hi: "#f7f8f9"
   chrome-lo: "#b0b6bc"
   ink: "#1b1b1b"
@@ -129,6 +132,31 @@ components:
     height: "80px"
   run-key-disabled:
     textColor: "{colors.ink-soft}"
+  plate-key:
+    backgroundColor: "{colors.chrome-hi}"
+    textColor: "{colors.ink}"
+    typography: "{typography.label}"
+    rounded: "{rounded.control}"
+    padding: "6px 14px"
+    height: "36px"
+  plate-key-disabled:
+    textColor: "{colors.ink-soft}"
+  toggle-key:
+    backgroundColor: "{colors.chrome-hi}"
+    textColor: "{colors.ink}"
+    typography: "{typography.label}"
+    rounded: "{rounded.window}"
+    padding: "4px 10px"
+    height: "32px"
+  toggle-key-on:
+    backgroundColor: "{colors.alu}"
+    textColor: "{colors.ink}"
+  field:
+    backgroundColor: "{colors.paper}"
+    textColor: "{colors.ink}"
+    typography: "{typography.body-small}"
+    rounded: "{rounded.window}"
+    padding: "6px 10px"
   model-switch:
     backgroundColor: "{colors.chrome-hi}"
     textColor: "{colors.ink}"
@@ -224,7 +252,7 @@ Amber is signal, not paint. It appears where the machine has something to say (a
 - Engraved narrow-grotesk caps (Barlow Condensed) as the legend under or beside every control and window.
 - Smoked-glass windows with a sunk bevel for every live figure; amber dot-matrix numerals (Doto) inside.
 - Amber LED ladders on an 8px segment pitch with a quarter-tick scale beneath.
-- One pressable chrome transport key (RUN) with real key travel.
+- One pressable chrome transport key (RUN) with real key travel; every other key is a flat chrome plate that sits in when pressed.
 - Red reserved for faults; amber reserved for live signal.
 
 ## Colors
@@ -232,8 +260,9 @@ Amber is signal, not paint. It appears where the machine has something to say (a
 A warm-neutral hardware palette (beige plastic, cool aluminium, cream paper, near-black smoked glass) with one signal hue, amber, and one fault hue, red.
 
 ### Primary
-- **LED Amber** (#ffb000): lit ladder segments, dot-matrix figures, lit lamp cores, the RUN strip while busy, text selection, and the focus ring on the paper editors. Every amber figure is a value the API returned.
-- **Amber Filament** (#cc7a00): the dim edge of a lit lamp, the lit RUN strip's border, and the 2px underline under the winning option's name.
+- **LED Amber** (#ffb000): lit ladder segments, dot-matrix figures, lit lamp cores, the RUN strip while busy, text selection, and the focus ring on the state tape (inside its dark well). Every amber figure is a value the API returned.
+- **Amber Filament** (#cc7a00): the inner glow stop of a lit lamp, the lit RUN strip's border, and the 2px underline under the winning option's name.
+- **Amber Rim** (#6e4300): the rim of a lit lamp, so the lamp reads against aluminium at 3:1 or more and not by glow alone.
 - **Unlit Amber** (#3d2e0d): dark lamps, unlit ladder segments, idle readout and counter dots. Never carries a readable figure.
 - **Ghost Matrix** (#282010): the unlit 5x7 dot grid behind every dot-matrix window. It is inlined in the grid's SVG data URI (a custom property cannot enter a data URI), so change both together.
 
@@ -248,6 +277,7 @@ A warm-neutral hardware palette (beige plastic, cool aluminium, cream paper, nea
 - **Aluminium** (#c7ccd1): the fascia body and channel modules.
 - **Aluminium Highlight** (#e4e7ea): the fascia's top edge, the light half of every groove, and the bottom lip of every sunk window.
 - **Aluminium Shade** (#a9afb5): the dark half of every groove, ladder tick marks, scrollbar thumbs.
+- **Field Edge Top** (#4f5459) and **Field Edge** (#676d73): the sunk walls of the paper fields, dark enough to hold 3:1 against aluminium.
 - **Chrome Highlight** (#f7f8f9) and **Chrome Shade** (#b0b6bc): the top and bottom stops of the chrome gradients on the RUN key and the model switch.
 - **Engraving Ink** (#1b1b1b): legends, headings and body text on aluminium and paper; the global focus outline.
 - **Soft Engraving** (#35383b): secondary legends, instructions, notes, disabled key text.
@@ -259,7 +289,7 @@ A warm-neutral hardware palette (beige plastic, cool aluminium, cream paper, nea
 - **Bevel Deep** (#050403) and **Bevel Side** (#1d1c17): the top and side walls of every sunk window.
 
 ### Named Rules
-**The Amber Is Live Rule.** Amber marks live signal only: returned figures, the winning answer's lamp and underline, the busy RUN strip, selection and editor focus. It is never a border, a background panel, a heading colour or an ornament.
+**The Amber Is Live Rule.** Amber marks live signal only: returned figures, the winning answer's lamp and underline, the busy RUN strip, the lit lamp of the state mode, of a pressed toggle key (what will be sent) and of the Changed lamp (the inputs differ from the last run), selection and the tape's focus ring. It is never a border, a background panel, a heading colour or an ornament.
 
 **The Red Is a Fault Rule.** The three fault colours appear only when a request or input was refused. No red for emphasis, warnings or destructive-looking controls.
 
@@ -279,7 +309,7 @@ A warm-neutral hardware palette (beige plastic, cool aluminium, cream paper, nea
 - **Title** (Barlow Condensed 600, 1.25rem, 1.15, 0.02em, sentence case as typed): a channel's question id, shown exactly as the id in the request.
 - **Body** (Barlow Semi Condensed 400, 1rem, 1.45, tabular numerals): running text and option names (500 for option names).
 - **Body Small** (Barlow Semi Condensed 400, 0.9375rem, 1.4, max 65ch): channel instructions; 0.875rem for option notes and level-fit lines.
-- **Label** (Barlow Condensed 600, 0.75rem, 1.2, 0.12em, uppercase): engraved legends under controls and windows, mode-lamp captions, the "Type" key. The maker's line uses the 500 weight at 0.14em.
+- **Label** (Barlow Condensed 600, 0.75rem, 1.2, 0.12em, uppercase): engraved legends under controls and windows, mode-lamp captions, the "Type" key. The maker's line uses the 500 weight at 0.14em. Plate keys and toggle keys set their legends at 0.8125rem (0.12em and 0.1em).
 - **Key Legend** (Barlow Condensed 600, 0.875rem, 1, 0.16em, uppercase): the RUN key's legend.
 - **Switch** (Barlow Condensed 600, 1rem, 1.2, 0.04em): the model name on the chrome switch; 0.9375rem for the "answered by" model.
 - **Figure** (Barlow Condensed 600, 1.125rem, 0.04em, amber on glass): returned text values such as the chosen answer.
@@ -301,7 +331,7 @@ One fascia, max 1440px, centred on the surround with 24px of page padding (8px a
 
 The rail is a four-area grid: maker's plate, model switch (12rem to 22rem), counters (right-aligned) and the RUN key at the far right, with 16px/32px gaps and 16px/24px padding. At 1080px the counters drop to a second full-width row; at 720px the rail becomes maker + RUN, then the switch, then three equal counter windows.
 
-The deck is a two-column grid, state cassette left (5fr) and question channels right (7fr), with the raw exchange spanning both below; 24px gap and padding. At 960px it becomes one column in reading order (cassette, channels, exchange); at 720px gaps tighten to 16px and padding to 12px. The state-left, questions-right order is binding.
+The deck is a two-column grid: the console strip across the top, state cassette left (5fr) and question channels right (7fr), the raw exchange and then the snippets spanning both below; 24px gap and padding. At 960px it becomes one column in reading order (console, cassette, channels, exchange, snippets); at 720px gaps tighten to 16px and padding to 12px. The state-left, questions-right order is binding.
 
 Spacing runs on a 4px base: 4, 8, 12, 16, 24, 32. Stacks inside modules use 12px; module padding is 16px (12px at phone width). The ladder row is a four-track grid (8px lamp, 6rem to 13rem name, flexible ladder, readout); at phone width the ladder drops beneath the name and the readout stays on the name's line. Figures under the ladders wrap as a row, and become a two-column grid at phone width.
 
@@ -330,15 +360,25 @@ Softened hardware corners, stepped by scale: the fascia at 16px (10px at phone w
 ## Components
 
 ### Buttons (RUN transport key)
-The only button on the fascia: a chrome transport key, tactile and deliberate.
+The only transport key on the fascia: a chrome transport key, tactile and deliberate.
 - **Shape:** gently squared (6px), 104 by 80px (88 by 68px at phone width).
 - **Primary:** chrome gradient (Chrome Highlight to Chrome Shade), Engraving Ink play glyph (22px inline SVG) over the "Run" key legend, with a 4px LED strip across the top.
 - **Hover:** the chrome brightens one step. **Active / busy:** the key drops 3px, its skirt collapses, the LED strip burns amber and the legend reads "Running"; `aria-busy` holds that pressed state for the whole run. Transitions are 80ms on `cubic-bezier(0.16, 1, 0.3, 1)`, none under reduced motion.
-- **Disabled:** flat pale chrome, Soft Engraving legend, not-allowed cursor.
+- **Disabled:** `aria-disabled`, never `disabled` (a key that disables itself while focused drops focus): flat pale chrome, Soft Engraving legend, not-allowed cursor; while a run is busy it keeps the pressed look. When the questions JSON does not parse, a Fault Ink note at the rail's right edge ("Questions JSON has an error") says why and describes the key.
+- **Changed lamp:** beneath the key, a lamp with the engraved legend "Changed", lit while what RUN would send differs from the last request sent.
 - **Focus:** 2px Engraving Ink outline, 4px offset. Ctrl/Cmd+Enter in either editor presses it.
 
+### Plate Keys (every other button)
+- **Style:** a chrome plate like the model switch (6px corners, Chrome plate shadow, 36px high) with its legend in uppercase Barlow Condensed 600 at 0.8125rem. Presets, Share link, Add question, Edit, Add option or level, Remove, Copy.
+- **Hover:** the chrome brightens one step. **Pressed / open:** the plate sits into the panel (an inset top shadow, darker aluminium gradient); `aria-expanded="true"` holds that look for the Edit and Share keys. No skirt: the Key Travel Rule keeps it for RUN.
+- **Disabled:** flat pale chrome, Soft Engraving legend, not-allowed cursor. **Focus:** Engraving Ink outline at 3px offset.
+
+### Chrome Toggle (question type, snippet language)
+- **Style:** a native radio group dressed as chrome keys (4px corners, 32px high) in a milled track (a 2px sunk bevel in Aluminium Shade), the engraved legend ("Type", "Language") before it. The real radio covers its key, invisible, so pointer, arrow keys and assistive tech reach the native control.
+- **On:** the key sits in (inset top shadow, darker aluminium) and its lamp lights amber, like the cassette's mode lamps: it says what will be sent. **Focus:** Engraving Ink outline around the key.
+
 ### Model Switch
-- **Style:** a real `select` on a chrome plate (6px), model name in the Switch role, a 2px engraved chevron at the right, the "Model" legend engraved beneath. After a run, an "Answered by" legend shows the model the API reported.
+- **Style:** a real `select` on a chrome plate (6px), model name in the Switch role, a 2px engraved chevron at the right, the "Model" legend engraved beneath. `jev-*` names read "jev-latest (server default)" until a run sent under that alias is answered, then "jev-latest → decider-2b-v11", the model the response reported; the page never guesses the default. After a run, an "Answered by" legend shows the model the API reported, followed by "From last run · inputs changed" while stale.
 - **Focus:** Engraving Ink outline at 3px offset.
 
 ### Counters and Readouts (dot-matrix windows)
@@ -352,15 +392,28 @@ The only button on the fascia: a chrome transport key, tactile and deliberate.
 
 ### Channel (question module)
 - **Corner Style:** 10px. **Background:** an aluminium gradient lighter at the top. **Shadow:** Channel module. **Padding:** 16px (12px at phone width).
-- **Head:** the question id in the Title role, instructions in Body Small beneath, and a read-only engraved type legend ("Type" key + type name) at the right, dropping under the title at phone width.
+- **Head:** the question id in the Title role, instructions in Body Small beneath, and at the right the Type toggle (noul, choice, score) and the Edit key, dropping under the title at phone width.
 - **Ladder row:** lamp, option name, ladder, readout. The winning option's lamp lights amber and its name takes a 2px Amber Filament underline at 4px offset, plus a visually hidden "(answer)".
+- **From last run:** when the state, the model or the channel's question differs from the request that produced its answer, an engraved "From last run · inputs changed" note sits under the instructions and the winner loses its underline; the figures stay exactly as returned.
+- **Faulted:** when a 422 issue's location names the question, the module takes a 2px inset Fault Ink edge and the message on a Fault Paper strip with the fault lamp, until the question is edited.
 - **Ladder:** Smoked Glass track (16px high, 3px corners, sunk bevel) of unlit segments; the lit fill is clipped to the returned level and climbs from zero in 900ms on `cubic-bezier(0.16, 1, 0.3, 1)`, static under reduced motion.
 - **Figures:** under a groove, engraved legends over glass windows: the answer as Figure text, confidence, p max, certainty and other extras as readouts.
 
+### Console
+- A strip across the top of the deck over a Groove: the engraved "Presets" legend and one plate key per preset (ticket routing, resume screening, support-chat audit) on the left, the Share link key on the right. After a preset load or a removed question, a "Restore previous" plate key follows the presets until the next edit and puts both editors back. Open, the share panel spans the strip: an engraved legend, the link in a paper field (Code Small) and a Copy key.
+
+### Builder (a channel's program)
+- Opened by the channel's Edit key, under a Groove inside the channel: the question id (Code), instructions (Body Small), then the criteria as rows of paper fields: noul "Yes means" and "No means", choice option name (Code) and description with a Remove key, score levels numbered from 0 (lowest first) with a Remove key. An engraved legend counts the rows against their range (2 to 255 options, 2 to 10 levels); Add and Remove keys disable at the bounds.
+- **Fields:** Label Paper, 4px corners, sunk: a 2px Field Edge Top (#4f5459) top wall, 1px Field Edge (#676d73) sides and bottom (3:1 and more on aluminium), and the Aluminium Highlight lip beneath; focus is the 2px Engraving Ink outline (amber would read at 1.2:1 on aluminium); an invalid field takes a Fault Ink border and a Fault Ink line beneath that describes it; structured JSON shows read only on Paper Shade with a note to edit it in the questions JSON.
+- **Type memory:** switching a question's type keeps the criteria it had under each type, so switching back restores them.
+
+### Snippets
+- Under the raw exchange: the engraved "Snippets" head, the Language toggle (curl, Python, TypeScript) and a Copy key, then the snippet on a wire pane. It is the request RUN would send now, aimed at this server.
+
 ### Inputs / Fields (questions editor)
 - **Style:** Label Paper text area in Code type inside a 6px near-black frame (8px corners), with the engraved "Questions JSON" legend above.
-- **Focus:** 2px amber outline, 2px offset.
-- **Error:** the frame turns Fault Ink and a Fault Ink line reports the parse error beneath.
+- **Focus:** 2px Engraving Ink outline, 2px offset.
+- **Error:** the frame turns Fault Ink and a Fault Ink line beneath, which describes the editor, says where the text goes wrong in plain words ("Questions JSON ends early at line 1, column 11").
 
 ### Wire (raw exchange)
 - **Style:** Smoked Glass panes (6px, 3px bevel) in Code Small, Glass Text, pre-wrapped, max 22rem tall and scrollable, focusable. Two side by side (sent, received with HTTP status), stacked at phone width. Selection inside the wire is amber on glass.
@@ -368,6 +421,9 @@ The only button on the fascia: a chrome transport key, tactile and deliberate.
 
 ### Fault
 - **Style:** Fault Paper panel (10px) with Fault Ink text, a red fault lamp beside the title, and each issue as its location in mono Fault Ink followed by the message in Engraving Ink 500. Errors show as the API reported them.
+
+### Announcements
+- Two polite, visually hidden `role="status"` regions, present and empty from load: the run's outcome ("Answered by decider-2b-v11: 2 questions, 212 ms", "HTTP 422, not answered"), and an input turning invalid or valid again. Field errors are text tied to their field with `aria-describedby`, never alerts that repeat on every keystroke. On a phone (720px and below) a run brings the fault or the first channel to the top of the view, instantly under reduced motion.
 
 ### Panel Head
 - **Style:** the engraved Headline for the panel, followed by a Groove rule and 12px before the content.
@@ -379,8 +435,8 @@ The only button on the fascia: a chrome transport key, tactile and deliberate.
 - **Do** engrave a Label legend (Barlow Condensed 600, 0.75rem, 0.12em, uppercase, 1px Engrave Light under-shadow) under or beside every control and window.
 - **Do** separate regions with the two-line Groove (Aluminium Shade over Aluminium Highlight), never a flat border.
 - **Do** light surfaces from above: white top highlights on raised parts, dark top walls on sunk windows.
-- **Do** keep motion to the RUN key press (80ms) and the ladder climb (900ms), both on `cubic-bezier(0.16, 1, 0.3, 1)` and both off under reduced motion.
-- **Do** keep the state on the left and the questions on the right; restack as cassette, channels, exchange in one column.
+- **Do** keep motion to the RUN key press and the snap of plate and toggle keys (80ms) and the ladder climb (900ms), all on `cubic-bezier(0.16, 1, 0.3, 1)` and all off under reduced motion.
+- **Do** keep the state on the left and the questions on the right; restack as console, cassette, channels, exchange, snippets in one column.
 
 ### Don't:
 - **Don't** build the two-pane API console of grey borders and a blue Run button; no blue anywhere on the fascia.
@@ -388,5 +444,5 @@ The only button on the fascia: a chrome transport key, tactile and deliberate.
 - **Don't** use the fault reds for anything but a refused request or invalid input.
 - **Don't** put a readable figure in Unlit Amber or Ghost Matrix; idle windows are empty cells with hidden text.
 - **Don't** set words in Doto, legends in Plex, or prose in Barlow Condensed.
-- **Don't** give any surface other than a pressable transport key a hard offset shadow.
+- **Don't** give any surface other than a pressable transport key a hard offset shadow; plate keys and toggle keys sit in, they do not travel.
 - **Don't** round, restyle or re-derive a returned value; show it at the stated precision with its raw value attached.

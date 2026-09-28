@@ -92,13 +92,19 @@ pub const GUIDELINES: &[Guideline] = &[
     },
     Guideline {
         file: "playwright.md",
-        pins: &[("@playwright/test", "1.63.0"), ("lz-string", "1.5.0")],
+        pins: &[
+            ("@playwright/test", "1.63.0"),
+            ("lz-string", "1.5.0"),
+            ("@typesafe-ai/sdk", "0.6.0"),
+        ],
         official: &[
             "https://playwright.dev/",
             "https://github.com/microsoft/playwright",
             "https://docs.npmjs.com/",
             "https://github.com/pieroxy/lz-string",
             "https://nodejs.org/",
+            "https://www.npmjs.com/package/@typesafe-ai/sdk",
+            "https://docs.typesafe.ai/",
         ],
     },
     Guideline {

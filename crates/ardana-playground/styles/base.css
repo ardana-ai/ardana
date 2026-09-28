@@ -20,6 +20,9 @@
   --amber: #ffb000;
   --amber-dim: #cc7a00;
   --amber-off: #3d2e0d;
+  --amber-rim: #6e4300;
+  --field-edge: #676d73;
+  --field-edge-top: #4f5459;
   --amber-ghost: #282010;
   --paper: #f4efe0;
   --paper-shade: #e3dcc7;
@@ -180,10 +183,11 @@ code {
   border: 1px solid #1a1407;
 }
 
+/* A lit lamp keeps a dark amber rim, so it reads against the aluminium (3:1 and more) as well as by its glow. */
 .on > .lamp,
 .lit > .lamp {
   background: radial-gradient(circle at 40% 35%, #fff1c9, var(--amber) 55%, var(--amber-dim));
-  border-color: var(--amber-dim);
+  border-color: var(--amber-rim);
 }
 
 /* A fault line: red is spent on errors only. */
@@ -192,6 +196,7 @@ code {
   font-weight: 500;
 }
 
+/* No fault line is a live region: the page announces through its status regions, so an empty line may collapse. */
 .fault-line:empty {
   display: none;
 }

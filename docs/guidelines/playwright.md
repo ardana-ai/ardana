@@ -2,14 +2,17 @@
 
 Scope: the browser end-to-end suite for the embedded Leptos playground (`crates/ardana-playground`, served by
 `crates/ardana-server` from the `ardana` binary). It lives in `e2e/playground/` (`package.json`, `package-lock.json`, `.npmrc`,
-`playwright.config.ts`, `tests/helpers.ts`, `tests/*.spec.ts`, `fixtures/jev-share-links.json`) and runs through `cargo xtask e2e playground`
-(W6 R6.3-R6.7, W7 R7.1-R7.6), next to the `impeccable detect` URL scans of `cargo xtask e2e design` (Q24, R6.2).
+`playwright.config.ts`, `tests/helpers.ts`, `tests/playground.spec.ts` (W6), `tests/parity.spec.ts` (W7),
+`fixtures/jev-share-links.json`) and runs through `cargo xtask e2e playground` (W6 R6.3-R6.7, W7 R7.1-R7.6), next to
+the `impeccable detect` URL scans and the finish check of `cargo xtask e2e design` (Q24, R6.2, R7.7).
 It covers npm setup inside the sandbox, config, browsers, locators, assertions, network timing, screenshots and
 share-link decoding.
 
 ## Versions
 - `@playwright/test` 1.63.0 — test runner, fixtures, web-first assertions; pinned exactly in `package.json` (Q20, R6.8)
 - `lz-string` 1.5.0 — decodes Jev share links in tests with `decompressFromEncodedURIComponent` (Q28, R7.4, R7.8)
+- `@typesafe-ai/sdk` 0.6.0 — the official TypeSafe TypeScript SDK the `snippets` case runs the TypeScript snippet with
+  (R7.6, R7.8); ESM and CJS builds, no dependencies, needs Node 20+
 - `node` 24 — the installed Node on the dev machine (24.18.1, LTS "Krypton"); Playwright 1.63 supports Node 22, 24 and 26
 
 ## Rules
@@ -89,6 +92,8 @@ share-link decoding.
   and requires every other `fetch`/`xhr` request to go to `<origin>/v1/`.
 - Screenshots (R6.7): every case ends with `await page.screenshot({ path: <root>/tmp/screens/<case>/<project>.png,
   fullPage: true })` using `testInfo.project.name`; the two projects together produce the 1280x800 and 390x844 pair.
+  Cases with several final states name each `<state>-<project>.png` (`jev_share_links/<page>-*`, `presets/<preset>-*`);
+  xtask requires at least one screenshot per project in every case directory and checks every one's width.
   Automatic `use.screenshot`/`trace` artifacts stay in `outputDir`.
 - Request timing (R6.5): take the finished request with
   `page.waitForEvent('requestfinished', r => r.url().endsWith('/v1/systemone'))`, then read `request.timing()`.
@@ -98,6 +103,29 @@ share-link decoding.
   API URL starts with `<baseURL>/v1/`; use `request.postDataJSON()` to compare the sent body with the raw panel.
 - Share links in W6 cases are written with `lz-string`'s `compressToEncodedURIComponent` (`shareHash` in
   `tests/helpers.ts`), as Jev's playground writes them, so the Rust decoder is checked against the JS encoder.
+- `run(page)` in `tests/helpers.ts` presses RUN and waits for the `/v1/systemone` response with `timeout: 0`, so a
+  heavy request is bounded by the test's own timeout (`test.setTimeout`), not the 30 s default of `waitForResponse`.
+- Docs share links (R7.3): `fixtures/jev-share-links.json` vendors every `console.typesafe.ai/playground#share/` link
+  found on docs.typesafe.ai (17, all on cookbook pages) with its page. `jev_share_links` has one test per link: the
+  editors hold the decoded `documentText` and `promptsText`, the picker the first `selectedModels` entry
+  (`jev-latest` when absent), and every question id gets a displayed answer. Two links name `speed_latest`, which
+  Ardana does not serve: the test first checks the 404 fault naming it (Q7), then picks decider-2b and runs. The
+  largest links take minutes (every row decodes a 12k-token state), hence `test.setTimeout(900_000)`.
+- Snippets (R7.6): the `snippets` case writes each snippet to `tmp/playwright/snippets/<project>/` and executes it
+  there: curl with `bash` (its body must equal the request the page sent, its output the response the page
+  received), Python with `tmp/py/sdk/bin/python` and `TYPESAFE_BASE_URL`, TypeScript with the running Node
+  (`decide.mts`, type stripping) through a `node_modules` symlink to `e2e/playground/node_modules`. Both SDKs get a
+  placeholder `TYPESAFE_API_KEY`; the SDK outputs must equal every displayed figure except Ardana's `x_` extras,
+  which the SDK models drop.
+- Recovery and announcements: `stale_and_restore` checks the Changed lamp, the "From last run · inputs changed"
+  labels (only the edited channel when one spec changes, every channel when the state changes), unchanged
+  `data-value`s, the winner's underline gone, Restore previous after a preset, and on the mobile project that the
+  first channel is in view after RUN. `answers_match_api` checks RUN keeps focus and the `run-status` text,
+  `picker_raw_errors` the 413 status text and the 422 issue marked on its channel, `builder_sync` focus after
+  rename and removals, the type round trip, `notice` and the RUN reason. Use `toBeFocused`,
+  `toHaveAccessibleDescription` and `toBeInViewport` for these.
+- Radio groups (the type toggle, the snippet language): the native radio covers its key, so `check()` and
+  `click()` hit the real input; arrow keys move the selection (`builder_sync` switches noul to choice by keyboard).
 - Share links (R7.3, R7.4): take the text after `#share/`, run `decompressFromEncodedURIComponent`, and assert the
   result is a non-empty string before `JSON.parse` (the 1.5.0 function returns `null` for `""` and does not throw on
   garbage). Check `apiVersion`, `documentText`, `promptsText`, `selectedModels`. `lz-string` 1.5.0 is CommonJS
@@ -114,6 +142,10 @@ share-link decoding.
 - `cargo xtask e2e design` runs `$IMPECCABLE_BIN detect --json --viewport 1280x800 <url>` and `--viewport 390x844` on
   `/`, `/#share/<ticket>`, `/?autorun=1#share/<ticket>` and `/?autorun=1#share/<invalid>` of a running server; exit 0
   is clean, 1 means a target was not scanned, 2 means primary findings. Treat any non-zero exit as a failure.
+- Its "finish" check (R7.7) then wants a critique record under `.impeccable/critique/` (any file but `ignore.md`),
+  `docs/design/audit.md` with the line `P0: 0 · P1: 0`, every scan of this run clean, and `.impeccable/config.json`
+  `hook.enabled` true. The critique and audit come from fresh-context agents after the last UI fix, never from the
+  agent that built the UI.
 - Scan URLs, not files: Leptos markup lives in `.rs` `view!` macros and the CSR shell is empty, so only the rendered
   page shows real findings. Use the same viewports and URLs as the Playwright projects so screenshots and findings match.
 
@@ -142,4 +174,8 @@ share-link decoding.
 - https://docs.npmjs.com/cli/v11/using-npm/config — `cache`, `npm_config_*` env mapping, `save-exact`, `logs-dir`
 - https://github.com/pieroxy/lz-string/blob/1.5.0/libs/lz-string.js — `decompressFromEncodedURIComponent` behavior, exports
 - https://github.com/pieroxy/lz-string/blob/1.5.0/package.json — 1.5.0 `main` and `typings`
+- https://www.npmjs.com/package/@typesafe-ai/sdk — `TypeSafeClient({ baseURL, apiKey, timeout })`, `systemOne`,
+  `TYPESAFE_API_KEY` and `TYPESAFE_BASE_URL`
+- https://docs.typesafe.ai/sitemap.xml — the docs pages the share links were collected from
+- https://nodejs.org/api/typescript.html — Node's type stripping runs `.mts` files
 - https://nodejs.org/en/about/previous-releases — Node 24 LTS status

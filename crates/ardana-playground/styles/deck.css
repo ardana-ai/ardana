@@ -1,14 +1,69 @@
-/* The deck: the state cassette on the left, the question channels on the right, the raw exchange below. */
+/* The deck: the console strip on top, the state cassette on the left, the question channels on the right, the raw
+   exchange and the snippets below. */
 
 .deck {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   grid-template-areas:
+    "console console"
     "cassette channels"
-    "exchange exchange";
+    "exchange exchange"
+    "snippets snippets";
   align-items: start;
   gap: var(--space-5);
   padding: var(--space-5);
+}
+
+/* ---- Console: the preset keys and the share key, over a groove. ---- */
+
+.console {
+  grid-area: console;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+  padding-bottom: var(--space-4);
+  box-shadow: 0 1px 0 var(--alu-lo), 0 2px 0 var(--alu-hi);
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.presets > .legend {
+  color: var(--ink-soft);
+}
+
+.preset-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.share-panel {
+  flex-basis: 100%;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.share-panel > .legend {
+  color: var(--ink-soft);
+}
+
+.share-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.share-link {
+  flex: 1;
+  min-width: 0;
+  font: 400 0.8125rem/1.4 var(--font-code);
 }
 
 /* ---- Cassette: a dark shell with a paper label strip and the tape window, a real text area. ---- */
@@ -107,9 +162,14 @@
   opacity: 1;
 }
 
-.tape:focus-visible,
-.program-text:focus-visible {
+/* The tape's ring sits on its dark well, where amber reads; the questions editor sits on aluminium, so ink. */
+.tape:focus-visible {
   outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.program-text:focus-visible {
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -168,6 +228,7 @@
 
 .channel-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
 }
 
@@ -181,6 +242,36 @@
     inset 0 1px 0 rgb(255 255 255 / 0.8),
     0 2px 4px rgb(0 0 0 / 0.18),
     0 6px 12px -8px rgb(0 0 0 / 0.35);
+}
+
+/* A channel refused by the last run: a Fault Ink edge and the API's message inside the module. */
+.channel.faulted {
+  box-shadow:
+    inset 0 0 0 2px var(--fault-ink),
+    inset 0 3px 0 rgb(255 255 255 / 0.5),
+    0 2px 4px rgb(0 0 0 / 0.18),
+    0 6px 12px -8px rgb(0 0 0 / 0.35);
+}
+
+.channel-fault {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: 4px;
+  background: var(--fault-paper);
+  color: var(--fault-ink);
+  font-weight: 500;
+}
+
+.channel-fault .fault-lamp {
+  flex: none;
+  align-self: center;
+}
+
+/* A channel whose answer came from different inputs: figures stay exact, the winner loses its underline. */
+.channel.stale .ladder-row.lit .ladder-name {
+  text-decoration: none;
 }
 
 .channel-head {
@@ -211,30 +302,74 @@
   font-size: 0.9375rem;
   line-height: 1.4;
   max-width: 65ch;
+  overflow-wrap: anywhere;
 }
 
-/* Type: an engraved legend, read only. */
-.type-legend {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding-top: 4px;
-  font-family: var(--font-legend);
-  font-weight: 600;
-  text-transform: uppercase;
-  text-shadow: 0 1px 0 var(--engrave);
+/* The channel's controls: its type toggle and its Edit key. */
+.channel-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2) var(--space-3);
 }
 
-.type-key {
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
+.channels-foot {
+  display: flex;
+}
+
+/* The builder, under a groove: id, instructions, then the criteria rows. */
+.program-panel {
+  display: grid;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  box-shadow:
+    inset 0 1px 0 var(--alu-lo),
+    inset 0 2px 0 var(--alu-hi),
+    inset 0 -2px 0 var(--alu-lo),
+    inset 0 -1px 0 var(--alu-hi);
+}
+
+.criteria {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.criteria-legend {
   color: var(--ink-soft);
 }
 
-.type-name {
-  font-size: 0.9375rem;
-  letter-spacing: 0.1em;
-  color: var(--ink);
+.criteria-rows {
+  display: grid;
+  gap: var(--space-2);
+  justify-self: stretch;
+}
+
+.criteria-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.level-row {
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+}
+
+.level-number {
+  font: 600 1rem/1 var(--font-legend);
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.criteria-error {
+  grid-column: 1 / -1;
+}
+
+.program-foot {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* Ladders: one per option, amber segments climbing to the returned probability. */
@@ -356,6 +491,15 @@
 .ladder-fit .fit {
   color: var(--ink);
   font-weight: 500;
+}
+
+/* The level fit is set in Barlow, whose own full stop reads as one: the Doto point treatment stays off here. */
+.ladder-fit .matrix-point {
+  color: inherit;
+}
+
+.ladder-fit .matrix-point::before {
+  content: none;
 }
 
 /* Figures under the ladders: engraved legend over a smoked window. */
@@ -484,6 +628,27 @@
   border-color: var(--fault-ink);
 }
 
+/* ---- Snippets: the request as code, on the same glass as the wire. ---- */
+
+.snippets {
+  grid-area: snippets;
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.snippets .panel-head {
+  margin-bottom: 0;
+}
+
+.snippets-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
 /* ---- Raw exchange ---- */
 
 .exchange {
@@ -541,9 +706,11 @@
   .deck {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
+      "console"
       "cassette"
       "channels"
-      "exchange";
+      "exchange"
+      "snippets";
   }
 
   .tape {
@@ -569,14 +736,55 @@
     padding: var(--space-3);
   }
 
-  .channel-head {
+  /* A channel refused by the last run: a Fault Ink edge and the API's message inside the module. */
+.channel.faulted {
+  box-shadow:
+    inset 0 0 0 2px var(--fault-ink),
+    inset 0 3px 0 rgb(255 255 255 / 0.5),
+    0 2px 4px rgb(0 0 0 / 0.18),
+    0 6px 12px -8px rgb(0 0 0 / 0.35);
+}
+
+.channel-fault {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: 4px;
+  background: var(--fault-paper);
+  color: var(--fault-ink);
+  font-weight: 500;
+}
+
+.channel-fault .fault-lamp {
+  flex: none;
+  align-self: center;
+}
+
+/* A channel whose answer came from different inputs: figures stay exact, the winner loses its underline. */
+.channel.stale .ladder-row.lit .ladder-name {
+  text-decoration: none;
+}
+
+.channel-head {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .type-legend {
+  .channel-controls {
+    justify-content: flex-start;
+  }
+
+  .criteria-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .criteria-row > .field-input:nth-of-type(2) {
     grid-column: 1 / -1;
-    justify-self: start;
-    padding-top: 0;
+    grid-row: 2;
+  }
+
+  .level-row {
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto;
   }
 
   .figures {
@@ -604,22 +812,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ladder::after {
-  content: "";
-  position: absolute;
-  left: -1px;
-  right: -1px;
-  top: calc(100% + 3px);
-  height: 4px;
-  background:
-    linear-gradient(var(--alu-lo), var(--alu-lo)) 0 0 / 1px 100% no-repeat,
-    linear-gradient(var(--alu-lo), var(--alu-lo)) 25% 100% / 1px 50% no-repeat,
-    linear-gradient(var(--alu-lo), var(--alu-lo)) 50% 0 / 1px 100% no-repeat,
-    linear-gradient(var(--alu-lo), var(--alu-lo)) 75% 100% / 1px 50% no-repeat,
-    linear-gradient(var(--alu-lo), var(--alu-lo)) 100% 0 / 1px 100% no-repeat;
-}
-
-.ladder-fill {
+  .ladder-fill {
     animation: none;
   }
 }

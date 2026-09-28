@@ -6,14 +6,38 @@ use serde::{Deserialize, Serialize};
 /// The URL fragment prefix of a share link, after `#`.
 pub const PREFIX: &str = "share/";
 
-/// A Jev share payload: the state as text, the `questions` JSON as text and the picked models.
+/// A Jev share payload: the state as text, the `questions` JSON as text and the picked models. Some docs links
+/// carry no `selectedModels`; they open on the default model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharePayload {
     pub api_version: String,
     pub document_text: String,
     pub prompts_text: String,
+    #[serde(default)]
     pub selected_models: Vec<String>,
+}
+
+impl SharePayload {
+    /// The payload of the playground's editors and picked model.
+    pub fn new(document_text: String, prompts_text: String, model: String) -> SharePayload {
+        SharePayload {
+            api_version: "v1".to_string(),
+            document_text,
+            prompts_text,
+            selected_models: vec![model],
+        }
+    }
+}
+
+/// The share link for `payload` on the playground at `origin`: `<origin>/#share/<encoded payload>`.
+pub fn link(origin: &str, payload: &SharePayload) -> String {
+    let json = serde_json::to_string(payload).expect("a payload of strings serialises");
+    format!(
+        "{}/#{PREFIX}{}",
+        origin.trim_end_matches('/'),
+        lz_str::compress_to_encoded_uri_component(json.as_str())
+    )
 }
 
 /// Reads the share in a URL fragment (`location.hash`, with or without `#`): `None` when the fragment is no share
@@ -60,6 +84,30 @@ mod tests {
         assert_eq!(payload.document_text, "Hi");
         assert_eq!(payload.selected_models, ["jev-latest"]);
         assert!(payload.prompts_text.contains("greeting"));
+    }
+
+    #[test]
+    fn a_payload_without_models_opens_on_the_default() {
+        let json = r#"{"apiVersion":"v1","documentText":"x","promptsText":"{}"}"#;
+        assert_eq!(
+            decode(&encode(json)).unwrap().selected_models,
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn links_round_trip_in_jev_key_order() {
+        let payload = SharePayload::new("Café ☕".into(), "{\"q\": 1}".into(), "decider-2b".into());
+        let url = link("http://127.0.0.1:8000/", &payload);
+        let hash = url.strip_prefix("http://127.0.0.1:8000/").unwrap();
+        assert_eq!(from_hash(hash).unwrap().unwrap(), payload);
+        let units =
+            lz_str::decompress_from_encoded_uri_component(hash.strip_prefix("#share/").unwrap())
+                .unwrap();
+        assert_eq!(
+            String::from_utf16(&units).unwrap(),
+            r#"{"apiVersion":"v1","documentText":"Café ☕","promptsText":"{\"q\": 1}","selectedModels":["decider-2b"]}"#
+        );
     }
 
     #[test]

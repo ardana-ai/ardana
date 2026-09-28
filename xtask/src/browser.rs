@@ -1,8 +1,8 @@
 //! The browser suites (Q24). `playground`: the release `ardana` from `cargo xtask build`, copied alone into
 //! `tmp/e2e/playground-binary` and serving decider-2b while the playground's `dist/` is moved away, driven by the
 //! Playwright cases in `e2e/playground` on the installed Chrome; plus the placeholder build of `ardana-server`.
-//! `design`: the /impeccable context of the playground and `impeccable detect` on its four states at 1280x800 and
-//! 390x844.
+//! `design`: the /impeccable context of the playground, `impeccable detect` on its four states at 1280x800 and
+//! 390x844, and the finish (critique record, audit, clean scans, hook on).
 
 use std::path::{Path, PathBuf};
 
@@ -14,8 +14,19 @@ use crate::playground;
 use crate::sandbox::{Sandbox, cargo};
 use crate::serve::Server;
 
-/// The Playwright cases; each saves a screenshot per viewport under `tmp/screens/<case>/`.
-pub const CASES: &[&str] = &["embedded_binary", "answers_match_api", "picker_raw_errors"];
+/// The Playwright cases; each saves at least one screenshot per viewport under `tmp/screens/<case>/`.
+pub const CASES: &[&str] = &[
+    "embedded_binary",
+    "answers_match_api",
+    "picker_raw_errors",
+    "builder_sync",
+    "state_modes",
+    "jev_share_links",
+    "share_roundtrip",
+    "presets",
+    "snippets",
+    "stale_and_restore",
+];
 /// Playwright project name and viewport, as `playwright.config.ts` and `impeccable detect` use them.
 pub const VIEWPORTS: &[(&str, u32, u32)] = &[("desktop", 1280, 800), ("mobile", 390, 844)];
 
@@ -83,20 +94,39 @@ pub fn playground(sandbox: &Sandbox) -> Result<()> {
     screenshots(sandbox)
 }
 
-/// R6.7: every case left a 1280- and a 390-wide screenshot, and Playwright wrote its results under `tmp/playwright/`.
+/// R6.7: every case left 1280- and 390-wide screenshots (`<project>.png` or `<state>-<project>.png`), and Playwright
+/// wrote its results under `tmp/playwright/`.
 fn screenshots(sandbox: &Sandbox) -> Result<()> {
     let mut missing = Vec::new();
     for case in CASES {
+        let dir = sandbox.tmp().join("screens").join(case);
+        let files: Vec<String> = std::fs::read_dir(&dir)
+            .map(|entries| {
+                entries
+                    .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+                    .collect()
+            })
+            .unwrap_or_default();
         for (project, width, _) in VIEWPORTS {
-            let path = sandbox
-                .tmp()
-                .join("screens")
-                .join(case)
-                .join(format!("{project}.png"));
-            match png_width(&path) {
-                Ok(w) if w == *width => {}
-                Ok(w) => missing.push(format!("{} is {w} px wide, not {width}", path.display())),
-                Err(err) => missing.push(format!("{}: {err:#}", path.display())),
+            let shots: Vec<&String> = files
+                .iter()
+                .filter(|name| {
+                    name.strip_suffix(&format!("{project}.png"))
+                        .is_some_and(|state| state.is_empty() || state.ends_with('-'))
+                })
+                .collect();
+            if shots.is_empty() {
+                missing.push(format!("{} has no {project} screenshot", dir.display()));
+            }
+            for name in shots {
+                let path = dir.join(name);
+                match png_width(&path) {
+                    Ok(w) if w == *width => {}
+                    Ok(w) => {
+                        missing.push(format!("{} is {w} px wide, not {width}", path.display()))
+                    }
+                    Err(err) => missing.push(format!("{}: {err:#}", path.display())),
+                }
             }
         }
     }
@@ -230,11 +260,63 @@ pub fn design(sandbox: &Sandbox) -> Result<()> {
             "e2e design: context: PRODUCT.md, DESIGN.md, surface brief, config and hook in place"
         );
     }
-    failures.extend(detect(sandbox)?);
+    let scans = detect(sandbox)?;
+    let finish = finish(sandbox, &scans);
+    for problem in &finish {
+        println!("e2e design: finish: {problem}");
+    }
+    if finish.is_empty() {
+        println!(
+            "e2e design: finish: critique record, audit with no P0 or P1, clean scans, hook enabled"
+        );
+    }
+    failures.extend(scans);
+    failures.extend(finish);
     if !failures.is_empty() {
         bail!("e2e design failed:\n  {}", failures.join("\n  "));
     }
     Ok(())
+}
+
+/// The audit line that says no blocking or major issue is left.
+const AUDIT_CLEAN: &str = "P0: 0 · P1: 0";
+
+/// R7.7: every problem with the finish of the playground: a fresh-context critique left its record under
+/// `.impeccable/critique/`, `docs/design/audit.md` holds the audit with no P0 or P1 left, this run's detect scans
+/// (`scan_failures`, from [`detect`]) found no primary finding, and the design hook is still enabled.
+fn finish(sandbox: &Sandbox, scan_failures: &[String]) -> Vec<String> {
+    let root = sandbox.repo_root();
+    let mut problems = Vec::new();
+    let critique = root.join(".impeccable/critique");
+    let records = std::fs::read_dir(&critique)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter(|entry| entry.path().is_file() && entry.file_name() != "ignore.md")
+                .count()
+        })
+        .unwrap_or(0);
+    if records == 0 {
+        problems.push(format!("{} holds no critique record", critique.display()));
+    }
+    let audit = root.join("docs/design/audit.md");
+    match std::fs::read_to_string(&audit) {
+        Ok(text) if text.lines().any(|line| line.trim() == AUDIT_CLEAN) => {}
+        Ok(_) => problems.push(format!("{} has no `{AUDIT_CLEAN}` line", audit.display())),
+        Err(_) => problems.push(format!("{} is missing", audit.display())),
+    }
+    if !scan_failures.is_empty() {
+        problems.push(format!(
+            "{} impeccable detect scans of R6.2's URLs report primary findings or failed",
+            scan_failures.len()
+        ));
+    }
+    match read_json(&root.join(".impeccable/config.json")) {
+        Ok(config) if config["hook"]["enabled"] == json!(true) => {}
+        Ok(_) => problems.push(".impeccable/config.json does not enable the hook".into()),
+        Err(err) => problems.push(format!("{err:#}")),
+    }
+    problems
 }
 
 /// R6.1: every problem with the /impeccable context of the playground.

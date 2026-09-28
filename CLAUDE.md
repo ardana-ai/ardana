@@ -28,7 +28,7 @@ Contracts are binding, its Requirements are the definition of done.
   (decider, jevcompat, JevBench), the jevcompat uv tool, the `tmp/py/sdk` and `tmp/py/jevbench` venvs, Hub models in
   `tmp/hf/hub`, `[[hf_local]]` copies of gated repos from the real `~/.cache/huggingface/hub`);
   `cargo xtask fetch --check` verifies them. It also runs `npm ci` in `e2e/playground` (`@playwright/test`,
-  `lz-string`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it before `cargo test`: tests read the decider-2b, Qwen3.5,
+  `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it before `cargo test`: tests read the decider-2b, Qwen3.5,
   SmolLM3 and Llama 3.2 tokenizers and chat templates from `tmp/hf`.
 - `cargo xtask build` builds the playground `dist/` with the fetched trunk, offline, then the release `ardana`, which
   embeds it (memory-serve, `force-embed`) and serves it at `/`. Building `ardana-server` without a dist (or with
@@ -41,9 +41,12 @@ Contracts are binding, its Requirements are the definition of done.
   decider-2b: `jevcompat` (jevcompat 0.1.0, open and with a key, every MUST must pass), `sdk` (typesafe-sdk 0.7.2
   parses `ticket.json`) and `jevbench` (231 public items, zero failed requests; output in `tmp/evals/jevbench/`); the browser suites
   `playground` (Playwright on the installed Chrome against the built binary copied alone into `tmp/`, plus the
-  placeholder build; screenshots in `tmp/screens/<case>/`, reports in `tmp/playwright/`) and `design` (/impeccable
-  context, then `impeccable detect` of the empty, loaded, results and 422 states at 1280x800 and 390x844; reports in
-  `tmp/evals/design/`).
+  placeholder build; the W6 cases, then the builder, state modes, the 17 docs.typesafe.ai share links in
+  `e2e/playground/fixtures/jev-share-links.json`, the share round trip, the presets and the executed snippets;
+  screenshots in `tmp/screens/<case>/`, reports in `tmp/playwright/`) and `design` (/impeccable context, then
+  `impeccable detect` of the empty, loaded, results and 422 states at 1280x800 and 390x844, reports in
+  `tmp/evals/design/`, then the finish: a `.impeccable/critique/` record, `docs/design/audit.md` with
+  `P0: 0 · P1: 0`, clean scans, the hook enabled).
 - `ardana pull <ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model in
   `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo); refs are `hf.co/<org>/<repo>[:<quant>]`
   (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]` (read in place from

@@ -1,7 +1,7 @@
 // Shared pieces of the playground cases: fixtures, Jev share links, the display formats and screenshots.
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Page, type Response, type TestInfo } from '@playwright/test';
 import LZString from 'lz-string';
 
 export const root = process.env.ARDANA_REPO_ROOT ?? path.resolve(__dirname, '../../..');
@@ -9,20 +9,45 @@ export const root = process.env.ARDANA_REPO_ROOT ?? path.resolve(__dirname, '../
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Request = { model?: string; state: Json; questions: Record<string, Json> };
 
+/** A request file, by its path from the repo root. */
+export function readRequest(file: string): Request {
+  return JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
+}
+
 export function fixture(name: string): Request {
-  return JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/requests', name), 'utf8'));
+  return readRequest(`tests/fixtures/requests/${name}`);
+}
+
+/** The state and questions editor texts of a request, as Jev writes them into a share link. */
+export function editorTexts(request: Request): { documentText: string; promptsText: string } {
+  return {
+    documentText: typeof request.state === 'string' ? request.state : JSON.stringify(request.state, null, 2),
+    promptsText: JSON.stringify(request.questions, null, 2),
+  };
 }
 
 /** The `#share/...` fragment Jev's playground writes for a request. */
 export function shareHash(request: Request): string {
-  const payload = {
-    apiVersion: 'v1',
-    documentText: typeof request.state === 'string' ? request.state : JSON.stringify(request.state, null, 2),
-    promptsText: JSON.stringify(request.questions, null, 2),
-    selectedModels: [request.model ?? 'jev-latest'],
-  };
+  const payload = { apiVersion: 'v1', ...editorTexts(request), selectedModels: [request.model ?? 'jev-latest'] };
   return `#share/${LZString.compressToEncodedURIComponent(JSON.stringify(payload))}`;
 }
+
+export const runKey = (page: Page) => page.getByRole('button', { name: /^Run/ });
+
+/** Presses RUN and returns the `/v1/systemone` response, however long the model takes (the test timeout bounds it). */
+export async function run(page: Page): Promise<Response> {
+  const replied = page.waitForResponse((r) => isSystemOne(r.url()), { timeout: 0 });
+  await runKey(page).click();
+  return replied;
+}
+
+/** A question's channel. */
+export const channel = (page: Page, id: string) =>
+  page.locator(`[data-testid="channel"][data-question="${id.replace(/["\\]/g, '\\$&')}"]`);
+
+/** A JSON pointer from its unescaped parts. */
+export const pointer = (...parts: string[]) =>
+  parts.map((part) => `/${part.replace(/~/g, '~0').replace(/\//g, '~1')}`).join('');
 
 /**
  * Rounds a JSON number, multiplied by 10^shift, to `places` decimals, half up, on its decimal digits: the rule the
