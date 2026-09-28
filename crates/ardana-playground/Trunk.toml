@@ -1,0 +1,12 @@
+# Built by `cargo xtask build` with `trunk build --release --offline`: trunk
+# takes these tool versions from tmp/bin (`cargo xtask fetch`) and never
+# downloads them.
+
+[build]
+target = "index.html"
+dist = "dist"
+
+[tools]
+# Must equal the wasm-bindgen version in Cargo.lock.
+wasm_bindgen = "0.2.129"
+wasm_opt = "version_133"

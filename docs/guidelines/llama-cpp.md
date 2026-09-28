@@ -1,0 +1,112 @@
+# llama.cpp guidelines
+
+Covers the `llama-cpp-2` crate (utilityai/llama-cpp-rs) and the llama.cpp library it builds, as used by
+`crates/ardana-llama`, the only crate that may depend on them. `ardana-llama` implements the `ardana-core` traits
+`Runtime` and `LoadedModel` (`load(weights, &LoadOptions)`, `slot_logits(ids, slots, label_ids)`); the `ardana`
+binary registers it in `Runtimes`. Tokenization, prompt building and readout stay in `ardana-core` and never call
+llama.cpp.
+
+## Versions
+- `llama-cpp-2` 0.1.157 — safe, near-raw bindings to llama.cpp; its `llama-cpp-sys-2` dependency bundles llama.cpp
+  at commit `26394b4` (`26394b4e6749a41c3633db040e0987500a5f7013`), which knows the `qwen35` architecture. Pin it
+  with `=0.1.157`: the crate tracks llama.cpp closely and does not follow semver meaningfully.
+
+## Rules
+
+### Build
+- Keep the dependency in `ardana-llama` only (`llama-cpp-2 = { workspace = true }`); `cargo xtask check-deps`
+  rejects it anywhere else, and `ardana-server` must never see it.
+- Expect a from-source C/C++ build: `llama-cpp-sys-2` drives llama.cpp's CMake through the `cmake` crate, so `cmake`
+  (4.4.3 on the dev machine) and a C/C++ toolchain must be on `PATH`. Build output stays under the repo's `target/`.
+- Pass llama.cpp build options through `CMAKE_*` or `GGML_*` environment variables (the build script forwards both);
+  never patch the vendored sources.
+- Do not enable a GPU feature on macOS: llama.cpp turns Metal on by default on Apple targets and the build script only
+  switches it off for watchOS. Expose `cuda` and `vulkan` as `ardana-llama` (and `ardana`) cargo features that forward
+  to `llama-cpp-2/cuda` and `llama-cpp-2/vulkan`; they pass through unverified (Q16), so never claim they work.
+
+### Backend and logging
+- Call `LlamaBackend::init()` exactly once per process and keep the value alive for as long as any model or context
+  exists (store it in the runtime behind an `Arc` or a `OnceLock`). A second `init` while one is alive returns
+  `BackendAlreadyInitialized`; never `init` per request or per model.
+- `LlamaBackend` is `Send + Sync`; share one handle between every loaded model.
+- Route llama.cpp logs through `send_logs_to_tracing(LogOptions::default().with_logs_enabled(verbose))` (or
+  `backend.void_logs()`), so its stderr chatter never mixes into `ardana run` JSON output.
+
+### Loading a model
+- Load with `LlamaModel::load_from_file(&backend, path, &params)` where `params` is `LlamaModelParams`. Keep the
+  default `use_mmap = true`, so Ollama blobs and HF cache files are read in place and never copied.
+- Map `LoadOptions::gpu_layers` explicitly: `-1` (offload all) leaves `n_gpu_layers` at its default `-1` or passes
+  `with_n_gpu_layers(u32::MAX)` (clamped to `i32::MAX`, which llama.cpp treats as every layer); `0` passes
+  `with_n_gpu_layers(0)`; any other negative value is an error.
+- Treat `--gpu-layers 0` as "no layers on the GPU", not "no GPU at all": llama.cpp documents that the GPU may still
+  accelerate some work at `-ngl 0`. The CPU check (R2.7) compares argmaxes, not exact probabilities.
+- Turn `LlamaModelLoadError` into an error that names the ref and path (R4.4: an unloadable Ollama blob suggests an
+  `hf.co/` source); never unwrap.
+
+> Plan note: `LlamaModelParams::with_n_gpu_layers` takes a `u32` in 0.1.157, so `LoadOptions { gpu_layers: -1 }`
+> cannot be passed through as-is; use the mapping above.
+
+### Contexts and threads
+- `LlamaModel` is `Send + Sync`; `LlamaContext<'a>` is `!Send` and `!Sync` and borrows its model for `'a`. A context
+  can never move between threads nor live in the same struct as the model it borrows.
+- Implement `LoadedModel: Send` by owning the model and its single context on one dedicated worker thread and handing
+  the caller a `Send` handle (a channel sender plus reply channel); `slot_logits` sends one prompt and waits. Do not
+  write `unsafe impl Send` around a context.
+
+> Plan note: the Contract `LoadedModel: Send` cannot hold a `LlamaContext` directly because 0.1.157 marks it
+> `!Send`; the worker-thread handle above (or a fresh context per call) satisfies the trait.
+
+- Build `LlamaContextParams` with `with_n_ctx(NonZeroU32::new(n_ctx))` and `with_n_batch(n_ctx)`, as decider does,
+  so any prompt that fits the window goes to one `decode` call; keep `n_seq_max` at its default of 1. The defaults
+  (n_ctx 512, n_batch 2048) are never right for Ardana, so always set both.
+- Report `LoadedModel::n_ctx()` from `ctx.n_ctx()` after creation, not from the requested value.
+
+### One prompt per decode
+- Decode exactly one prompt per call, alone in the context (decider `engine_gguf.py`); never pack several prompts
+  into one batch or sequence: packing moved Q4_K_M probabilities by up to 0.16.
+- Before each prompt call `ctx.clear_kv_cache()` (it wraps `llama_memory_clear(mem, true)`, clearing metadata and
+  data). Never reuse a cached prefix or use `clear_kv_cache_seq` for partial removal; Qwen3.5 is a hybrid model with
+  recurrent state, and partial removals may fail (the call returns `false`).
+- Fill a `LlamaBatch::new(ids.len(), 1)` with `batch.add(LlamaToken::new(id), pos, &[0], is_slot)` for
+  `pos = 0..len`, converting each `u32` id with `i32::try_from` (error, never `as`). Flag `logits = true` only at
+  slot positions. `add` returns `BatchAddError` when the batch is full; propagate it.
+- Call `ctx.decode(&mut batch)` and map `DecodeError` into `anyhow`; a non-zero return (for example "no KV slot")
+  is a runtime error, not a capacity check. `Decider::plan` enforces the context cap before any decode.
+- Read each slot with `ctx.get_logits_ith(i)`, where `i` is the batch index of a flagged token. It panics (asserts)
+  when `i` was not flagged in the last decode or `i >= n_ctx`, so only pass indices you flagged in this batch.
+- Copy the label logits out immediately: the slice borrows the context and is overwritten by the next decode.
+
+### Logits width versus tokenizer vocabulary
+- Logit rows are `model.n_vocab()` wide, taken from the GGUF, not from `tokenizer.json`. Qwen3.5 rows are 248,320
+  wide while its tokenizer has 248,070 tokens; the padding columns hold meaningless values.
+- Index only the label ids passed to `slot_logits`, and never softmax, argmax or sum over a whole row.
+- Check at load that every label id is `< n_vocab()` and fail with a clear error otherwise.
+- Tokenize with the HF `tokenizer.json` in `ardana-core` (decider does the same); never use `model.str_to_token`
+  or the GGUF vocab for prompts.
+
+## Testing
+- Unit tests in `ardana-core` use fake `LoadedModel`s; tests that load a GGUF are `#[ignore]` and run through
+  `cargo xtask e2e rust` against the official models in `tmp/hf` (decider-2b Q4_K_M, Qwen3.5-0.8B Q4_0,
+  SmolLM3-3B Q4_K_M) or the local Ollama `llama3.2` blob, never an invented fixture.
+- Run the decider-2b ticket check at default offload and at `--gpu-layers 0` and compare argmaxes (R2.7).
+
+## Sources
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/index.html — crate overview, modules, logging redirection
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/llama_backend/struct.LlamaBackend.html — `init` once, `BackendAlreadyInitialized`, `void_logs`, Send/Sync
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/model/struct.LlamaModel.html — `load_from_file`, `new_context`, `n_vocab`, Send/Sync
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/model/params/struct.LlamaModelParams.html — `with_n_gpu_layers(u32)`, `use_mmap`, defaults
+- https://docs.rs/llama-cpp-2/0.1.157/src/llama_cpp_2/model/params.rs.html — `u32` to `i32` clamp in `with_n_gpu_layers`
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/context/params/struct.LlamaContextParams.html — `with_n_ctx`, `with_n_batch`, defaults
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/context/struct.LlamaContext.html — `decode`, `get_logits_ith`, `clear_kv_cache`, `!Send`/`!Sync`
+- https://docs.rs/llama-cpp-2/0.1.157/src/llama_cpp_2/context.rs.html — `get_logits_ith` assertions on unflagged indices
+- https://docs.rs/llama-cpp-2/0.1.157/src/llama_cpp_2/context/kv_cache.rs.html — `clear_kv_cache` wraps `llama_memory_clear`
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/llama_batch/struct.LlamaBatch.html — `new`, `add`, `BatchAddError`
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/token/struct.LlamaToken.html — `LlamaToken(i32)` wrapper
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/fn.send_logs_to_tracing.html — llama.cpp logs into `tracing`
+- https://github.com/utilityai/llama-cpp-rs — README: build from source, semver policy, cuda feature
+- https://github.com/utilityai/llama-cpp-rs/tree/0.1.157/llama-cpp-sys-2 — llama.cpp submodule at `26394b4`
+- https://github.com/utilityai/llama-cpp-rs/blob/0.1.157/llama-cpp-sys-2/build.rs — cmake build, `CMAKE_`/`GGML_` env forwarding, cuda/vulkan, watchOS Metal off
+- https://github.com/utilityai/llama-cpp-rs/blob/0.1.157/examples/simple/src/main.rs — reference backend/model/batch/decode flow
+- https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md — Metal on by default on macOS, `-ngl 0` caveat, CMake flags
+- https://github.com/ggml-org/llama.cpp/blob/26394b4e6749a41c3633db040e0987500a5f7013/include/llama.h — batch logits flag, decode return codes, negative `n_gpu_layers`, memory clear
+- https://github.com/ggml-org/llama.cpp/blob/26394b4e6749a41c3633db040e0987500a5f7013/src/llama-arch.cpp — `qwen35` architecture name

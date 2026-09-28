@@ -1,0 +1,27 @@
+# Everything `cargo xtask fetch` installs into the gitignored tmp/, and
+# `cargo xtask fetch --check` verifies.
+#
+# [[tool]] fields:
+#   name     crate name (`cargo`) or tool name (`github`)
+#   version  a literal version, or `cargo-lock:<crate>` for the version Cargo.lock resolves
+#   source   `cargo`: installed by `Sandbox::cargo_install` (CARGO_HOME=tmp/cargo, root tmp,
+#            binaries in tmp/bin, recorded in tmp/.crates2.json)
+#            `github`: the release archive at `url`, checked against `url`.sha256, extracted
+#            to tmp/tools/<name>/<version>, with `path` inside it linked into tmp/bin
+
+[[tool]]
+name = "trunk"
+version = "0.21.14"
+source = "cargo"
+
+[[tool]]
+name = "wasm-bindgen-cli"
+version = "cargo-lock:wasm-bindgen"
+source = "cargo"
+
+[[tool]]
+name = "binaryen"
+version = "version_133"
+source = "github"
+url = "https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-arm64-macos.tar.gz"
+path = "binaryen-version_133/bin/wasm-opt"

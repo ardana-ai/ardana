@@ -1,0 +1,16 @@
+/target
+/crates/ardana-playground/dist
+*-prd/
+*-prd.md
+
+# Project-local sandbox (Q21): everything under tmp/ except the TMPDIR anchor.
+/tmp/*
+!/tmp/sys/
+/tmp/sys/*
+!/tmp/sys/.gitkeep
+
+/e2e/playground/node_modules
+/.claude/settings.local.json
+/.impeccable/config.local.json
+
+.DS_Store

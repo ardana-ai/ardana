@@ -1,0 +1,121 @@
+# Rust guidelines
+
+Covers the Rust language, the cargo workspace, error handling, tests, lints, formatting and the `cargo xtask` task
+runner for every Ardana crate: `crates/ardana` (binary), `crates/ardana-api`, `crates/ardana-core`,
+`crates/ardana-llama`, `crates/ardana-registry`, `crates/ardana-server`, `crates/ardana-playground` and `xtask`.
+Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in their own guideline files.
+
+## Versions
+- `rustc` 1.97.1 — the stable toolchain on the dev machine (rustup-managed); every crate must build and test on it.
+- `edition` 2024 — set once in `[workspace.package]`; stabilized in Rust 1.85 and implies Cargo resolver 3.
+- `resolver` 3 — set explicitly in the virtual root `[workspace]`, since a virtual manifest has no edition to infer it.
+
+## Rules
+
+### Workspace and manifests
+- Keep the root `Cargo.toml` a virtual manifest: `[workspace] members = [...]`, `resolver = "3"`, no root package.
+- Declare `edition`, `rust-version`, `license` and `version` in `[workspace.package]`; members write
+  `edition.workspace = true` (and the same for the other keys) instead of repeating values.
+- Declare every third-party dependency once in `[workspace.dependencies]` with its pinned Q28 version
+  (`llama-cpp-2 = "=0.1.157"`, `tokenizers = "0.23.2"`, `hf-hub = "1.0.0"`, `axum = "0.8"`, ...); members use
+  `dep = { workspace = true }`. Add member-specific features at the member; they are additive to the workspace ones.
+- Never mark a `[workspace.dependencies]` entry `optional`; make it optional in the member that needs it.
+- Reference workspace crates by path in `[workspace.dependencies]` too (`ardana-core = { path = "crates/ardana-core" }`)
+  so the dependency graph lives in one file that `cargo xtask check-deps` can read.
+- Respect the dependency direction enforced by `cargo xtask check-deps`: `ardana-api` depends on no workspace crate,
+  `ardana-core` only on `ardana-api`, `ardana-llama` and `ardana-registry` on `ardana-core`, `ardana-server` never on
+  `ardana-llama`, `ardana-playground` only on `ardana-api`. Only the `ardana` binary wires `ardana-llama` into
+  `Runtimes`. A new runtime is a new crate plus one registration line, never a server or playground change.
+- Keep `ardana-api` and `ardana-playground` free of native-only dependencies; `ardana-api` must pass
+  `cargo check -p ardana-api --target wasm32-unknown-unknown`.
+- Commit `Cargo.lock`: Ardana ships a binary, and the lockfile is also the source of the wasm-bindgen version that
+  `xtask/fetch.toml` reads via `cargo-lock:wasm-bindgen`. Pass `--locked` in xtask steps that must not re-resolve.
+
+### `.cargo/config.toml`
+- Keep the alias `[alias] xtask = "run --quiet --package xtask --"` (quiet, so `eval "$(cargo xtask env)"` sees only
+  the exports); do not add other aliases that hide real commands.
+- Set `HF_HOME`, `ARDANA_HOME`, `ARDANA_TMP` and `TMPDIR` in `[env]` with `relative = true` (resolved against the
+  directory holding `.cargo/`, i.e. the repo root) and `force = true` (overrides the shell). Cargo applies `[env]` to
+  build scripts, rustc, `cargo run` and `cargo test`, which is what keeps plain `cargo test` inside `tmp/`.
+- Do not put `HOME`, `CARGO_HOME` or `RUSTUP_HOME` in `[env]`; Cargo's home and rustup are the allowed exceptions, and
+  the full tool environment comes from `Sandbox::env` (`cargo xtask env`).
+
+### Language
+- Treat `std::env::set_var` and `remove_var` as the `unsafe` functions they are in edition 2024; never call them in
+  library code or tests (tests run on parallel threads). Pass variables to children with `Command::env` or
+  `Sandbox::command` instead.
+- No `unwrap()`/`expect()` on values that come from requests, files, models or the network; reserve them for
+  invariants and tests, and give `expect` a message that states the invariant.
+- Bad client input must never panic: validate and return an error (the server maps errors to 4xx, never 5xx).
+- Derive `Debug` on public types; derive `Clone`, `PartialEq`, `Eq`, `Default` where they make sense, because
+  downstream crates cannot add them later.
+- Keep `unsafe` confined to `ardana-llama` FFI edges (if any) with a `// SAFETY:` comment per block.
+
+### Errors
+- Library crates expose typed error enums callers can match on: `DecideError` (`Invalid { loc, msg }`,
+  `Capacity`, `Runtime`), `ProfileError`, `ChatTemplateError`, `RegistryError`. Implement `std::error::Error` and
+  `Display` for them (derive with `thiserror` from `[workspace.dependencies]`, or by hand); keep them `Send + Sync`.
+- Write `Display` messages lowercase and without trailing punctuation, except where a message must reproduce
+  decider's exact text (R2.3) or contain a contract substring ("context window", "has no chat template").
+- Use `anyhow::Result` in `xtask`, in the `ardana` binary's command layer, and at the `Runtime`/`LoadedModel` trait
+  boundary exactly as the contracts in `ardana-serve-prd/main.md` define it; wrap it as `DecideError::Runtime`.
+- Attach context with `.context()`/`.with_context(|| ...)` naming the path, ref or model involved; use `bail!` and
+  `ensure!` for early exits in xtask and the binary.
+- Convert between error types with `From` impls (`#[from]`) so `?` works; do not stringify an error just to re-wrap it.
+
+### Testing
+- Unit tests live in a `#[cfg(test)] mod tests` next to the code and may test private items.
+- Contract-level tests live in each crate's `tests/` directory, one file per concern with the names the plan fixes
+  (`crates/ardana-core/tests/readout.rs` "decider_goldens", `xtask/tests/guard.rs` "detects_home_write", ...). Share
+  helpers through `tests/common/mod.rs`, not a top-level `tests/common.rs`.
+- Keep `main.rs` thin and logic in `lib.rs` so integration tests can call it; test the CLI through
+  `env!("CARGO_BIN_EXE_ardana")`.
+- Mark every test that needs a real model, network, the Ollama store or more than a few seconds with
+  `#[ignore = "e2e: <what it needs>"]`. Plain `cargo test` stays fast and offline; `cargo xtask e2e rust` runs
+  `cargo test --workspace -- --include-ignored` under the home guard.
+- End-to-end tests use the official models from `xtask/fetch.toml` (decider-2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B,
+  Ollama `llama3.2`), resolved from `tmp/hf`; never replace a real model with an invented fixture.
+- Put test temp files under `$ARDANA_TMP` (or `std::env::temp_dir()`, which `[env]` points at `tmp/sys`); never under
+  the real home.
+- Prefer tests returning `anyhow::Result<()>` with `?` over chains of `unwrap()`.
+- Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice.
+
+### Lints and formatting
+- `cargo clippy --workspace --all-targets -- -D warnings` must pass before every commit; this also fails on rustc
+  warnings such as `dead_code`.
+- Silence a lint locally with `#[expect(clippy::<lint>, reason = "...")]` on the smallest item (`expect` warns once
+  the lint no longer fires, so stale suppressions surface); never crate-wide without a note in this file.
+- `cargo fmt --all -- --check` must pass; keep rustfmt at its defaults, and add a `rustfmt.toml` only for stable options.
+
+## xtask
+- `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check]`, `build`, `check-deps`,
+  `check-docs`, `e2e <suite>`; keep its dependency set small so `cargo xtask` compiles quickly.
+- Run every external tool through `Sandbox::command` (sandbox env, `PATH` prefixed with `tmp/bin`), and wrap `fetch`,
+  `build` and every `e2e` suite in `Sandbox::guarded`.
+- Install cargo tools only through `Sandbox::cargo_install` (`CARGO_HOME=tmp/cargo`, root `tmp`); never
+  `cargo install` into `~/.cargo/bin`.
+- Build the playground with `cargo xtask build`, never from a `build.rs`: a build script that runs trunk runs a nested
+  cargo that blocks on the outer build's target-dir lock (rust-lang/cargo#8938). `ardana-server`'s build script may
+  only read `crates/ardana-playground/dist` (and warn when it is missing), never build it.
+
+## Sources
+- https://doc.rust-lang.org/cargo/reference/workspaces.html — virtual manifests, `workspace.dependencies`, `workspace.package`, `workspace.lints`, shared lockfile and target dir
+- https://doc.rust-lang.org/cargo/reference/resolver.html — resolver 3 default for edition 2024, explicit resolver in virtual workspaces
+- https://doc.rust-lang.org/cargo/reference/config.html — `[env]` with `relative`/`force`, `[alias]`
+- https://doc.rust-lang.org/cargo/reference/environment-variables.html — `CARGO_BIN_EXE_<name>`, `CARGO_MANIFEST_DIR`, `CARGO_TARGET_TMPDIR`
+- https://doc.rust-lang.org/cargo/faq.html — committing `Cargo.lock` for binaries, `--locked`
+- https://doc.rust-lang.org/cargo/commands/cargo-test.html — `--workspace`, arguments after `--`, `--locked`
+- https://doc.rust-lang.org/edition-guide/rust-2024/index.html — edition 2024, stabilized in Rust 1.85
+- https://doc.rust-lang.org/edition-guide/rust-2024/newly-unsafe-functions.html — `set_var`/`remove_var` unsafe
+- https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html — `?` and `From` conversions
+- https://doc.rust-lang.org/book/ch11-02-running-tests.html — `#[ignore]`, `--include-ignored`, parallel tests
+- https://doc.rust-lang.org/book/ch11-03-test-organization.html — unit vs integration tests, `tests/common/mod.rs`
+- https://doc.rust-lang.org/reference/attributes/testing.html — `#[ignore = "reason"]`, tests returning `Result`
+- https://doc.rust-lang.org/reference/attributes/diagnostics.html — lint `reason` parameter, `#[expect]`
+- https://doc.rust-lang.org/clippy/usage.html — `cargo clippy`, `-D warnings`, lint levels
+- https://rust-lang.github.io/api-guidelines/interoperability.html — C-GOOD-ERR, C-COMMON-TRAITS
+- https://docs.rs/thiserror/latest/thiserror/ — derive for library error types; points to anyhow for applications
+- https://docs.rs/anyhow/latest/anyhow/ — `Context`, `bail!`, `ensure!`
+- https://github.com/rust-lang/rustfmt — `cargo fmt --all -- --check`, `rustfmt.toml`, `style_edition`
+- https://github.com/rust-lang/cargo/issues/8938 — nested cargo from a build script deadlocks on the target-dir lock
+- https://github.com/matklad/cargo-xtask — xtask alias, workspace member layout, keep xtask fast to compile

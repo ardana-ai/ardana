@@ -1,0 +1,26 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/ardana",
+    "crates/ardana-api",
+    "crates/ardana-core",
+    "crates/ardana-llama",
+    "crates/ardana-registry",
+    "crates/ardana-server",
+    "crates/ardana-playground",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+anyhow = "1"
+leptos = { version = "0.8", features = ["csr"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+toml = "1"
