@@ -92,16 +92,25 @@ test('answers_match_api', async ({ page }, testInfo) => {
   }
 
   const fields = await expectFiguresMatch(page, json as unknown as Json);
+  // R6.5's display formats, by the `data-format` each figure declares: probabilities as percent with one decimal
+  // (`percent`), confidence, noul and score with two decimals (`fixed2`).
   for (const [id, answer] of Object.entries(json.answers)) {
-    const expected =
+    const expected: [string, string][] =
       answer.type === 'noul'
-        ? [`/answers/${id}/noul`]
+        ? [[`/answers/${id}/noul`, 'fixed2']]
         : [
-            `/answers/${id}/confidence`,
-            ...Object.keys(answer.probabilities as Record<string, number>).map((o) => `/answers/${id}/probabilities/${o}`),
+            ...(answer.type === 'score' ? [[`/answers/${id}/score`, 'fixed2'] as [string, string]] : []),
+            [`/answers/${id}/confidence`, 'fixed2'],
+            ...Object.keys(answer.probabilities as Record<string, number>).map(
+              (o): [string, string] => [`/answers/${id}/probabilities/${o}`, 'percent'],
+            ),
           ];
-    for (const field of expected) {
+    for (const [field, format] of expected) {
       expect(fields, `${field} is displayed`).toContain(field);
+      await expect(page.locator(`[data-field=${JSON.stringify(field)}]`), `${field} format`).toHaveAttribute(
+        'data-format',
+        format,
+      );
     }
   }
   await expect(page.getByTestId('answered-by').locator('[data-field="/model"]')).toHaveAttribute(

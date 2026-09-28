@@ -2,10 +2,12 @@
 //!
 //! Every model reads its requests through a [`Decider`] (tokenizer and profile, built on the first request and kept),
 //! so a request is validated and sized before any weights load. Loaded weights live on one worker thread per model
-//! that decodes one request at a time from a FIFO channel. At most `max_loaded_models` are loaded; loading one more
-//! evicts the least recently used, and a model idle for `keep_alive` is unloaded. Unloading closes the worker's
-//! channel, so the worker finishes the requests it already has before it drops the model. Admission counts the
-//! scoring rows of admitted, unfinished requests over all models and refuses a request that would exceed
+//! that decodes one request at a time from a FIFO channel. At most `max_loaded_models` hold weights at once, counting
+//! models still loading and unloaded ones still answering their queue; loading one more evicts the least recently
+//! used and waits until its weights are dropped, and a model idle for `keep_alive` is unloaded. Unloading closes the
+//! worker's channel, so the worker finishes the requests it already has before it drops the model. A load holds only
+//! its own model's turn, so other models and `/health` answer meanwhile. Admission counts the scoring rows of queued
+//! and decoding requests over all models, until the worker is done with them, and refuses a request that would exceed
 //! `max_queued_rows`.
 
 use std::collections::HashMap;
@@ -18,7 +20,7 @@ use ardana_api::{ModelInfo, ModelsResponse, SystemOneRequest, SystemOneResponse}
 use ardana_core::{DecideError, Decider, Limits, LoadOptions, LoadedModel, Plan, Runtimes};
 use ardana_registry::{Registry, RegistryError, ResolvedModel};
 use serde_json::{Map, Value, json};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{Notify, mpsc, oneshot};
 
 use crate::error::{ApiError, ValidationItem};
 
@@ -68,8 +70,12 @@ pub struct Models {
     /// The resolved default model; `None` only for an empty registry.
     default: Option<String>,
     deciders: Mutex<HashMap<String, Arc<Decider>>>,
-    /// Loaded models; loads happen under this lock, one at a time.
+    /// Per model, the turn a request holds from looking up its worker (loading it if needed) to queueing on it, so
+    /// one model's requests queue in arrival order and it loads once.
+    turns: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// Loaded models taking requests; never locked across a load.
     loaded: Arc<tokio::sync::Mutex<Vec<Arc<Worker>>>>,
+    residents: Arc<Residents>,
     queued_rows: Arc<AtomicUsize>,
 }
 
@@ -105,13 +111,20 @@ impl Models {
             ),
             None => registry.names().into_iter().next(),
         };
+        let residents = Arc::new(Residents {
+            count: AtomicUsize::new(0),
+            limit: opts.max_loaded_models,
+            changed: Notify::new(),
+        });
         Ok(Models {
             registry,
             runtimes: Arc::new(runtimes),
             opts,
             default,
             deciders: Mutex::new(HashMap::new()),
+            turns: Mutex::new(HashMap::new()),
             loaded: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+            residents,
             queued_rows: Arc::new(AtomicUsize::new(0)),
         })
     }
@@ -187,13 +200,14 @@ impl Models {
         loaded.into_iter().map(|(_, name)| name).collect()
     }
 
-    /// Scoring rows admitted and not yet answered.
+    /// Scoring rows admitted and not yet decoded or discarded.
     pub fn queued_rows(&self) -> usize {
         self.queued_rows.load(Ordering::SeqCst)
     }
 
     /// `POST /v1/systemone`: resolve the model, plan (validation and the 413 limits, before anything loads), admit
-    /// the rows, load the model if needed and queue the request on its worker.
+    /// the rows, load the model if needed and queue the request on its worker. The job holds the admitted rows, so
+    /// they stay counted until the worker is done with it, even when the client goes away.
     pub async fn decide(&self, req: SystemOneRequest) -> Result<SystemOneResponse, ApiError> {
         let name = self.resolve(req.model.as_deref())?;
         let decider = self.decider(&name).await?;
@@ -202,9 +216,8 @@ impl Models {
             .await
             .map_err(|err| ApiError::Internal(format!("planning the request failed: {err}")))?
             .map_err(decide_error)?;
-        let _admitted = self.admit(plan.rows())?;
-        let lease = self.acquire(&name, &decider).await?;
-        let reply = lease.worker.submit(plan)?;
+        let admission = self.admit(plan.rows())?;
+        let (_lease, reply) = self.enqueue(&name, &decider, plan, admission).await?;
         let answer = reply
             .await
             .map_err(|_| ApiError::Internal(format!("the worker of model {name} stopped")))?;
@@ -268,19 +281,42 @@ impl Models {
         })
     }
 
-    /// The loaded worker of `name`, loading it (and evicting the least recently used model) when needed.
-    async fn acquire(&self, name: &str, decider: &Arc<Decider>) -> Result<Lease, ApiError> {
-        let mut loaded = self.loaded.lock().await;
-        loaded.retain(|w| w.alive());
-        if let Some(worker) = loaded.iter().find(|w| w.name == name) {
-            return Ok(Lease::new(worker.clone()));
-        }
-        while loaded.len() >= self.opts.max_loaded_models {
-            let lru = (0..loaded.len())
-                .min_by_key(|&i| loaded[i].last_used())
-                .expect("the loaded list is not empty");
-            loaded.remove(lru);
-        }
+    /// Queues `plan` on the worker of `name`, loading the model when needed, in `name`'s turn.
+    async fn enqueue(
+        &self,
+        name: &str,
+        decider: &Arc<Decider>,
+        plan: Plan,
+        admission: Admission,
+    ) -> Result<(Lease, oneshot::Receiver<Answer>), ApiError> {
+        let turn = self
+            .turns
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .entry(name.to_string())
+            .or_default()
+            .clone();
+        let _turn = turn.lock().await;
+        let listed = {
+            let mut loaded = self.loaded.lock().await;
+            loaded.retain(|w| w.alive());
+            loaded
+                .iter()
+                .find(|w| w.name == name)
+                .cloned()
+                .map(Lease::new)
+        };
+        let lease = match listed {
+            Some(lease) => lease,
+            None => Lease::new(self.load(name, decider).await?),
+        };
+        let reply = lease.worker.submit(plan, admission)?;
+        Ok((lease, reply))
+    }
+
+    /// Loads `name` once a model's place is free and lists its worker.
+    async fn load(&self, name: &str, decider: &Arc<Decider>) -> Result<Arc<Worker>, ApiError> {
+        let residence = self.reserve().await;
         let model = self.resolved(name)?;
         let runtimes = self.runtimes.clone();
         let opts = self.opts.load;
@@ -288,14 +324,46 @@ impl Models {
             .await
             .map_err(|err| ApiError::Internal(format!("loading model {name} failed: {err}")))?
             .map_err(|err| ApiError::Internal(err.to_string()))?;
-        let worker = Worker::start(name, decider.clone(), weights, self.opts.max_queued_rows)?;
-        loaded.push(worker.clone());
+        let worker = Worker::start(
+            name,
+            decider.clone(),
+            weights,
+            residence,
+            self.opts.max_queued_rows,
+        )?;
+        self.loaded.lock().await.push(worker.clone());
+        self.residents.changed.notify_waiters();
         tokio::spawn(reap(
             Arc::downgrade(&self.loaded),
             Arc::downgrade(&worker),
             self.opts.keep_alive,
         ));
-        Ok(Lease::new(worker))
+        Ok(worker)
+    }
+
+    /// A place among the models holding weights. When every place is taken by a listed model, the least recently used
+    /// is unloaded; either way this waits until a model drops its weights (or another load lists its own).
+    async fn reserve(&self) -> Residence {
+        loop {
+            let changed = self.residents.changed.notified();
+            let mut changed = std::pin::pin!(changed);
+            changed.as_mut().enable();
+            if let Some(residence) = self.residents.try_reserve() {
+                return residence;
+            }
+            {
+                let mut loaded = self.loaded.lock().await;
+                loaded.retain(|w| w.alive());
+                // Models loading or still answering after an unload free (or take) a place on their own.
+                if loaded.len() >= self.residents.count() {
+                    let lru = (0..loaded.len()).min_by_key(|&i| loaded[i].last_used());
+                    if let Some(lru) = lru {
+                        loaded.remove(lru);
+                    }
+                }
+            }
+            changed.await;
+        }
     }
 
     /// Unloads every model and waits for the workers to drop them; queued requests finish first.
@@ -323,7 +391,7 @@ fn decide_error(err: DecideError) -> ApiError {
     }
 }
 
-/// Queued rows reserved by one request, released when it finishes.
+/// Queued rows reserved by one request, released when its job is decoded or discarded.
 struct Admission {
     rows: usize,
     queued: Arc<AtomicUsize>,
@@ -355,11 +423,46 @@ impl Drop for Lease {
     }
 }
 
-type Reply = oneshot::Sender<Result<SystemOneResponse, DecideError>>;
+/// Models holding weights: loading, loaded, or unloaded and still answering their queue.
+struct Residents {
+    count: AtomicUsize,
+    limit: usize,
+    /// Notified when a model drops its weights or a loaded one is listed.
+    changed: Notify,
+}
+
+impl Residents {
+    fn try_reserve(self: &Arc<Self>) -> Option<Residence> {
+        self.count
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+                (n < self.limit).then_some(n + 1)
+            })
+            .ok()
+            .map(|_| Residence(self.clone()))
+    }
+
+    fn count(&self) -> usize {
+        self.count.load(Ordering::SeqCst)
+    }
+}
+
+/// One model's place among the [`Residents`], held from before its load until its weights are dropped.
+struct Residence(Arc<Residents>);
+
+impl Drop for Residence {
+    fn drop(&mut self) {
+        self.0.count.fetch_sub(1, Ordering::SeqCst);
+        self.0.changed.notify_waiters();
+    }
+}
+
+type Answer = Result<SystemOneResponse, DecideError>;
 
 struct Job {
     plan: Plan,
-    reply: Reply,
+    reply: oneshot::Sender<Answer>,
+    /// Released once the worker has decoded the job, or with the job when it is discarded.
+    admission: Admission,
 }
 
 /// A loaded model: the channel to the thread that owns it.
@@ -372,32 +475,43 @@ struct Worker {
 }
 
 impl Worker {
-    /// Starts the thread that owns `model` and answers jobs in arrival order until every sender is gone.
+    /// Starts the thread that owns `model` and answers jobs in arrival order until every sender is gone, then drops
+    /// the model and gives back its `residence`.
     fn start(
         name: &str,
         decider: Arc<Decider>,
         mut model: Box<dyn LoadedModel>,
+        residence: Residence,
         capacity: usize,
     ) -> Result<Arc<Worker>, ApiError> {
         let (jobs, mut rx) = mpsc::channel::<Job>(capacity);
         let thread = std::thread::Builder::new()
             .name(format!("ardana-model-{name}"))
             .spawn(move || {
-                while let Some(job) = rx.blocking_recv() {
+                while let Some(Job {
+                    plan,
+                    reply,
+                    admission,
+                }) = rx.blocking_recv()
+                {
                     let answer =
-                        catch_unwind(AssertUnwindSafe(|| decider.run(model.as_mut(), &job.plan)));
+                        catch_unwind(AssertUnwindSafe(|| decider.run(model.as_mut(), &plan)));
                     let panicked = answer.is_err();
                     let answer = answer.unwrap_or_else(|_| {
                         Err(DecideError::Runtime(anyhow::anyhow!(
                             "the model worker panicked"
                         )))
                     });
-                    // The requester may have gone away; the answer is then dropped.
-                    let _ = job.reply.send(answer);
+                    // The rows are done before the requester hears back, which may have gone away (the answer is
+                    // then dropped).
+                    drop(admission);
+                    let _ = reply.send(answer);
                     if panicked {
                         break;
                     }
                 }
+                drop(model);
+                drop(residence);
             })
             .map_err(|err| {
                 ApiError::Internal(format!("starting the worker of model {name}: {err}"))
@@ -411,14 +525,19 @@ impl Worker {
         }))
     }
 
-    /// Queues `plan`; the receiver gets the answer.
+    /// Queues `plan` with its admitted rows; the receiver gets the answer.
     fn submit(
         &self,
         plan: Plan,
-    ) -> Result<oneshot::Receiver<Result<SystemOneResponse, DecideError>>, ApiError> {
+        admission: Admission,
+    ) -> Result<oneshot::Receiver<Answer>, ApiError> {
         let (reply, answer) = oneshot::channel();
         self.jobs
-            .try_send(Job { plan, reply })
+            .try_send(Job {
+                plan,
+                reply,
+                admission,
+            })
             .map_err(|err| match err {
                 mpsc::error::TrySendError::Full(_) => ApiError::Busy(format!(
                     "server busy: the queue of model {} is full; retry later",

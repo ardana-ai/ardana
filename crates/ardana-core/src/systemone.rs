@@ -492,6 +492,17 @@ mod tests {
     }
 
     #[test]
+    fn render_state_reads_floats_like_python() {
+        let body = r#"{"amount": 123456789.123456789123456789, "tiny": 2.2250738585072011e-308, "ratio": 0.1234567890123456789}"#;
+        let state: Value = serde_json::from_str(body).unwrap();
+        // CPython 3.12: `json.dumps(json.loads(body), ensure_ascii=False)`.
+        assert_eq!(
+            render_state(&state),
+            r#"{"amount": 123456789.12345679, "tiny": 2.225073858507201e-308, "ratio": 0.12345678901234568}"#
+        );
+    }
+
+    #[test]
     fn choice_names_and_descriptions() {
         let rq = render_question(&json!({"type": "choice", "instructions": "Which team?",
             "criteria": {"billing": "charges", "returns": {"what": "refunds", "not_for": "delivery"}, "other": null}}))

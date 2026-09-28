@@ -7,7 +7,7 @@ use tokenizers::Tokenizer;
 
 use crate::profile::ModelProfile;
 use crate::prompt::{self, Item, LabelTable, PromptError, RowQuestion};
-use crate::runtime::LoadedModel;
+use crate::runtime::{LoadOptions, LoadedModel};
 use crate::systemone::{self, PlannedRow, RenderedQuestion, RowSpan};
 
 /// Why a request cannot be answered.
@@ -30,7 +30,8 @@ impl From<PromptError> for DecideError {
     }
 }
 
-/// Request size limits checked by [`Decider::plan`] before any decode. The defaults are decider's server limits.
+/// Request size limits checked by [`Decider::plan`] before any decode. The defaults are decider's server limits and
+/// the default [`LoadOptions`] window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
     /// Scoring rows per request (questions, with isolated score levels expanded).
@@ -50,7 +51,7 @@ impl Default for Limits {
             max_rows: 1024,
             max_row_tokens: 36_864,
             max_request_tokens: 1 << 20,
-            context_window: None,
+            context_window: Some(LoadOptions::default().n_ctx as usize),
         }
     }
 }

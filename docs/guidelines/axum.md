@@ -85,12 +85,18 @@ runtime, and serving the Leptos playground's `dist` from memory with `memory-ser
 - Plan every request (tokenizer, validation, 413 limits) before admission and before any load: each model's
   `Decider` (tokenizer and profile) is built on its first request and kept apart from its weights.
 - Admission counts queued rows, not requests: keep an atomic queued-row counter per server, reject with 503 before
-  loading or enqueueing when `queued + plan.rows > max_queued_rows`, and decrement when the request ends (a guard's
-  `Drop`). Treat `TrySendError::Full` as the same 503.
+  loading or enqueueing when `queued + plan.rows > max_queued_rows`, and decrement when the worker has decoded the
+  job or the job is discarded: the job owns the guard (its `Drop`), so a client that goes away leaves its queued rows
+  counted. Treat `TrySendError::Full` as the same 503.
 - Use `tokio::task::spawn_blocking` only for bounded one-off work (model load, `hf`/registry file reads). Its tasks
   cannot be aborted once running, and runtime shutdown waits for them.
 - LRU eviction and the `--keep-alive` idle unload close the worker's channel; the worker drops the model after its
-  queue drains, so eviction never cancels an admitted request. Loads run one at a time under the loaded-set lock.
+  queue drains, so eviction never cancels an admitted request. Each model has a turn (a fair `tokio::sync::Mutex`)
+  that a request holds from looking up the worker, loading it if needed, to queueing its job, so one model's requests
+  queue in arrival order and it loads once; the loaded-set lock is never held across a load, so `/health` and other
+  models answer meanwhile. At most `max_loaded_models` models hold weights, counting models still loading and evicted
+  ones still draining: a load first reserves a place (unloading the least recently used listed model when every
+  place is listed) and waits until a model drops its weights.
   A request holds a lease (in-flight count, last use) from acquiring the worker to its answer; one tokio task per
   loaded model sleeps until `last use + keep_alive` and unloads the model only when it holds no lease, keeping only
   `Weak` references so it never keeps a model alive.
@@ -120,7 +126,7 @@ runtime, and serving the Leptos playground's `dist` from memory with `memory-ser
 - Test handlers in `crates/ardana-server/tests/*.rs` without binding a port: build the app with a fake `Runtime`
   and call `app.clone().oneshot(Request::builder()...body(Body::empty())?)` from `tower::ServiceExt`; read bodies
   with `axum::body::to_bytes(body, usize::MAX)`. The fake runtime (`tests/common/mod.rs`) counts loads and drops and
-  can hold decodes; requests are read with decider-2b's real tokenizer and profile from `tmp/hf`.
+  can hold loads and decodes; requests are read with decider-2b's real tokenizer and profile from `tmp/hf`.
 - Assert status, headers (`Retry-After`, `Content-Type`) and the exact JSON shape of every error body, including
   that no bad-input case returns 5xx.
 - Fake runtimes are for lifecycle and error-path tests only; end-to-end checks (`cargo xtask e2e jevcompat|sdk|

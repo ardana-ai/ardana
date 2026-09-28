@@ -1,4 +1,4 @@
-//! Shared helpers of the server tests: a fake runtime that counts loads and drops and can hold a decode, registries
+//! Shared helpers of the server tests: a fake runtime that counts loads and drops and can hold a load or a decode, registries
 //! of decider-2b's real tokenizer and profile (from `tmp/hf`) over fake weights, and requests through the router.
 #![allow(dead_code, reason = "each test file uses a different subset")]
 
@@ -22,21 +22,43 @@ use tower::ServiceExt;
 pub struct Fake {
     pub loads: AtomicUsize,
     pub drops: AtomicUsize,
+    /// The most models loaded and not yet dropped at once.
+    pub peak_resident: AtomicUsize,
     /// The weights file of each load and each drop, in order.
     pub loaded: Mutex<Vec<PathBuf>>,
     pub dropped: Mutex<Vec<PathBuf>>,
     /// The token ids of every decoded prompt row.
     pub decoded: Mutex<Vec<Vec<u32>>>,
     /// While closed, every decode waits.
-    gate: Mutex<bool>,
+    decode_gate: Gate,
+    /// While closed, every load waits (after it is counted).
+    load_gate: Gate,
+}
+
+/// A door threads wait at while it is closed; it starts open.
+#[derive(Debug, Default)]
+struct Gate {
+    closed: Mutex<bool>,
     opened: Condvar,
+}
+
+impl Gate {
+    fn set(&self, closed: bool) {
+        *self.closed.lock().unwrap() = closed;
+        self.opened.notify_all();
+    }
+
+    fn pass(&self) {
+        let mut closed = self.closed.lock().unwrap();
+        while *closed {
+            closed = self.opened.wait(closed).unwrap();
+        }
+    }
 }
 
 impl Fake {
     pub fn new() -> Arc<Fake> {
-        let fake = Fake::default();
-        *fake.gate.lock().unwrap() = true;
-        Arc::new(fake)
+        Arc::new(Fake::default())
     }
 
     pub fn runtimes(self: &Arc<Fake>) -> Runtimes {
@@ -45,12 +67,26 @@ impl Fake {
 
     /// Holds every decode until [`Fake::open`].
     pub fn close(&self) {
-        *self.gate.lock().unwrap() = false;
+        self.decode_gate.set(true);
     }
 
     pub fn open(&self) {
-        *self.gate.lock().unwrap() = true;
-        self.opened.notify_all();
+        self.decode_gate.set(false);
+    }
+
+    /// Holds every load until [`Fake::open_loads`].
+    pub fn close_loads(&self) {
+        self.load_gate.set(true);
+    }
+
+    pub fn open_loads(&self) {
+        self.load_gate.set(false);
+    }
+
+    /// Opens both gates when the guard drops, so a failing test leaves no load waiting (the runtime would wait for
+    /// it) and no worker thread held.
+    pub fn open_on_drop(self: &Arc<Fake>) -> OpenOnDrop {
+        OpenOnDrop(self.clone())
     }
 
     pub fn loads(&self) -> usize {
@@ -61,8 +97,22 @@ impl Fake {
         self.drops.load(Ordering::SeqCst)
     }
 
+    pub fn peak_resident(&self) -> usize {
+        self.peak_resident.load(Ordering::SeqCst)
+    }
+
     pub fn decoded(&self) -> Vec<Vec<u32>> {
         self.decoded.lock().unwrap().clone()
+    }
+}
+
+/// See [`Fake::open_on_drop`].
+pub struct OpenOnDrop(Arc<Fake>);
+
+impl Drop for OpenOnDrop {
+    fn drop(&mut self) {
+        self.0.open();
+        self.0.open_loads();
     }
 }
 
@@ -78,8 +128,11 @@ impl Runtime for FakeRuntime {
     }
 
     fn load(&self, weights: &Path, opts: &LoadOptions) -> anyhow::Result<Box<dyn LoadedModel>> {
-        self.0.loads.fetch_add(1, Ordering::SeqCst);
+        let loads = self.0.loads.fetch_add(1, Ordering::SeqCst) + 1;
+        let resident = loads - self.0.drops.load(Ordering::SeqCst);
+        self.0.peak_resident.fetch_max(resident, Ordering::SeqCst);
         self.0.loaded.lock().unwrap().push(weights.to_path_buf());
+        self.0.load_gate.pass();
         Ok(Box::new(FakeModel {
             fake: self.0.clone(),
             weights: weights.to_path_buf(),
@@ -106,11 +159,7 @@ impl LoadedModel for FakeModel {
         slots: &[usize],
         label_ids: &[u32],
     ) -> anyhow::Result<Vec<Vec<f32>>> {
-        let mut open = self.fake.gate.lock().unwrap();
-        while !*open {
-            open = self.fake.opened.wait(open).unwrap();
-        }
-        drop(open);
+        self.fake.decode_gate.pass();
         self.fake.decoded.lock().unwrap().push(ids.to_vec());
         Ok(slots.iter().map(|_| vec![0.0; label_ids.len()]).collect())
     }

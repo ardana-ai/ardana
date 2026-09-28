@@ -40,7 +40,9 @@ leptos = { version = "0.8", features = ["csr"] }
 lz-str = "0.2"
 memory-serve = "2.4"
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+# `float_roundtrip`: every number keeps its exact value, as Python's `json.loads` reads it (prompts re-render state
+# floats, the playground shows response numbers).
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 tokio = "1"
 toml = "1"
 tower = "0.5"

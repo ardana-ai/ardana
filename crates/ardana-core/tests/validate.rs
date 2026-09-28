@@ -137,6 +137,14 @@ fn context_window_is_a_capacity_error_not_a_truncation() -> Result<()> {
         other => panic!("expected Capacity, got {other:?}"),
     }
 
+    // The contract constructor alone checks the default load window (40,960 tokens).
+    match base.plan(&request(json!(" word".repeat(41_000)), questions.clone())) {
+        Err(DecideError::Capacity(msg)) => {
+            assert!(msg.contains("context window of 40960 tokens"), "{msg}")
+        }
+        other => panic!("expected Capacity, got {other:?}"),
+    }
+
     // decider's own limits, in its order.
     let rows = base.clone().with_limits(Limits {
         max_rows: 1,

@@ -29,7 +29,8 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Keep `ardana-api` and `ardana-playground` free of native-only dependencies; `ardana-api` must pass
   `cargo check -p ardana-api --target wasm32-unknown-unknown`.
 - Current third-party pins: `anyhow` 1, `thiserror` 2 (library error enums), `indexmap` 2 with `serde` (ordered wire
-  maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts), `clap` 4
+  maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts) and
+  `float_roundtrip` (floats parse to the exact `f64` Python's `json.loads` gives, which prompts re-render), `clap` 4
   with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
   `tokio` 1 (the `ardana` binary runs `pull` on a current-thread runtime and `serve` on a multi-thread one;
   `ardana-server` adds `sync`, `signal`, `macros`), `axum` 0.8, `tower-http` 0.7 and `tower` 0.5 (dev) as

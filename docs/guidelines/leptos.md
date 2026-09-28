@@ -17,8 +17,8 @@ design workflow that gates every UI change (Q23, Q27).
   `web-sys` features it calls (`Clipboard`, `Document`, `Element`, `Headers`, `HtmlElement`, `HtmlInputElement`,
   `KeyboardEvent`, `Location`, `MediaQueryList`, `Navigator`, `Performance`, `Request`, `RequestInit`, `Response`,
   `ScrollBehavior`, `ScrollIntoViewOptions`, `ScrollLogicalPosition`, `UrlSearchParams`, `Window`)
-- `serde_json` with `float_roundtrip` in the playground — numbers read from a response keep their exact `f64`, so a
-  re-serialised `data-value` equals the API's JSON text
+- `serde_json` with `float_roundtrip` (the workspace feature, `rust.md`) — numbers read from a response keep their
+  exact `f64`, so a re-serialised `data-value` equals the API's JSON text
 
 ## Rules
 - Depend on `leptos` with `features = ["csr"]` and nothing else from its mode set; exactly one of `csr`, `hydrate`,
