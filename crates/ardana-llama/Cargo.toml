@@ -5,3 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+
+[features]
+# Pass-through GPU backends (Q16): built but not verified. Metal is on by default on macOS.
+cuda = ["llama-cpp-2/cuda"]
+vulkan = ["llama-cpp-2/vulkan"]
+
+[dependencies]
+anyhow.workspace = true
+ardana-core.workspace = true
+llama-cpp-2.workspace = true

@@ -1,0 +1,11548 @@
+{
+ "generated_by": "xtask/scripts/decider_layout_cases.py (cargo xtask export-decider)",
+ "decider": "Mapika/decider@23579f7a7e8f10e1045be492af3c1c05a005d67c tests/layout_cases.py",
+ "tokenizer": "models--Mapika--decider-2b-GGUF@ff2e5e687327eda9ac34e9a3ca84d3f400672c87 tokenizer.json",
+ "transformers": "5.17.0",
+ "texts": [
+  "a customer wants a refund",
+  "",
+  "árvíztűrő tükörfúrógép 🙂\n\nline two",
+  "{\"ticket\": {\"body\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"tags\": [\"a\", \"b\"]}, \"rows\": [{\"v\": 0}, {\"v\": 1}, {\"v\": 2}, {\"v\": 3}, {\"v\": 4}, {\"v\": 5}, {\"v\": 6}, {\"v\": 7}, {\"v\": 8}, {\"v\": 9}, {\"v\": 10}, {\"v\": 11}]}",
+  "delta é gamma refund } beta alpha } ticket é delta delta } é é } { gamma delta gamma é { alpha beta gamma alpha ticket alpha ticket } { { { } gamma refund beta alpha gamma } delta ticket { ticket { é { refund é { delta refund alpha ticket gamma refund é beta delta ticket ticket beta beta } } beta refund beta { gamma alpha ticket { { beta alpha alpha { refund é ticket é delta alpha ticket alpha beta beta é alpha delta { ticket ticket gamma alpha refund refund refund gamma { { } é { é beta é ticket { delta ticket { ticket é ticket é refund alpha { refund alpha { gamma alpha refund } refund refund ticket } alpha alpha alpha refund ticket } ticket refund gamma refund gamma refund refund ticket ticket { beta alpha gamma ticket é delta ticket delta refund gamma { beta beta refund refund delta } gamma beta refund delta } ticket delta beta alpha é delta refund gamma ticket refund beta refund gamma { ticket é ticket } refund { ticket { { alpha { gamma delta alpha } é { é delta alpha } é ticket é refund delta beta ticket beta delta alpha alpha é delta { alpha alpha } beta gamma é ticket delta alpha é é { alpha beta refund gamma ticket é } alpha refund delta delta beta é beta gamma delta ticket gamma alpha } { alpha ticket delta ticket é é { alpha } refund alpha alpha gamma alpha beta alpha beta } alpha beta é é } refund gamma refund beta refund { { ticket refund ticket delta refund { beta gamma é alpha { beta gamma alpha refund } é { alpha { alpha refund } refund { { } alpha delta delta é ticket beta { delta { gamma alpha refund refund é ticket beta } beta é { beta refund é beta alpha } gamma delta { alpha é beta beta { gamma alpha refund beta alpha beta } ticket ticket beta alpha é é delta beta é beta é alpha é refund gamma beta delta gamma delta } { ticket refund { refund é { beta { é delta { gamma { é } gamma { gamma gamma beta } } é } gamma gamma ticket delta gamma é refund delta é ticket { ticket delta ticket alpha ticket } { delta gamma refund delta refund } gamma { } delta } é alpha } beta { alpha } delta delta beta delta ticket delta delta ticket gamma gamma alpha ticket gamma alpha refund gamma { beta beta beta beta ticket ticket alpha refund } refund alpha alpha refund refund { { } beta delta } { gamma é refund beta ticket beta { beta } é ticket beta é refund refund } ticket ticket beta refund é é beta } é refund alpha ticket gamma gamma gamma refund } beta beta é gamma refund { é ticket gamma } } ticket gamma beta beta gamma é é { refund beta ticket ticket { alpha gamma alpha } é ticket delta é refund refund { } é beta refund } beta gamma ticket beta beta beta gamma delta { { gamma gamma { delta é é gamma gamma delta ticket refund ticket alpha } { { refund é ticket } é ticket } alpha delta alpha beta delta } gamma é } delta delta é delta alpha é } beta ticket gamma gamma } beta alpha alpha refund delta é beta } é alpha refund refund refund refund gamma beta alpha beta refund delta beta delta { delta } refund beta alpha { beta delta gamma { } } beta é { delta } ticket alpha } } { } gamma } alpha ticket refund refund } é refund { delta alpha delta ticket refund gamma } é delta gamma delta alpha gamma { é gamma alpha gamma beta gamma } } gamma alpha alpha { } refund { alpha alpha delta { alpha { } alpha delta delta beta { } delta gamma refund beta refund beta alpha ticket ticket } ticket } delta é ticket alpha refund refund refund beta alpha { beta alpha beta alpha beta alpha gamma é alpha } alpha delta é refund delta } refund } refund alpha { ticket { beta ticket gamma { beta é { é refund é { gamma { é refund gamma refund { } delta } } refund ticket gamma é { } alpha gamma gamma alpha } beta beta refund delta alpha alpha } } refund refund alpha beta delta { beta refund ticket beta } beta delta delta alpha gamma gamma alpha beta delta ticket delta delta é é { é refund é delta } gamma beta alpha beta alpha beta delta ticket beta beta } { delta beta } refund { } beta ticket } { delta beta é alpha } ticket beta refund refund delta } beta é refund { beta é delta delta refund alpha refund delta { } beta ticket delta refund gamma delta delta } é { refund delta { } { } alpha ticket alpha gamma beta alpha gamma ticket é é alpha } alpha delta delta ticket } { alpha refund } delta ticket gamma beta } ticket { } beta delta gamma } ticket { refund gamma { ticket } } é é delta refund ticket ticket alpha } refund refund ticket delta é alpha alpha gamma é gamma é alpha gamma alpha alpha delta } refund refund é alpha } gamma delta alpha ticket { refund alpha é beta } ticket ticket delta } { ticket refund alpha alpha { alpha gamma delta gamma { é refund é gamma ticket alpha gamma alpha alpha } alpha } } é é { refund é gamma ticket gamma beta gamma é beta { refund } } ticket ticket } ticket é gamma refund gamma é alpha { } delta } ticket alpha refund é beta } gamma ticket ticket beta { beta refund alpha é } } delta ticket refund gamma { { refund alpha ticket delta alpha refund refund { é ticket alpha gamma { ticket { beta } delta delta beta é beta beta alpha ticket beta { ticket } } ticket ticket é é alpha gamma delta } gamma gamma gamma gamma } { alpha gamma { alpha gamma gamma ticket delta gamma gamma alpha é gamma é delta { beta { { gamma alpha ticket beta gamma beta gamma ticket gamma { refund beta delta alpha refund gamma } delta beta refund é } beta refund } alpha refund é } { } é é ticket } gamma é } { delta ticket gamma ticket gamma refund ticket delta gamma alpha alpha { gamma beta alpha gamma beta { refund é ticket beta } é } refund gamma delta refund } é refund refund refund refund refund ticket ticket ticket gamma beta é delta refund delta ticket { ticket } gamma } refund é gamma é é } alpha beta { { é ticket alpha delta { { delta beta refund é delta alpha é } beta { { é refund alpha ticket refund é refund { } refund beta } gamma refund delta alpha refund beta alpha gamma beta delta refund { ticket delta alpha alpha é refund é } refund delta } refund beta é { delta } gamma ticket ticket é delta beta gamma beta { alpha refund { alpha } gamma } ticket gamma { delta é { ticket { ticket beta beta beta } refund beta alpha refund } { beta refund { delta refund delta { beta alpha é alpha é é delta beta gamma delta } é { ticket refund } é delta delta ticket refund gamma é refund é refund refund é delta } alpha { ticket delta } delta gamma beta } beta é { delta refund gamma alpha refund } delta { alpha delta { refund { delta gamma ticket ticket refund ticket alpha refund beta delta delta ticket } gamma gamma delta } delta delta refund delta gamma é { é { gamma ticket } refund alpha beta é } } alpha gamma ticket é { } delta { é } refund { } gamma beta { refund gamma refund beta refund é gamma ticket } é gamma } refund } alpha refund delta beta é ticket ticket é refund { ticket alpha { é refund { } refund gamma delta ticket delta { beta refund é gamma refund } gamma é { } delta { é refund beta alpha } delta gamma é gamma beta beta é é beta { é é refund { ticket beta } ticket refund delta ticket beta delta beta } refund { gamma ticket refund gamma ticket é delta delta delta ticket refund refund beta beta gamma beta delta } refund beta refund gamma gamma alpha } ticket é gamma refund } { é { { ticket ticket é ticket { gamma alpha alpha gamma { alpha delta gamma é delta refund ticket alpha é refund delta beta gamma delta beta } { ticket gamma beta é refund gamma ticket gamma beta beta gamma beta alpha beta é { } é } ticket gamma alpha beta ticket { gamma alpha alpha refund é refund refund beta alpha delta { alpha é } refund delta } } delta alpha refund delta delta gamma { { beta { refund beta é delta ticket beta alpha { alpha refund delta delta } é ticket { delta é { ticket beta gamma } é é beta ticket gamma } é gamma ticket é gamma delta refund é ticket beta beta } beta } delta { alpha alpha alpha } alpha alpha é } alpha alpha refund ticket ticket } } ticket ticket gamma ticket beta { alpha beta delta delta beta gamma { é é gamma gamma beta ticket é é alpha } beta refund } beta { refund é { { } refund alpha refund ticket } ticket } ticket delta refund beta ticket } { } delta refund alpha delta alpha { delta { gamma refund beta gamma é } ticket { { refund { { alpha refund { refund { ticket é delta gamma delta delta alpha { beta { } } { é é é { delta } { alpha é gamma alpha delta beta gamma { é beta beta beta delta ticket é gamma { { gamma gamma delta { } refund } é alpha ticket é alpha refund refund é { delta beta ticket delta beta delta { delta delta refund delta beta refund é ticket delta é delta é { alpha é ticket delta gamma ticket beta ticket refund delta ticket gamma refund delta delta é beta } { ticket alpha é { ticket ticket é delta } delta ticket refund beta beta { { refund delta ticket beta beta alpha gamma refund refund gamma delta refund alpha beta refund é beta { refund é ticket alpha } } } gamma } alpha beta gamma refund } ticket { é delta } { } refund refund alpha é refund } } é } alpha } beta ticket gamma delta é beta gamma gamma ticket refund beta refund é alpha delta refund alpha alpha { gamma beta é } refund } alpha } { é beta beta beta beta delta beta ticket beta refund alpha delta alpha } alpha beta é delta refund } ticket refund alpha delta é alpha delta { gamma refund } é é { } gamma ticket ticket beta delta gamma é refund } { delta é é refund ticket refund refund gamma ticket refund beta gamma { ticket } { é { delta beta refund alpha refund } alpha } é ticket } é é } delta ticket beta beta } } { gamma delta ticket gamma é ticket alpha gamma delta delta } beta ticket refund delta é beta alpha refund } ticket } alpha refund ticket gamma } } ticket é } refund delta beta delta é alpha refund é beta refund alpha gamma alpha } gamma refund beta gamma refund delta } é é alpha alpha é delta refund gamma ticket é delta refund refund { gamma } { { alpha } { alpha beta ticket { ticket refund beta alpha gamma beta { alpha { { delta beta { alpha ticket refund gamma { refund { alpha delta refund é delta { refund refund ticket gamma delta refund alpha delta gamma } ticket delta gamma } é } gamma { ticket { { beta delta { beta delta refund refund ticket ticket { é { gamma refund é beta ticket refund ticket delta delta { delta delta é delta refund ticket } delta beta beta é alpha { alpha é ticket ticket refund gamma é gamma ticket gamma } { ticket é delta gamma } beta delta refund alpha } alpha é { { beta { refund { ticket refund { beta } delta beta ticket } beta ticket é beta delta é refund ticket delta refund { alpha beta alpha gamma delta delta beta delta refund gamma é beta gamma { é } alpha beta refund delta { { delta beta alpha beta beta é ticket delta gamma } gamma beta refund beta } é gamma gamma delta delta } ticket { alpha delta ticket refund beta gamma gamma alpha } beta delta beta gamma gamma é refund delta é { alpha ticket beta } delta é } delta beta { gamma delta é ticket beta gamma } { alpha { beta delta é { gamma beta beta } alpha gamma delta refund refund } } ticket beta beta refund alpha alpha refund refund alpha beta gamma ticket beta alpha ticket } alpha { { alpha ticket refund gamma é refund delta beta refund ticket é { gamma { ticket beta delta } é beta { ticket beta é é refund delta delta delta é { } ticket gamma gamma alpha delta gamma é } refund { { } é é ticket { é { ticket beta refund beta beta { { ticket } ticket beta delta } } gamma beta { } delta } ticket alpha ticket ticket beta gamma delta alpha alpha } { é { { { alpha gamma alpha { { } beta delta gamma gamma refund beta refund refund alpha ticket refund alpha ticket } refund alpha delta { alpha ticket alpha beta delta refund } beta } { alpha { alpha ticket } é gamma { delta gamma { é beta beta beta beta delta alpha delta refund refund } é alpha { delta beta refund beta } delta { gamma refund gamma refund refund é refund beta gamma } beta refund gamma refund delta beta gamma } é ticket } é ticket é beta { beta delta beta beta delta ticket refund delta gamma gamma é beta gamma delta refund refund delta beta gamma { alpha delta ticket ticket alpha refund } refund refund é ticket refund } beta refund delta ticket } delta } ticket delta refund beta } beta é } gamma refund gamma alpha refund alpha ticket alpha delta ticket refund ticket gamma } gamma gamma refund é refund é é delta ticket refund { beta { delta beta ticket beta gamma é alpha } } ticket refund ticket delta ticket { beta alpha beta { beta é gamma gamma é } delta ticket refund { alpha { delta alpha { é é ticket ticket ticket gamma refund alpha delta beta gamma gamma delta beta { alpha } { é } delta beta refund é ticket é refund alpha delta delta é } } alpha } } refund gamma refund beta refund alpha ticket { é } refund refund beta alpha é ticket gamma é beta ticket } ticket } } beta é ticket ticket alpha refund { ticket delta refund gamma delta } delta é refund beta alpha alpha é } { ticket { { ticket refund } alpha é { é beta gamma delta gamma refund refund beta delta ticket é é { ticket refund refund delta alpha é alpha } beta refund ticket { beta gamma beta refund beta gamma gamma delta é delta } } ticket delta é refund ticket refund refund é delta refund refund gamma ticket ticket delta { refund } } beta beta alpha { } } é } refund ticket } refund alpha ticket gamma beta alpha beta alpha ticket refund } é } refund alpha alpha delta ticket } ticket { delta refund { refund delta } delta delta é delta gamma beta ticket } ticket gamma é } beta { { } ticket delta alpha } beta ticket beta delta { alpha } gamma { alpha beta } } { refund alpha ticket beta alpha ticket refund ticket delta beta é refund é beta } ticket é beta { é } beta alpha ticket refund refund refund { gamma ticket refund ticket delta é } beta gamma é refund delta refund beta refund delta ticket delta é gamma alpha beta é é é { é beta alpha delta é } { refund refund delta { beta { { delta delta { } delta alpha refund refund alpha alpha refund refund beta delta é } delta ticket refund é refund refund { { é { gamma { ticket é { } ticket alpha beta } é é beta beta beta refund } ticket ticket delta beta } } é é ticket } alpha alpha delta delta { refund } gamma refund é ticket refund delta gamma ticket alpha é { beta beta gamma { refund delta { alpha alpha ticket delta alpha refund é beta beta ticket refund delta } beta } ticket é beta delta"
+ ],
+ "states": [
+  "a customer wants a refund",
+  {
+   "ticket": {
+    "body": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "tags": [
+     "a",
+     "b"
+    ]
+   },
+   "rows": [
+    {
+     "v": 0
+    },
+    {
+     "v": 1
+    },
+    {
+     "v": 2
+    },
+    {
+     "v": 3
+    },
+    {
+     "v": 4
+    },
+    {
+     "v": 5
+    },
+    {
+     "v": 6
+    },
+    {
+     "v": 7
+    },
+    {
+     "v": 8
+    },
+    {
+     "v": 9
+    },
+    {
+     "v": 10
+    },
+    {
+     "v": 11
+    }
+   ]
+  },
+  "",
+  "delta é gamma refund } beta alpha } ticket é delta delta } é é } { gamma delta gamma é { alpha beta gamma alpha ticket alpha ticket } { { { } gamma refund beta alpha gamma } delta ticket { ticket { é { refund é { delta refund alpha ticket gamma refund é beta delta ticket ticket beta beta } } beta refund beta { gamma alpha ticket { { beta alpha alpha { refund é ticket é delta alpha ticket alpha beta beta é alpha delta { ticket ticket gamma alpha refund refund refund gamma { { } é { é beta é ticket { delta ticket { ticket é ticket é refund alpha { refund alpha { gamma alpha refund } refund refund ticket } alpha alpha alpha refund ticket } ticket refund gamma refund gamma refund refund ticket ticket { beta alpha gamma ticket é delta ticket delta refund gamma { beta beta refund refund delta } gamma beta refund delta } ticket delta beta alpha é delta refund gamma ticket refund beta refund gamma { ticket é ticket } refund { ticket { { alpha { gamma delta alpha } é { é delta alpha } é ticket é refund delta beta ticket beta delta alpha alpha é delta { alpha alpha } beta gamma é ticket delta alpha é é { alpha beta refund gamma ticket é } alpha refund delta delta beta é beta gamma delta ticket gamma alpha } { alpha ticket delta ticket é é { alpha } refund alpha alpha gamma alpha beta alpha beta } alpha beta é é } refund gamma refund beta refund { { ticket refund ticket delta refund { beta gamma é alpha { beta gamma alpha refund } é { alpha { alpha refund } refund { { } alpha delta delta é ticket beta { delta { gamma alpha refund refund é ticket beta } beta é { beta refund é beta alpha } gamma delta { alpha é beta beta { gamma alpha refund beta alpha beta } ticket ticket beta alpha é é delta beta é beta é alpha é refund gamma beta delta gamma delta } { ticket refund { refund é { beta { é delta { gamma { é } gamma { gamma gamma beta } } é } gamma gamma ticket delta gamma é refund delta é ticket { ticket delta ticket alpha ticket } { delta gamma refund delta refund } gamma { } delta } é alpha } beta { alpha } delta delta beta delta ticket delta delta ticket gamma gamma alpha ticket gamma alpha refund gamma { beta beta beta beta ticket ticket alpha refund } refund alpha alpha refund refund { { } beta delta } { gamma é refund beta ticket beta { beta } é ticket beta é refund refund } ticket ticket beta refund é é beta } é refund alpha ticket gamma gamma gamma refund } beta beta é gamma refund { é ticket gamma } } ticket gamma beta beta gamma é é { refund beta ticket ticket { alpha gamma alpha } é ticket delta é refund refund { } é beta refund } beta gamma ticket beta beta beta gamma delta { { gamma gamma { delta é é gamma gamma delta ticket refund ticket alpha } { { refund é ticket } é ticket } alpha delta alpha beta delta } gamma é } delta delta é delta alpha é } beta ticket gamma gamma } beta alpha alpha refund delta é beta } é alpha refund refund refund refund gamma beta alpha beta refund delta beta delta { delta } refund beta alpha { beta delta gamma { } } beta é { delta } ticket alpha } } { } gamma } alpha ticket refund refund } é refund { delta alpha delta ticket refund gamma } é delta gamma delta alpha gamma { é gamma alpha gamma beta gamma } } gamma alpha alpha { } refund { alpha alpha delta { alpha { } alpha delta delta beta { } delta gamma refund beta refund beta alpha ticket ticket } ticket } delta é ticket alpha refund refund refund beta alpha { beta alpha beta alpha beta alpha gamma é alpha } alpha delta é refund delta } refund } refund alpha { ticket { beta ticket gamma { beta é { é refund é { gamma { é refund gamma refund { } delta } } refund ticket gamma é { } alpha gamma gamma alpha } beta beta refund delta alpha alpha } } refund refund alpha beta delta { beta refund ticket beta } beta delta delta alpha gamma gamma alpha beta delta ticket delta delta é é { é refund é delta } gamma beta alpha beta alpha beta delta ticket beta beta } { delta beta } refund { } beta ticket } { delta beta é alpha } ticket beta refund refund delta } beta é refund { beta é delta delta refund alpha refund delta { } beta ticket delta refund gamma delta delta } é { refund delta { } { } alpha ticket alpha gamma beta alpha gamma ticket é é alpha } alpha delta delta ticket } { alpha refund } delta ticket gamma beta } ticket { } beta delta gamma } ticket { refund gamma { ticket } } é é delta refund ticket ticket alpha } refund refund ticket delta é alpha alpha gamma é gamma é alpha gamma alpha alpha delta } refund refund é alpha } gamma delta alpha ticket { refund alpha é beta } ticket ticket delta } { ticket refund alpha alpha { alpha gamma delta gamma { é refund é gamma ticket alpha gamma alpha alpha } alpha } } é é { refund é gamma ticket gamma beta gamma é beta { refund } } ticket ticket } ticket é gamma refund gamma é alpha { } delta } ticket alpha refund é beta } gamma ticket ticket beta { beta refund alpha é } } delta ticket refund gamma { { refund alpha ticket delta alpha refund refund { é ticket alpha gamma { ticket { beta } delta delta beta é beta beta alpha ticket beta { ticket } } ticket ticket é é alpha gamma delta } gamma gamma gamma gamma } { alpha gamma { alpha gamma gamma ticket delta gamma gamma alpha é gamma é delta { beta { { gamma alpha ticket beta gamma beta gamma ticket gamma { refund beta delta alpha refund gamma } delta beta refund é } beta refund } alpha refund é } { } é é ticket } gamma é } { delta ticket gamma ticket gamma refund ticket delta gamma alpha alpha { gamma beta alpha gamma beta { refund é ticket beta } é } refund gamma delta refund } é refund refund refund refund refund ticket ticket ticket gamma beta é delta refund delta ticket { ticket } gamma } refund é gamma é é } alpha beta { { é ticket alpha delta { { delta beta refund é delta alpha é } beta { { é refund alpha ticket refund é refund { } refund beta } gamma refund delta alpha refund beta alpha gamma beta delta refund { ticket delta alpha alpha é refund é } refund delta } refund beta é { delta } gamma ticket ticket é delta beta gamma beta { alpha refund { alpha } gamma } ticket gamma { delta é { ticket { ticket beta beta beta } refund beta alpha refund } { beta refund { delta refund delta { beta alpha é alpha é é delta beta gamma delta } é { ticket refund } é delta delta ticket refund gamma é refund é refund refund é delta } alpha { ticket delta } delta gamma beta } beta é { delta refund gamma alpha refund } delta { alpha delta { refund { delta gamma ticket ticket refund ticket alpha refund beta delta delta ticket } gamma gamma delta } delta delta refund delta gamma é { é { gamma ticket } refund alpha beta é } } alpha gamma ticket é { } delta { é } refund { } gamma beta { refund gamma refund beta refund é gamma ticket } é gamma } refund } alpha refund delta beta é ticket ticket é refund { ticket alpha { é refund { } refund gamma delta ticket delta { beta refund é gamma refund } gamma é { } delta { é refund beta alpha } delta gamma é gamma beta beta é é beta { é é refund { ticket beta } ticket refund delta ticket beta delta beta } refund { gamma ticket refund gamma ticket é delta delta delta ticket refund refund beta beta gamma beta delta } refund beta refund gamma gamma alpha } ticket é gamma refund } { é { { ticket ticket é ticket { gamma alpha alpha gamma { alpha delta gamma é delta refund ticket alpha é refund delta beta gamma delta beta } { ticket gamma beta é refund gamma ticket gamma beta beta gamma beta alpha beta é { } é } ticket gamma alpha beta ticket { gamma alpha alpha refund é refund refund beta alpha delta { alpha é } refund delta } } delta alpha refund delta delta gamma { { beta { refund beta é delta ticket beta alpha { alpha refund delta delta } é ticket { delta é { ticket beta gamma } é é beta ticket gamma } é gamma ticket é gamma delta refund é ticket beta beta } beta } delta { alpha alpha alpha } alpha alpha é } alpha alpha refund ticket ticket } } ticket ticket gamma ticket beta { alpha beta delta delta beta gamma { é é gamma gamma beta ticket é é alpha } beta refund } beta { refund é { { } refund alpha refund ticket } ticket } ticket delta refund beta ticket } { } delta refund alpha delta alpha { delta { gamma refund beta gamma é } ticket { { refund { { alpha refund { refund { ticket é delta gamma delta delta alpha { beta { } } { é é é { delta } { alpha é gamma alpha delta beta gamma { é beta beta beta delta ticket é gamma { { gamma gamma delta { } refund } é alpha ticket é alpha refund refund é { delta beta ticket delta beta delta { delta delta refund delta beta refund é ticket delta é delta é { alpha é ticket delta gamma ticket beta ticket refund delta ticket gamma refund delta delta é beta } { ticket alpha é { ticket ticket é delta } delta ticket refund beta beta { { refund delta ticket beta beta alpha gamma refund refund gamma delta refund alpha beta refund é beta { refund é ticket alpha } } } gamma } alpha beta gamma refund } ticket { é delta } { } refund refund alpha é refund } } é } alpha } beta ticket gamma delta é beta gamma gamma ticket refund beta refund é alpha delta refund alpha alpha { gamma beta é } refund } alpha } { é beta beta beta beta delta beta ticket beta refund alpha delta alpha } alpha beta é delta refund } ticket refund alpha delta é alpha delta { gamma refund } é é { } gamma ticket ticket beta delta gamma é refund } { delta é é refund ticket refund refund gamma ticket refund beta gamma { ticket } { é { delta beta refund alpha refund } alpha } é ticket } é é } delta ticket beta beta } } { gamma delta ticket gamma é ticket alpha gamma delta delta } beta ticket refund delta é beta alpha refund } ticket } alpha refund ticket gamma } } ticket é } refund delta beta delta é alpha refund é beta refund alpha gamma alpha } gamma refund beta gamma refund delta } é é alpha alpha é delta refund gamma ticket é delta refund refund { gamma } { { alpha } { alpha beta ticket { ticket refund beta alpha gamma beta { alpha { { delta beta { alpha ticket refund gamma { refund { alpha delta refund é delta { refund refund ticket gamma delta refund alpha delta gamma } ticket delta gamma } é } gamma { ticket { { beta delta { beta delta refund refund ticket ticket { é { gamma refund é beta ticket refund ticket delta delta { delta delta é delta refund ticket } delta beta beta é alpha { alpha é ticket ticket refund gamma é gamma ticket gamma } { ticket é delta gamma } beta delta refund alpha } alpha é { { beta { refund { ticket refund { beta } delta beta ticket } beta ticket é beta delta é refund ticket delta refund { alpha beta alpha gamma delta delta beta delta refund gamma é beta gamma { é } alpha beta refund delta { { delta beta alpha beta beta é ticket delta gamma } gamma beta refund beta } é gamma gamma delta delta } ticket { alpha delta ticket refund beta gamma gamma alpha } beta delta beta gamma gamma é refund delta é { alpha ticket beta } delta é } delta beta { gamma delta é ticket beta gamma } { alpha { beta delta é { gamma beta beta } alpha gamma delta refund refund } } ticket beta beta refund alpha alpha refund refund alpha beta gamma ticket beta alpha ticket } alpha { { alpha ticket refund gamma é refund delta beta refund ticket é { gamma { ticket beta delta } é beta { ticket beta é é refund delta delta delta é { } ticket gamma gamma alpha delta gamma é } refund { { } é é ticket { é { ticket beta refund beta beta { { ticket } ticket beta delta } } gamma beta { } delta } ticket alpha ticket ticket beta gamma delta alpha alpha } { é { { { alpha gamma alpha { { } beta delta gamma gamma refund beta refund refund alpha ticket refund alpha ticket } refund alpha delta { alpha ticket alpha beta delta refund } beta } { alpha { alpha ticket } é gamma { delta gamma { é beta beta beta beta delta alpha delta refund refund } é alpha { delta beta refund beta } delta { gamma refund gamma refund refund é refund beta gamma } beta refund gamma refund delta beta gamma } é ticket } é ticket é beta { beta delta beta beta delta ticket refund delta gamma gamma é beta gamma delta refund refund delta beta gamma { alpha delta ticket ticket alpha refund } refund refund é ticket refund } beta refund delta ticket } delta } ticket delta refund beta } beta é } gamma refund gamma alpha refund alpha ticket alpha delta ticket refund ticket gamma } gamma gamma refund é refund é é delta ticket refund { beta { delta beta ticket beta gamma é alpha } } ticket refund ticket delta ticket { beta alpha beta { beta é gamma gamma é } delta ticket refund { alpha { delta alpha { é é ticket ticket ticket gamma refund alpha delta beta gamma gamma delta beta { alpha } { é } delta beta refund é ticket é refund alpha delta delta é } } alpha } } refund gamma refund beta refund alpha ticket { é } refund refund beta alpha é ticket gamma é beta ticket } ticket } } beta é ticket ticket alpha refund { ticket delta refund gamma delta } delta é refund beta alpha alpha é } { ticket { { ticket refund } alpha é { é beta gamma delta gamma refund refund beta delta ticket é é { ticket refund refund delta alpha é alpha } beta refund ticket { beta gamma beta refund beta gamma gamma delta é delta } } ticket delta é refund ticket refund refund é delta refund refund gamma ticket ticket delta { refund } } beta beta alpha { } } é } refund ticket } refund alpha ticket gamma beta alpha beta alpha ticket refund } é } refund alpha alpha delta ticket } ticket { delta refund { refund delta } delta delta é delta gamma beta ticket } ticket gamma é } beta { { } ticket delta alpha } beta ticket beta delta { alpha } gamma { alpha beta } } { refund alpha ticket beta alpha ticket refund ticket delta beta é refund é beta } ticket é beta { é } beta alpha ticket refund refund refund { gamma ticket refund ticket delta é } beta gamma é refund delta refund beta refund delta ticket delta é gamma alpha beta é é é { é beta alpha delta é } { refund refund delta { beta { { delta delta { } delta alpha refund refund alpha alpha refund refund beta delta é } delta ticket refund é refund refund { { é { gamma { ticket é { } ticket alpha beta } é é beta beta beta refund } ticket ticket delta beta } } é é ticket } alpha alpha delta delta { refund } gamma refund é ticket refund delta gamma ticket alpha é { beta beta gamma { refund delta { alpha alpha ticket delta alpha refund é beta beta ticket refund delta } beta } ticket é beta delta"
+ ],
+ "questions": {
+  "queue": {
+   "type": "choice",
+   "instructions": "Which queue?",
+   "criteria": [
+    "billing",
+    "technical",
+    "sales"
+   ]
+  },
+  "flag": {
+   "type": "noul",
+   "instructions": "Does this need a human?"
+  },
+  "sev": {
+   "type": "score",
+   "instructions": "How severe?",
+   "criteria": [
+    "none",
+    "low",
+    "medium",
+    "high"
+   ]
+  },
+  "wide": {
+   "type": "choice",
+   "instructions": "Which label?",
+   "criteria": {
+    "L0": "label 0",
+    "L1": "label 1",
+    "L2": "label 2",
+    "L3": "label 3",
+    "L4": "label 4",
+    "L5": "label 5",
+    "L6": "label 6",
+    "L7": "label 7",
+    "L8": "label 8",
+    "L9": "label 9",
+    "L10": "label 10",
+    "L11": "label 11",
+    "L12": "label 12",
+    "L13": "label 13",
+    "L14": "label 14",
+    "L15": "label 15",
+    "L16": "label 16",
+    "L17": "label 17",
+    "L18": "label 18",
+    "L19": "label 19",
+    "L20": "label 20",
+    "L21": "label 21",
+    "L22": "label 22",
+    "L23": "label 23"
+   }
+  },
+  "abstain": {
+   "type": "choice",
+   "instructions": "Which team?",
+   "criteria": [
+    "sales",
+    "support",
+    "None of the above"
+   ]
+  }
+ },
+ "cases": {
+  "prompt:build/state_first/one question/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ]
+   ]
+  },
+  "prompt:build/state_first/one question/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ]
+   ]
+  },
+  "prompt:build/state_first/one question/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ]
+   ]
+  },
+  "prompt:build/state_first/one question/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     2,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/one question/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ]
+   ]
+  },
+  "prompt:build/schema_first/one question/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ]
+   ]
+  },
+  "prompt:build/schema_first/one question/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ]
+   ]
+  },
+  "prompt:build/schema_first/one question/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     2,
+     1
+    ]
+   ]
+  },
+  "prompt:schema_prefix/one question": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/three questions/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     1
+    ],
+    [
+     "Sentiment?",
+     [
+      "angry",
+      "neutral",
+      "happy",
+      "none of the above"
+     ],
+     3
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/state_first/three questions/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     1
+    ],
+    [
+     "Sentiment?",
+     [
+      "angry",
+      "neutral",
+      "happy",
+      "none of the above"
+     ],
+     3
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/state_first/three questions/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     1
+    ],
+    [
+     "Sentiment?",
+     [
+      "angry",
+      "neutral",
+      "happy",
+      "none of the above"
+     ],
+     3
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/state_first/three questions/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     1
+    ],
+    [
+     "Sentiment?",
+     [
+      "angry",
+      "neutral",
+      "happy",
+      "none of the above"
+     ],
+     3
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     2,
+     1
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     0,
+     1,
+     3,
+     2
+    ]
+   ]
+  },
+  "prompt:build/schema_first/three questions/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     1
+    ],
+    [
+     "Sentiment?",
+     [
+      "angry",
+      "neutral",
+      "happy",
+      "none of the above"
+     ],
+     3
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/schema_first/three questions/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     1
+    ],
+    [
+     "Sentiment?",
+     [
+      "angry",
+      "neutral",
+      "happy",
+      "none of the above"
+     ],
+     3
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/schema_first/three questions/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     1
+    ],
+    [
+     "Sentiment?",
+     [
+      "angry",
+      "neutral",
+      "happy",
+      "none of the above"
+     ],
+     3
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/schema_first/three questions/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ],
+     0
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     1
+    ],
+    [
+     "Sentiment?",
+     [
+      "angry",
+      "neutral",
+      "happy",
+      "none of the above"
+     ],
+     3
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     2,
+     1
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     0,
+     1,
+     3,
+     2
+    ]
+   ]
+  },
+  "prompt:schema_prefix/three questions": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which queue?",
+     [
+      "billing",
+      "technical",
+      "sales"
+     ]
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Sentiment?",
+     [
+      "angry",
+      "neutral",
+      "happy",
+      "none of the above"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/empty state/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 1,
+   "cap": 1536,
+   "questions": [
+    [
+     "Yes or no?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/empty state/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 1,
+   "cap": 64,
+   "questions": [
+    [
+     "Yes or no?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/empty state/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 1,
+   "cap": 32768,
+   "questions": [
+    [
+     "Yes or no?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/empty state/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 1,
+   "cap": 1536,
+   "questions": [
+    [
+     "Yes or no?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/empty state/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 1,
+   "cap": 1536,
+   "questions": [
+    [
+     "Yes or no?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/empty state/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 1,
+   "cap": 64,
+   "questions": [
+    [
+     "Yes or no?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/empty state/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 1,
+   "cap": 32768,
+   "questions": [
+    [
+     "Yes or no?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/empty state/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 1,
+   "cap": 1536,
+   "questions": [
+    [
+     "Yes or no?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:schema_prefix/empty state": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Yes or no?",
+     [
+      "no",
+      "yes"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/unicode/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 2,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which?",
+     [
+      "a",
+      "b"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/unicode/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 2,
+   "cap": 64,
+   "questions": [
+    [
+     "Which?",
+     [
+      "a",
+      "b"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/unicode/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 2,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which?",
+     [
+      "a",
+      "b"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/unicode/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 2,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which?",
+     [
+      "a",
+      "b"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/unicode/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 2,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which?",
+     [
+      "a",
+      "b"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/unicode/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 2,
+   "cap": 64,
+   "questions": [
+    [
+     "Which?",
+     [
+      "a",
+      "b"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/unicode/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 2,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which?",
+     [
+      "a",
+      "b"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/unicode/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 2,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which?",
+     [
+      "a",
+      "b"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:schema_prefix/unicode": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which?",
+     [
+      "a",
+      "b"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/json state/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which?",
+     [
+      "one",
+      "two",
+      "three"
+     ],
+     0
+    ],
+    [
+     "Flag?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/json state/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 3,
+   "cap": 64,
+   "questions": [
+    [
+     "Which?",
+     [
+      "one",
+      "two",
+      "three"
+     ],
+     0
+    ],
+    [
+     "Flag?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/json state/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 3,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which?",
+     [
+      "one",
+      "two",
+      "three"
+     ],
+     0
+    ],
+    [
+     "Flag?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/json state/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which?",
+     [
+      "one",
+      "two",
+      "three"
+     ],
+     0
+    ],
+    [
+     "Flag?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     2,
+     1
+    ],
+    [
+     1,
+     0
+    ]
+   ]
+  },
+  "prompt:build/schema_first/json state/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which?",
+     [
+      "one",
+      "two",
+      "three"
+     ],
+     0
+    ],
+    [
+     "Flag?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/json state/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 3,
+   "cap": 64,
+   "questions": [
+    [
+     "Which?",
+     [
+      "one",
+      "two",
+      "three"
+     ],
+     0
+    ],
+    [
+     "Flag?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/json state/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 3,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which?",
+     [
+      "one",
+      "two",
+      "three"
+     ],
+     0
+    ],
+    [
+     "Flag?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/json state/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which?",
+     [
+      "one",
+      "two",
+      "three"
+     ],
+     0
+    ],
+    [
+     "Flag?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     2,
+     1
+    ],
+    [
+     1,
+     0
+    ]
+   ]
+  },
+  "prompt:schema_prefix/json state": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which?",
+     [
+      "one",
+      "two",
+      "three"
+     ]
+    ],
+    [
+     "Flag?",
+     [
+      "no",
+      "yes"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/long state/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 4,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which topic?",
+     [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/state_first/long state/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 4,
+   "cap": 64,
+   "questions": [
+    [
+     "Which topic?",
+     [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/state_first/long state/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 4,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which topic?",
+     [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/state_first/long state/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 4,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which topic?",
+     [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     2,
+     0,
+     1,
+     3
+    ]
+   ]
+  },
+  "prompt:build/schema_first/long state/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 4,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which topic?",
+     [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/schema_first/long state/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 4,
+   "cap": 64,
+   "questions": [
+    [
+     "Which topic?",
+     [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/schema_first/long state/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 4,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which topic?",
+     [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/schema_first/long state/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 4,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which topic?",
+     [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     2,
+     0,
+     1,
+     3
+    ]
+   ]
+  },
+  "prompt:schema_prefix/long state": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which topic?",
+     [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide 40/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "option 0",
+      "option 1",
+      "option 2",
+      "option 3",
+      "option 4",
+      "option 5",
+      "option 6",
+      "option 7",
+      "option 8",
+      "option 9",
+      "option 10",
+      "option 11",
+      "option 12",
+      "option 13",
+      "option 14",
+      "option 15",
+      "option 16",
+      "option 17",
+      "option 18",
+      "option 19",
+      "option 20",
+      "option 21",
+      "option 22",
+      "option 23",
+      "option 24",
+      "option 25",
+      "option 26",
+      "option 27",
+      "option 28",
+      "option 29",
+      "option 30",
+      "option 31",
+      "option 32",
+      "option 33",
+      "option 34",
+      "option 35",
+      "option 36",
+      "option 37",
+      "option 38",
+      "option 39"
+     ],
+     17
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide 40/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "option 0",
+      "option 1",
+      "option 2",
+      "option 3",
+      "option 4",
+      "option 5",
+      "option 6",
+      "option 7",
+      "option 8",
+      "option 9",
+      "option 10",
+      "option 11",
+      "option 12",
+      "option 13",
+      "option 14",
+      "option 15",
+      "option 16",
+      "option 17",
+      "option 18",
+      "option 19",
+      "option 20",
+      "option 21",
+      "option 22",
+      "option 23",
+      "option 24",
+      "option 25",
+      "option 26",
+      "option 27",
+      "option 28",
+      "option 29",
+      "option 30",
+      "option 31",
+      "option 32",
+      "option 33",
+      "option 34",
+      "option 35",
+      "option 36",
+      "option 37",
+      "option 38",
+      "option 39"
+     ],
+     17
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide 40/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "option 0",
+      "option 1",
+      "option 2",
+      "option 3",
+      "option 4",
+      "option 5",
+      "option 6",
+      "option 7",
+      "option 8",
+      "option 9",
+      "option 10",
+      "option 11",
+      "option 12",
+      "option 13",
+      "option 14",
+      "option 15",
+      "option 16",
+      "option 17",
+      "option 18",
+      "option 19",
+      "option 20",
+      "option 21",
+      "option 22",
+      "option 23",
+      "option 24",
+      "option 25",
+      "option 26",
+      "option 27",
+      "option 28",
+      "option 29",
+      "option 30",
+      "option 31",
+      "option 32",
+      "option 33",
+      "option 34",
+      "option 35",
+      "option 36",
+      "option 37",
+      "option 38",
+      "option 39"
+     ],
+     17
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide 40/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "option 0",
+      "option 1",
+      "option 2",
+      "option 3",
+      "option 4",
+      "option 5",
+      "option 6",
+      "option 7",
+      "option 8",
+      "option 9",
+      "option 10",
+      "option 11",
+      "option 12",
+      "option 13",
+      "option 14",
+      "option 15",
+      "option 16",
+      "option 17",
+      "option 18",
+      "option 19",
+      "option 20",
+      "option 21",
+      "option 22",
+      "option 23",
+      "option 24",
+      "option 25",
+      "option 26",
+      "option 27",
+      "option 28",
+      "option 29",
+      "option 30",
+      "option 31",
+      "option 32",
+      "option 33",
+      "option 34",
+      "option 35",
+      "option 36",
+      "option 37",
+      "option 38",
+      "option 39"
+     ],
+     17
+    ]
+   ],
+   "perms": [
+    [
+     26,
+     17,
+     25,
+     31,
+     2,
+     27,
+     33,
+     16,
+     32,
+     20
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide 40/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "option 0",
+      "option 1",
+      "option 2",
+      "option 3",
+      "option 4",
+      "option 5",
+      "option 6",
+      "option 7",
+      "option 8",
+      "option 9",
+      "option 10",
+      "option 11",
+      "option 12",
+      "option 13",
+      "option 14",
+      "option 15",
+      "option 16",
+      "option 17",
+      "option 18",
+      "option 19",
+      "option 20",
+      "option 21",
+      "option 22",
+      "option 23",
+      "option 24",
+      "option 25",
+      "option 26",
+      "option 27",
+      "option 28",
+      "option 29",
+      "option 30",
+      "option 31",
+      "option 32",
+      "option 33",
+      "option 34",
+      "option 35",
+      "option 36",
+      "option 37",
+      "option 38",
+      "option 39"
+     ],
+     17
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide 40/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "option 0",
+      "option 1",
+      "option 2",
+      "option 3",
+      "option 4",
+      "option 5",
+      "option 6",
+      "option 7",
+      "option 8",
+      "option 9",
+      "option 10",
+      "option 11",
+      "option 12",
+      "option 13",
+      "option 14",
+      "option 15",
+      "option 16",
+      "option 17",
+      "option 18",
+      "option 19",
+      "option 20",
+      "option 21",
+      "option 22",
+      "option 23",
+      "option 24",
+      "option 25",
+      "option 26",
+      "option 27",
+      "option 28",
+      "option 29",
+      "option 30",
+      "option 31",
+      "option 32",
+      "option 33",
+      "option 34",
+      "option 35",
+      "option 36",
+      "option 37",
+      "option 38",
+      "option 39"
+     ],
+     17
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide 40/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "option 0",
+      "option 1",
+      "option 2",
+      "option 3",
+      "option 4",
+      "option 5",
+      "option 6",
+      "option 7",
+      "option 8",
+      "option 9",
+      "option 10",
+      "option 11",
+      "option 12",
+      "option 13",
+      "option 14",
+      "option 15",
+      "option 16",
+      "option 17",
+      "option 18",
+      "option 19",
+      "option 20",
+      "option 21",
+      "option 22",
+      "option 23",
+      "option 24",
+      "option 25",
+      "option 26",
+      "option 27",
+      "option 28",
+      "option 29",
+      "option 30",
+      "option 31",
+      "option 32",
+      "option 33",
+      "option 34",
+      "option 35",
+      "option 36",
+      "option 37",
+      "option 38",
+      "option 39"
+     ],
+     17
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide 40/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "option 0",
+      "option 1",
+      "option 2",
+      "option 3",
+      "option 4",
+      "option 5",
+      "option 6",
+      "option 7",
+      "option 8",
+      "option 9",
+      "option 10",
+      "option 11",
+      "option 12",
+      "option 13",
+      "option 14",
+      "option 15",
+      "option 16",
+      "option 17",
+      "option 18",
+      "option 19",
+      "option 20",
+      "option 21",
+      "option 22",
+      "option 23",
+      "option 24",
+      "option 25",
+      "option 26",
+      "option 27",
+      "option 28",
+      "option 29",
+      "option 30",
+      "option 31",
+      "option 32",
+      "option 33",
+      "option 34",
+      "option 35",
+      "option 36",
+      "option 37",
+      "option 38",
+      "option 39"
+     ],
+     17
+    ]
+   ],
+   "perms": [
+    [
+     26,
+     17,
+     25,
+     31,
+     2,
+     27,
+     33,
+     16,
+     32,
+     20
+    ]
+   ]
+  },
+  "prompt:schema_prefix/wide 40": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which label?",
+     [
+      "option 0",
+      "option 1",
+      "option 2",
+      "option 3",
+      "option 4",
+      "option 5",
+      "option 6",
+      "option 7",
+      "option 8",
+      "option 9",
+      "option 10",
+      "option 11",
+      "option 12",
+      "option 13",
+      "option 14",
+      "option 15",
+      "option 16",
+      "option 17",
+      "option 18",
+      "option 19",
+      "option 20",
+      "option 21",
+      "option 22",
+      "option 23",
+      "option 24",
+      "option 25",
+      "option 26",
+      "option 27",
+      "option 28",
+      "option 29",
+      "option 30",
+      "option 31",
+      "option 32",
+      "option 33",
+      "option 34",
+      "option 35",
+      "option 36",
+      "option 37",
+      "option 38",
+      "option 39"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide 255/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "o0",
+      "o1",
+      "o2",
+      "o3",
+      "o4",
+      "o5",
+      "o6",
+      "o7",
+      "o8",
+      "o9",
+      "o10",
+      "o11",
+      "o12",
+      "o13",
+      "o14",
+      "o15",
+      "o16",
+      "o17",
+      "o18",
+      "o19",
+      "o20",
+      "o21",
+      "o22",
+      "o23",
+      "o24",
+      "o25",
+      "o26",
+      "o27",
+      "o28",
+      "o29",
+      "o30",
+      "o31",
+      "o32",
+      "o33",
+      "o34",
+      "o35",
+      "o36",
+      "o37",
+      "o38",
+      "o39",
+      "o40",
+      "o41",
+      "o42",
+      "o43",
+      "o44",
+      "o45",
+      "o46",
+      "o47",
+      "o48",
+      "o49",
+      "o50",
+      "o51",
+      "o52",
+      "o53",
+      "o54",
+      "o55",
+      "o56",
+      "o57",
+      "o58",
+      "o59",
+      "o60",
+      "o61",
+      "o62",
+      "o63",
+      "o64",
+      "o65",
+      "o66",
+      "o67",
+      "o68",
+      "o69",
+      "o70",
+      "o71",
+      "o72",
+      "o73",
+      "o74",
+      "o75",
+      "o76",
+      "o77",
+      "o78",
+      "o79",
+      "o80",
+      "o81",
+      "o82",
+      "o83",
+      "o84",
+      "o85",
+      "o86",
+      "o87",
+      "o88",
+      "o89",
+      "o90",
+      "o91",
+      "o92",
+      "o93",
+      "o94",
+      "o95",
+      "o96",
+      "o97",
+      "o98",
+      "o99",
+      "o100",
+      "o101",
+      "o102",
+      "o103",
+      "o104",
+      "o105",
+      "o106",
+      "o107",
+      "o108",
+      "o109",
+      "o110",
+      "o111",
+      "o112",
+      "o113",
+      "o114",
+      "o115",
+      "o116",
+      "o117",
+      "o118",
+      "o119",
+      "o120",
+      "o121",
+      "o122",
+      "o123",
+      "o124",
+      "o125",
+      "o126",
+      "o127",
+      "o128",
+      "o129",
+      "o130",
+      "o131",
+      "o132",
+      "o133",
+      "o134",
+      "o135",
+      "o136",
+      "o137",
+      "o138",
+      "o139",
+      "o140",
+      "o141",
+      "o142",
+      "o143",
+      "o144",
+      "o145",
+      "o146",
+      "o147",
+      "o148",
+      "o149",
+      "o150",
+      "o151",
+      "o152",
+      "o153",
+      "o154",
+      "o155",
+      "o156",
+      "o157",
+      "o158",
+      "o159",
+      "o160",
+      "o161",
+      "o162",
+      "o163",
+      "o164",
+      "o165",
+      "o166",
+      "o167",
+      "o168",
+      "o169",
+      "o170",
+      "o171",
+      "o172",
+      "o173",
+      "o174",
+      "o175",
+      "o176",
+      "o177",
+      "o178",
+      "o179",
+      "o180",
+      "o181",
+      "o182",
+      "o183",
+      "o184",
+      "o185",
+      "o186",
+      "o187",
+      "o188",
+      "o189",
+      "o190",
+      "o191",
+      "o192",
+      "o193",
+      "o194",
+      "o195",
+      "o196",
+      "o197",
+      "o198",
+      "o199",
+      "o200",
+      "o201",
+      "o202",
+      "o203",
+      "o204",
+      "o205",
+      "o206",
+      "o207",
+      "o208",
+      "o209",
+      "o210",
+      "o211",
+      "o212",
+      "o213",
+      "o214",
+      "o215",
+      "o216",
+      "o217",
+      "o218",
+      "o219",
+      "o220",
+      "o221",
+      "o222",
+      "o223",
+      "o224",
+      "o225",
+      "o226",
+      "o227",
+      "o228",
+      "o229",
+      "o230",
+      "o231",
+      "o232",
+      "o233",
+      "o234",
+      "o235",
+      "o236",
+      "o237",
+      "o238",
+      "o239",
+      "o240",
+      "o241",
+      "o242",
+      "o243",
+      "o244",
+      "o245",
+      "o246",
+      "o247",
+      "o248",
+      "o249",
+      "o250",
+      "o251",
+      "o252",
+      "o253",
+      "o254"
+     ],
+     200
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     46,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58,
+     59,
+     60,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68,
+     69,
+     70,
+     71,
+     72,
+     73,
+     74,
+     75,
+     76,
+     77,
+     78,
+     79,
+     80,
+     81,
+     82,
+     83,
+     84,
+     85,
+     86,
+     87,
+     88,
+     89,
+     90,
+     91,
+     92,
+     93,
+     94,
+     95,
+     96,
+     97,
+     98,
+     99,
+     100,
+     101,
+     102,
+     103,
+     104,
+     105,
+     106,
+     107,
+     108,
+     109,
+     110,
+     111,
+     112,
+     113,
+     114,
+     115,
+     116,
+     117,
+     118,
+     119,
+     120,
+     121,
+     122,
+     123,
+     124,
+     125,
+     126,
+     127,
+     128,
+     129,
+     130,
+     131,
+     132,
+     133,
+     134,
+     135,
+     136,
+     137,
+     138,
+     139,
+     140,
+     141,
+     142,
+     143,
+     144,
+     145,
+     146,
+     147,
+     148,
+     149,
+     150,
+     151,
+     152,
+     153,
+     154,
+     155,
+     156,
+     157,
+     158,
+     159,
+     160,
+     161,
+     162,
+     163,
+     164,
+     165,
+     166,
+     167,
+     168,
+     169,
+     170,
+     171,
+     172,
+     173,
+     174,
+     175,
+     176,
+     177,
+     178,
+     179,
+     180,
+     181,
+     182,
+     183,
+     184,
+     185,
+     186,
+     187,
+     188,
+     189,
+     190,
+     191,
+     192,
+     193,
+     194,
+     195,
+     196,
+     197,
+     198,
+     199,
+     200,
+     201,
+     202,
+     203,
+     204,
+     205,
+     206,
+     207,
+     208,
+     209,
+     210,
+     211,
+     212,
+     213,
+     214,
+     215,
+     216,
+     217,
+     218,
+     219,
+     220,
+     221,
+     222,
+     223,
+     224,
+     225,
+     226,
+     227,
+     228,
+     229,
+     230,
+     231,
+     232,
+     233,
+     234,
+     235,
+     236,
+     237,
+     238,
+     239,
+     240,
+     241,
+     242,
+     243,
+     244,
+     245,
+     246,
+     247,
+     248,
+     249,
+     250,
+     251,
+     252,
+     253,
+     254
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide 255/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "o0",
+      "o1",
+      "o2",
+      "o3",
+      "o4",
+      "o5",
+      "o6",
+      "o7",
+      "o8",
+      "o9",
+      "o10",
+      "o11",
+      "o12",
+      "o13",
+      "o14",
+      "o15",
+      "o16",
+      "o17",
+      "o18",
+      "o19",
+      "o20",
+      "o21",
+      "o22",
+      "o23",
+      "o24",
+      "o25",
+      "o26",
+      "o27",
+      "o28",
+      "o29",
+      "o30",
+      "o31",
+      "o32",
+      "o33",
+      "o34",
+      "o35",
+      "o36",
+      "o37",
+      "o38",
+      "o39",
+      "o40",
+      "o41",
+      "o42",
+      "o43",
+      "o44",
+      "o45",
+      "o46",
+      "o47",
+      "o48",
+      "o49",
+      "o50",
+      "o51",
+      "o52",
+      "o53",
+      "o54",
+      "o55",
+      "o56",
+      "o57",
+      "o58",
+      "o59",
+      "o60",
+      "o61",
+      "o62",
+      "o63",
+      "o64",
+      "o65",
+      "o66",
+      "o67",
+      "o68",
+      "o69",
+      "o70",
+      "o71",
+      "o72",
+      "o73",
+      "o74",
+      "o75",
+      "o76",
+      "o77",
+      "o78",
+      "o79",
+      "o80",
+      "o81",
+      "o82",
+      "o83",
+      "o84",
+      "o85",
+      "o86",
+      "o87",
+      "o88",
+      "o89",
+      "o90",
+      "o91",
+      "o92",
+      "o93",
+      "o94",
+      "o95",
+      "o96",
+      "o97",
+      "o98",
+      "o99",
+      "o100",
+      "o101",
+      "o102",
+      "o103",
+      "o104",
+      "o105",
+      "o106",
+      "o107",
+      "o108",
+      "o109",
+      "o110",
+      "o111",
+      "o112",
+      "o113",
+      "o114",
+      "o115",
+      "o116",
+      "o117",
+      "o118",
+      "o119",
+      "o120",
+      "o121",
+      "o122",
+      "o123",
+      "o124",
+      "o125",
+      "o126",
+      "o127",
+      "o128",
+      "o129",
+      "o130",
+      "o131",
+      "o132",
+      "o133",
+      "o134",
+      "o135",
+      "o136",
+      "o137",
+      "o138",
+      "o139",
+      "o140",
+      "o141",
+      "o142",
+      "o143",
+      "o144",
+      "o145",
+      "o146",
+      "o147",
+      "o148",
+      "o149",
+      "o150",
+      "o151",
+      "o152",
+      "o153",
+      "o154",
+      "o155",
+      "o156",
+      "o157",
+      "o158",
+      "o159",
+      "o160",
+      "o161",
+      "o162",
+      "o163",
+      "o164",
+      "o165",
+      "o166",
+      "o167",
+      "o168",
+      "o169",
+      "o170",
+      "o171",
+      "o172",
+      "o173",
+      "o174",
+      "o175",
+      "o176",
+      "o177",
+      "o178",
+      "o179",
+      "o180",
+      "o181",
+      "o182",
+      "o183",
+      "o184",
+      "o185",
+      "o186",
+      "o187",
+      "o188",
+      "o189",
+      "o190",
+      "o191",
+      "o192",
+      "o193",
+      "o194",
+      "o195",
+      "o196",
+      "o197",
+      "o198",
+      "o199",
+      "o200",
+      "o201",
+      "o202",
+      "o203",
+      "o204",
+      "o205",
+      "o206",
+      "o207",
+      "o208",
+      "o209",
+      "o210",
+      "o211",
+      "o212",
+      "o213",
+      "o214",
+      "o215",
+      "o216",
+      "o217",
+      "o218",
+      "o219",
+      "o220",
+      "o221",
+      "o222",
+      "o223",
+      "o224",
+      "o225",
+      "o226",
+      "o227",
+      "o228",
+      "o229",
+      "o230",
+      "o231",
+      "o232",
+      "o233",
+      "o234",
+      "o235",
+      "o236",
+      "o237",
+      "o238",
+      "o239",
+      "o240",
+      "o241",
+      "o242",
+      "o243",
+      "o244",
+      "o245",
+      "o246",
+      "o247",
+      "o248",
+      "o249",
+      "o250",
+      "o251",
+      "o252",
+      "o253",
+      "o254"
+     ],
+     200
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     46,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58,
+     59,
+     60,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68,
+     69,
+     70,
+     71,
+     72,
+     73,
+     74,
+     75,
+     76,
+     77,
+     78,
+     79,
+     80,
+     81,
+     82,
+     83,
+     84,
+     85,
+     86,
+     87,
+     88,
+     89,
+     90,
+     91,
+     92,
+     93,
+     94,
+     95,
+     96,
+     97,
+     98,
+     99,
+     100,
+     101,
+     102,
+     103,
+     104,
+     105,
+     106,
+     107,
+     108,
+     109,
+     110,
+     111,
+     112,
+     113,
+     114,
+     115,
+     116,
+     117,
+     118,
+     119,
+     120,
+     121,
+     122,
+     123,
+     124,
+     125,
+     126,
+     127,
+     128,
+     129,
+     130,
+     131,
+     132,
+     133,
+     134,
+     135,
+     136,
+     137,
+     138,
+     139,
+     140,
+     141,
+     142,
+     143,
+     144,
+     145,
+     146,
+     147,
+     148,
+     149,
+     150,
+     151,
+     152,
+     153,
+     154,
+     155,
+     156,
+     157,
+     158,
+     159,
+     160,
+     161,
+     162,
+     163,
+     164,
+     165,
+     166,
+     167,
+     168,
+     169,
+     170,
+     171,
+     172,
+     173,
+     174,
+     175,
+     176,
+     177,
+     178,
+     179,
+     180,
+     181,
+     182,
+     183,
+     184,
+     185,
+     186,
+     187,
+     188,
+     189,
+     190,
+     191,
+     192,
+     193,
+     194,
+     195,
+     196,
+     197,
+     198,
+     199,
+     200,
+     201,
+     202,
+     203,
+     204,
+     205,
+     206,
+     207,
+     208,
+     209,
+     210,
+     211,
+     212,
+     213,
+     214,
+     215,
+     216,
+     217,
+     218,
+     219,
+     220,
+     221,
+     222,
+     223,
+     224,
+     225,
+     226,
+     227,
+     228,
+     229,
+     230,
+     231,
+     232,
+     233,
+     234,
+     235,
+     236,
+     237,
+     238,
+     239,
+     240,
+     241,
+     242,
+     243,
+     244,
+     245,
+     246,
+     247,
+     248,
+     249,
+     250,
+     251,
+     252,
+     253,
+     254
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide 255/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "o0",
+      "o1",
+      "o2",
+      "o3",
+      "o4",
+      "o5",
+      "o6",
+      "o7",
+      "o8",
+      "o9",
+      "o10",
+      "o11",
+      "o12",
+      "o13",
+      "o14",
+      "o15",
+      "o16",
+      "o17",
+      "o18",
+      "o19",
+      "o20",
+      "o21",
+      "o22",
+      "o23",
+      "o24",
+      "o25",
+      "o26",
+      "o27",
+      "o28",
+      "o29",
+      "o30",
+      "o31",
+      "o32",
+      "o33",
+      "o34",
+      "o35",
+      "o36",
+      "o37",
+      "o38",
+      "o39",
+      "o40",
+      "o41",
+      "o42",
+      "o43",
+      "o44",
+      "o45",
+      "o46",
+      "o47",
+      "o48",
+      "o49",
+      "o50",
+      "o51",
+      "o52",
+      "o53",
+      "o54",
+      "o55",
+      "o56",
+      "o57",
+      "o58",
+      "o59",
+      "o60",
+      "o61",
+      "o62",
+      "o63",
+      "o64",
+      "o65",
+      "o66",
+      "o67",
+      "o68",
+      "o69",
+      "o70",
+      "o71",
+      "o72",
+      "o73",
+      "o74",
+      "o75",
+      "o76",
+      "o77",
+      "o78",
+      "o79",
+      "o80",
+      "o81",
+      "o82",
+      "o83",
+      "o84",
+      "o85",
+      "o86",
+      "o87",
+      "o88",
+      "o89",
+      "o90",
+      "o91",
+      "o92",
+      "o93",
+      "o94",
+      "o95",
+      "o96",
+      "o97",
+      "o98",
+      "o99",
+      "o100",
+      "o101",
+      "o102",
+      "o103",
+      "o104",
+      "o105",
+      "o106",
+      "o107",
+      "o108",
+      "o109",
+      "o110",
+      "o111",
+      "o112",
+      "o113",
+      "o114",
+      "o115",
+      "o116",
+      "o117",
+      "o118",
+      "o119",
+      "o120",
+      "o121",
+      "o122",
+      "o123",
+      "o124",
+      "o125",
+      "o126",
+      "o127",
+      "o128",
+      "o129",
+      "o130",
+      "o131",
+      "o132",
+      "o133",
+      "o134",
+      "o135",
+      "o136",
+      "o137",
+      "o138",
+      "o139",
+      "o140",
+      "o141",
+      "o142",
+      "o143",
+      "o144",
+      "o145",
+      "o146",
+      "o147",
+      "o148",
+      "o149",
+      "o150",
+      "o151",
+      "o152",
+      "o153",
+      "o154",
+      "o155",
+      "o156",
+      "o157",
+      "o158",
+      "o159",
+      "o160",
+      "o161",
+      "o162",
+      "o163",
+      "o164",
+      "o165",
+      "o166",
+      "o167",
+      "o168",
+      "o169",
+      "o170",
+      "o171",
+      "o172",
+      "o173",
+      "o174",
+      "o175",
+      "o176",
+      "o177",
+      "o178",
+      "o179",
+      "o180",
+      "o181",
+      "o182",
+      "o183",
+      "o184",
+      "o185",
+      "o186",
+      "o187",
+      "o188",
+      "o189",
+      "o190",
+      "o191",
+      "o192",
+      "o193",
+      "o194",
+      "o195",
+      "o196",
+      "o197",
+      "o198",
+      "o199",
+      "o200",
+      "o201",
+      "o202",
+      "o203",
+      "o204",
+      "o205",
+      "o206",
+      "o207",
+      "o208",
+      "o209",
+      "o210",
+      "o211",
+      "o212",
+      "o213",
+      "o214",
+      "o215",
+      "o216",
+      "o217",
+      "o218",
+      "o219",
+      "o220",
+      "o221",
+      "o222",
+      "o223",
+      "o224",
+      "o225",
+      "o226",
+      "o227",
+      "o228",
+      "o229",
+      "o230",
+      "o231",
+      "o232",
+      "o233",
+      "o234",
+      "o235",
+      "o236",
+      "o237",
+      "o238",
+      "o239",
+      "o240",
+      "o241",
+      "o242",
+      "o243",
+      "o244",
+      "o245",
+      "o246",
+      "o247",
+      "o248",
+      "o249",
+      "o250",
+      "o251",
+      "o252",
+      "o253",
+      "o254"
+     ],
+     200
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     46,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58,
+     59,
+     60,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68,
+     69,
+     70,
+     71,
+     72,
+     73,
+     74,
+     75,
+     76,
+     77,
+     78,
+     79,
+     80,
+     81,
+     82,
+     83,
+     84,
+     85,
+     86,
+     87,
+     88,
+     89,
+     90,
+     91,
+     92,
+     93,
+     94,
+     95,
+     96,
+     97,
+     98,
+     99,
+     100,
+     101,
+     102,
+     103,
+     104,
+     105,
+     106,
+     107,
+     108,
+     109,
+     110,
+     111,
+     112,
+     113,
+     114,
+     115,
+     116,
+     117,
+     118,
+     119,
+     120,
+     121,
+     122,
+     123,
+     124,
+     125,
+     126,
+     127,
+     128,
+     129,
+     130,
+     131,
+     132,
+     133,
+     134,
+     135,
+     136,
+     137,
+     138,
+     139,
+     140,
+     141,
+     142,
+     143,
+     144,
+     145,
+     146,
+     147,
+     148,
+     149,
+     150,
+     151,
+     152,
+     153,
+     154,
+     155,
+     156,
+     157,
+     158,
+     159,
+     160,
+     161,
+     162,
+     163,
+     164,
+     165,
+     166,
+     167,
+     168,
+     169,
+     170,
+     171,
+     172,
+     173,
+     174,
+     175,
+     176,
+     177,
+     178,
+     179,
+     180,
+     181,
+     182,
+     183,
+     184,
+     185,
+     186,
+     187,
+     188,
+     189,
+     190,
+     191,
+     192,
+     193,
+     194,
+     195,
+     196,
+     197,
+     198,
+     199,
+     200,
+     201,
+     202,
+     203,
+     204,
+     205,
+     206,
+     207,
+     208,
+     209,
+     210,
+     211,
+     212,
+     213,
+     214,
+     215,
+     216,
+     217,
+     218,
+     219,
+     220,
+     221,
+     222,
+     223,
+     224,
+     225,
+     226,
+     227,
+     228,
+     229,
+     230,
+     231,
+     232,
+     233,
+     234,
+     235,
+     236,
+     237,
+     238,
+     239,
+     240,
+     241,
+     242,
+     243,
+     244,
+     245,
+     246,
+     247,
+     248,
+     249,
+     250,
+     251,
+     252,
+     253,
+     254
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide 255/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "o0",
+      "o1",
+      "o2",
+      "o3",
+      "o4",
+      "o5",
+      "o6",
+      "o7",
+      "o8",
+      "o9",
+      "o10",
+      "o11",
+      "o12",
+      "o13",
+      "o14",
+      "o15",
+      "o16",
+      "o17",
+      "o18",
+      "o19",
+      "o20",
+      "o21",
+      "o22",
+      "o23",
+      "o24",
+      "o25",
+      "o26",
+      "o27",
+      "o28",
+      "o29",
+      "o30",
+      "o31",
+      "o32",
+      "o33",
+      "o34",
+      "o35",
+      "o36",
+      "o37",
+      "o38",
+      "o39",
+      "o40",
+      "o41",
+      "o42",
+      "o43",
+      "o44",
+      "o45",
+      "o46",
+      "o47",
+      "o48",
+      "o49",
+      "o50",
+      "o51",
+      "o52",
+      "o53",
+      "o54",
+      "o55",
+      "o56",
+      "o57",
+      "o58",
+      "o59",
+      "o60",
+      "o61",
+      "o62",
+      "o63",
+      "o64",
+      "o65",
+      "o66",
+      "o67",
+      "o68",
+      "o69",
+      "o70",
+      "o71",
+      "o72",
+      "o73",
+      "o74",
+      "o75",
+      "o76",
+      "o77",
+      "o78",
+      "o79",
+      "o80",
+      "o81",
+      "o82",
+      "o83",
+      "o84",
+      "o85",
+      "o86",
+      "o87",
+      "o88",
+      "o89",
+      "o90",
+      "o91",
+      "o92",
+      "o93",
+      "o94",
+      "o95",
+      "o96",
+      "o97",
+      "o98",
+      "o99",
+      "o100",
+      "o101",
+      "o102",
+      "o103",
+      "o104",
+      "o105",
+      "o106",
+      "o107",
+      "o108",
+      "o109",
+      "o110",
+      "o111",
+      "o112",
+      "o113",
+      "o114",
+      "o115",
+      "o116",
+      "o117",
+      "o118",
+      "o119",
+      "o120",
+      "o121",
+      "o122",
+      "o123",
+      "o124",
+      "o125",
+      "o126",
+      "o127",
+      "o128",
+      "o129",
+      "o130",
+      "o131",
+      "o132",
+      "o133",
+      "o134",
+      "o135",
+      "o136",
+      "o137",
+      "o138",
+      "o139",
+      "o140",
+      "o141",
+      "o142",
+      "o143",
+      "o144",
+      "o145",
+      "o146",
+      "o147",
+      "o148",
+      "o149",
+      "o150",
+      "o151",
+      "o152",
+      "o153",
+      "o154",
+      "o155",
+      "o156",
+      "o157",
+      "o158",
+      "o159",
+      "o160",
+      "o161",
+      "o162",
+      "o163",
+      "o164",
+      "o165",
+      "o166",
+      "o167",
+      "o168",
+      "o169",
+      "o170",
+      "o171",
+      "o172",
+      "o173",
+      "o174",
+      "o175",
+      "o176",
+      "o177",
+      "o178",
+      "o179",
+      "o180",
+      "o181",
+      "o182",
+      "o183",
+      "o184",
+      "o185",
+      "o186",
+      "o187",
+      "o188",
+      "o189",
+      "o190",
+      "o191",
+      "o192",
+      "o193",
+      "o194",
+      "o195",
+      "o196",
+      "o197",
+      "o198",
+      "o199",
+      "o200",
+      "o201",
+      "o202",
+      "o203",
+      "o204",
+      "o205",
+      "o206",
+      "o207",
+      "o208",
+      "o209",
+      "o210",
+      "o211",
+      "o212",
+      "o213",
+      "o214",
+      "o215",
+      "o216",
+      "o217",
+      "o218",
+      "o219",
+      "o220",
+      "o221",
+      "o222",
+      "o223",
+      "o224",
+      "o225",
+      "o226",
+      "o227",
+      "o228",
+      "o229",
+      "o230",
+      "o231",
+      "o232",
+      "o233",
+      "o234",
+      "o235",
+      "o236",
+      "o237",
+      "o238",
+      "o239",
+      "o240",
+      "o241",
+      "o242",
+      "o243",
+      "o244",
+      "o245",
+      "o246",
+      "o247",
+      "o248",
+      "o249",
+      "o250",
+      "o251",
+      "o252",
+      "o253",
+      "o254"
+     ],
+     200
+    ]
+   ],
+   "perms": [
+    [
+     130,
+     217,
+     10,
+     98,
+     200,
+     194,
+     228,
+     107,
+     66,
+     248
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide 255/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "o0",
+      "o1",
+      "o2",
+      "o3",
+      "o4",
+      "o5",
+      "o6",
+      "o7",
+      "o8",
+      "o9",
+      "o10",
+      "o11",
+      "o12",
+      "o13",
+      "o14",
+      "o15",
+      "o16",
+      "o17",
+      "o18",
+      "o19",
+      "o20",
+      "o21",
+      "o22",
+      "o23",
+      "o24",
+      "o25",
+      "o26",
+      "o27",
+      "o28",
+      "o29",
+      "o30",
+      "o31",
+      "o32",
+      "o33",
+      "o34",
+      "o35",
+      "o36",
+      "o37",
+      "o38",
+      "o39",
+      "o40",
+      "o41",
+      "o42",
+      "o43",
+      "o44",
+      "o45",
+      "o46",
+      "o47",
+      "o48",
+      "o49",
+      "o50",
+      "o51",
+      "o52",
+      "o53",
+      "o54",
+      "o55",
+      "o56",
+      "o57",
+      "o58",
+      "o59",
+      "o60",
+      "o61",
+      "o62",
+      "o63",
+      "o64",
+      "o65",
+      "o66",
+      "o67",
+      "o68",
+      "o69",
+      "o70",
+      "o71",
+      "o72",
+      "o73",
+      "o74",
+      "o75",
+      "o76",
+      "o77",
+      "o78",
+      "o79",
+      "o80",
+      "o81",
+      "o82",
+      "o83",
+      "o84",
+      "o85",
+      "o86",
+      "o87",
+      "o88",
+      "o89",
+      "o90",
+      "o91",
+      "o92",
+      "o93",
+      "o94",
+      "o95",
+      "o96",
+      "o97",
+      "o98",
+      "o99",
+      "o100",
+      "o101",
+      "o102",
+      "o103",
+      "o104",
+      "o105",
+      "o106",
+      "o107",
+      "o108",
+      "o109",
+      "o110",
+      "o111",
+      "o112",
+      "o113",
+      "o114",
+      "o115",
+      "o116",
+      "o117",
+      "o118",
+      "o119",
+      "o120",
+      "o121",
+      "o122",
+      "o123",
+      "o124",
+      "o125",
+      "o126",
+      "o127",
+      "o128",
+      "o129",
+      "o130",
+      "o131",
+      "o132",
+      "o133",
+      "o134",
+      "o135",
+      "o136",
+      "o137",
+      "o138",
+      "o139",
+      "o140",
+      "o141",
+      "o142",
+      "o143",
+      "o144",
+      "o145",
+      "o146",
+      "o147",
+      "o148",
+      "o149",
+      "o150",
+      "o151",
+      "o152",
+      "o153",
+      "o154",
+      "o155",
+      "o156",
+      "o157",
+      "o158",
+      "o159",
+      "o160",
+      "o161",
+      "o162",
+      "o163",
+      "o164",
+      "o165",
+      "o166",
+      "o167",
+      "o168",
+      "o169",
+      "o170",
+      "o171",
+      "o172",
+      "o173",
+      "o174",
+      "o175",
+      "o176",
+      "o177",
+      "o178",
+      "o179",
+      "o180",
+      "o181",
+      "o182",
+      "o183",
+      "o184",
+      "o185",
+      "o186",
+      "o187",
+      "o188",
+      "o189",
+      "o190",
+      "o191",
+      "o192",
+      "o193",
+      "o194",
+      "o195",
+      "o196",
+      "o197",
+      "o198",
+      "o199",
+      "o200",
+      "o201",
+      "o202",
+      "o203",
+      "o204",
+      "o205",
+      "o206",
+      "o207",
+      "o208",
+      "o209",
+      "o210",
+      "o211",
+      "o212",
+      "o213",
+      "o214",
+      "o215",
+      "o216",
+      "o217",
+      "o218",
+      "o219",
+      "o220",
+      "o221",
+      "o222",
+      "o223",
+      "o224",
+      "o225",
+      "o226",
+      "o227",
+      "o228",
+      "o229",
+      "o230",
+      "o231",
+      "o232",
+      "o233",
+      "o234",
+      "o235",
+      "o236",
+      "o237",
+      "o238",
+      "o239",
+      "o240",
+      "o241",
+      "o242",
+      "o243",
+      "o244",
+      "o245",
+      "o246",
+      "o247",
+      "o248",
+      "o249",
+      "o250",
+      "o251",
+      "o252",
+      "o253",
+      "o254"
+     ],
+     200
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     46,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58,
+     59,
+     60,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68,
+     69,
+     70,
+     71,
+     72,
+     73,
+     74,
+     75,
+     76,
+     77,
+     78,
+     79,
+     80,
+     81,
+     82,
+     83,
+     84,
+     85,
+     86,
+     87,
+     88,
+     89,
+     90,
+     91,
+     92,
+     93,
+     94,
+     95,
+     96,
+     97,
+     98,
+     99,
+     100,
+     101,
+     102,
+     103,
+     104,
+     105,
+     106,
+     107,
+     108,
+     109,
+     110,
+     111,
+     112,
+     113,
+     114,
+     115,
+     116,
+     117,
+     118,
+     119,
+     120,
+     121,
+     122,
+     123,
+     124,
+     125,
+     126,
+     127,
+     128,
+     129,
+     130,
+     131,
+     132,
+     133,
+     134,
+     135,
+     136,
+     137,
+     138,
+     139,
+     140,
+     141,
+     142,
+     143,
+     144,
+     145,
+     146,
+     147,
+     148,
+     149,
+     150,
+     151,
+     152,
+     153,
+     154,
+     155,
+     156,
+     157,
+     158,
+     159,
+     160,
+     161,
+     162,
+     163,
+     164,
+     165,
+     166,
+     167,
+     168,
+     169,
+     170,
+     171,
+     172,
+     173,
+     174,
+     175,
+     176,
+     177,
+     178,
+     179,
+     180,
+     181,
+     182,
+     183,
+     184,
+     185,
+     186,
+     187,
+     188,
+     189,
+     190,
+     191,
+     192,
+     193,
+     194,
+     195,
+     196,
+     197,
+     198,
+     199,
+     200,
+     201,
+     202,
+     203,
+     204,
+     205,
+     206,
+     207,
+     208,
+     209,
+     210,
+     211,
+     212,
+     213,
+     214,
+     215,
+     216,
+     217,
+     218,
+     219,
+     220,
+     221,
+     222,
+     223,
+     224,
+     225,
+     226,
+     227,
+     228,
+     229,
+     230,
+     231,
+     232,
+     233,
+     234,
+     235,
+     236,
+     237,
+     238,
+     239,
+     240,
+     241,
+     242,
+     243,
+     244,
+     245,
+     246,
+     247,
+     248,
+     249,
+     250,
+     251,
+     252,
+     253,
+     254
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide 255/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "o0",
+      "o1",
+      "o2",
+      "o3",
+      "o4",
+      "o5",
+      "o6",
+      "o7",
+      "o8",
+      "o9",
+      "o10",
+      "o11",
+      "o12",
+      "o13",
+      "o14",
+      "o15",
+      "o16",
+      "o17",
+      "o18",
+      "o19",
+      "o20",
+      "o21",
+      "o22",
+      "o23",
+      "o24",
+      "o25",
+      "o26",
+      "o27",
+      "o28",
+      "o29",
+      "o30",
+      "o31",
+      "o32",
+      "o33",
+      "o34",
+      "o35",
+      "o36",
+      "o37",
+      "o38",
+      "o39",
+      "o40",
+      "o41",
+      "o42",
+      "o43",
+      "o44",
+      "o45",
+      "o46",
+      "o47",
+      "o48",
+      "o49",
+      "o50",
+      "o51",
+      "o52",
+      "o53",
+      "o54",
+      "o55",
+      "o56",
+      "o57",
+      "o58",
+      "o59",
+      "o60",
+      "o61",
+      "o62",
+      "o63",
+      "o64",
+      "o65",
+      "o66",
+      "o67",
+      "o68",
+      "o69",
+      "o70",
+      "o71",
+      "o72",
+      "o73",
+      "o74",
+      "o75",
+      "o76",
+      "o77",
+      "o78",
+      "o79",
+      "o80",
+      "o81",
+      "o82",
+      "o83",
+      "o84",
+      "o85",
+      "o86",
+      "o87",
+      "o88",
+      "o89",
+      "o90",
+      "o91",
+      "o92",
+      "o93",
+      "o94",
+      "o95",
+      "o96",
+      "o97",
+      "o98",
+      "o99",
+      "o100",
+      "o101",
+      "o102",
+      "o103",
+      "o104",
+      "o105",
+      "o106",
+      "o107",
+      "o108",
+      "o109",
+      "o110",
+      "o111",
+      "o112",
+      "o113",
+      "o114",
+      "o115",
+      "o116",
+      "o117",
+      "o118",
+      "o119",
+      "o120",
+      "o121",
+      "o122",
+      "o123",
+      "o124",
+      "o125",
+      "o126",
+      "o127",
+      "o128",
+      "o129",
+      "o130",
+      "o131",
+      "o132",
+      "o133",
+      "o134",
+      "o135",
+      "o136",
+      "o137",
+      "o138",
+      "o139",
+      "o140",
+      "o141",
+      "o142",
+      "o143",
+      "o144",
+      "o145",
+      "o146",
+      "o147",
+      "o148",
+      "o149",
+      "o150",
+      "o151",
+      "o152",
+      "o153",
+      "o154",
+      "o155",
+      "o156",
+      "o157",
+      "o158",
+      "o159",
+      "o160",
+      "o161",
+      "o162",
+      "o163",
+      "o164",
+      "o165",
+      "o166",
+      "o167",
+      "o168",
+      "o169",
+      "o170",
+      "o171",
+      "o172",
+      "o173",
+      "o174",
+      "o175",
+      "o176",
+      "o177",
+      "o178",
+      "o179",
+      "o180",
+      "o181",
+      "o182",
+      "o183",
+      "o184",
+      "o185",
+      "o186",
+      "o187",
+      "o188",
+      "o189",
+      "o190",
+      "o191",
+      "o192",
+      "o193",
+      "o194",
+      "o195",
+      "o196",
+      "o197",
+      "o198",
+      "o199",
+      "o200",
+      "o201",
+      "o202",
+      "o203",
+      "o204",
+      "o205",
+      "o206",
+      "o207",
+      "o208",
+      "o209",
+      "o210",
+      "o211",
+      "o212",
+      "o213",
+      "o214",
+      "o215",
+      "o216",
+      "o217",
+      "o218",
+      "o219",
+      "o220",
+      "o221",
+      "o222",
+      "o223",
+      "o224",
+      "o225",
+      "o226",
+      "o227",
+      "o228",
+      "o229",
+      "o230",
+      "o231",
+      "o232",
+      "o233",
+      "o234",
+      "o235",
+      "o236",
+      "o237",
+      "o238",
+      "o239",
+      "o240",
+      "o241",
+      "o242",
+      "o243",
+      "o244",
+      "o245",
+      "o246",
+      "o247",
+      "o248",
+      "o249",
+      "o250",
+      "o251",
+      "o252",
+      "o253",
+      "o254"
+     ],
+     200
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     46,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58,
+     59,
+     60,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68,
+     69,
+     70,
+     71,
+     72,
+     73,
+     74,
+     75,
+     76,
+     77,
+     78,
+     79,
+     80,
+     81,
+     82,
+     83,
+     84,
+     85,
+     86,
+     87,
+     88,
+     89,
+     90,
+     91,
+     92,
+     93,
+     94,
+     95,
+     96,
+     97,
+     98,
+     99,
+     100,
+     101,
+     102,
+     103,
+     104,
+     105,
+     106,
+     107,
+     108,
+     109,
+     110,
+     111,
+     112,
+     113,
+     114,
+     115,
+     116,
+     117,
+     118,
+     119,
+     120,
+     121,
+     122,
+     123,
+     124,
+     125,
+     126,
+     127,
+     128,
+     129,
+     130,
+     131,
+     132,
+     133,
+     134,
+     135,
+     136,
+     137,
+     138,
+     139,
+     140,
+     141,
+     142,
+     143,
+     144,
+     145,
+     146,
+     147,
+     148,
+     149,
+     150,
+     151,
+     152,
+     153,
+     154,
+     155,
+     156,
+     157,
+     158,
+     159,
+     160,
+     161,
+     162,
+     163,
+     164,
+     165,
+     166,
+     167,
+     168,
+     169,
+     170,
+     171,
+     172,
+     173,
+     174,
+     175,
+     176,
+     177,
+     178,
+     179,
+     180,
+     181,
+     182,
+     183,
+     184,
+     185,
+     186,
+     187,
+     188,
+     189,
+     190,
+     191,
+     192,
+     193,
+     194,
+     195,
+     196,
+     197,
+     198,
+     199,
+     200,
+     201,
+     202,
+     203,
+     204,
+     205,
+     206,
+     207,
+     208,
+     209,
+     210,
+     211,
+     212,
+     213,
+     214,
+     215,
+     216,
+     217,
+     218,
+     219,
+     220,
+     221,
+     222,
+     223,
+     224,
+     225,
+     226,
+     227,
+     228,
+     229,
+     230,
+     231,
+     232,
+     233,
+     234,
+     235,
+     236,
+     237,
+     238,
+     239,
+     240,
+     241,
+     242,
+     243,
+     244,
+     245,
+     246,
+     247,
+     248,
+     249,
+     250,
+     251,
+     252,
+     253,
+     254
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide 255/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "o0",
+      "o1",
+      "o2",
+      "o3",
+      "o4",
+      "o5",
+      "o6",
+      "o7",
+      "o8",
+      "o9",
+      "o10",
+      "o11",
+      "o12",
+      "o13",
+      "o14",
+      "o15",
+      "o16",
+      "o17",
+      "o18",
+      "o19",
+      "o20",
+      "o21",
+      "o22",
+      "o23",
+      "o24",
+      "o25",
+      "o26",
+      "o27",
+      "o28",
+      "o29",
+      "o30",
+      "o31",
+      "o32",
+      "o33",
+      "o34",
+      "o35",
+      "o36",
+      "o37",
+      "o38",
+      "o39",
+      "o40",
+      "o41",
+      "o42",
+      "o43",
+      "o44",
+      "o45",
+      "o46",
+      "o47",
+      "o48",
+      "o49",
+      "o50",
+      "o51",
+      "o52",
+      "o53",
+      "o54",
+      "o55",
+      "o56",
+      "o57",
+      "o58",
+      "o59",
+      "o60",
+      "o61",
+      "o62",
+      "o63",
+      "o64",
+      "o65",
+      "o66",
+      "o67",
+      "o68",
+      "o69",
+      "o70",
+      "o71",
+      "o72",
+      "o73",
+      "o74",
+      "o75",
+      "o76",
+      "o77",
+      "o78",
+      "o79",
+      "o80",
+      "o81",
+      "o82",
+      "o83",
+      "o84",
+      "o85",
+      "o86",
+      "o87",
+      "o88",
+      "o89",
+      "o90",
+      "o91",
+      "o92",
+      "o93",
+      "o94",
+      "o95",
+      "o96",
+      "o97",
+      "o98",
+      "o99",
+      "o100",
+      "o101",
+      "o102",
+      "o103",
+      "o104",
+      "o105",
+      "o106",
+      "o107",
+      "o108",
+      "o109",
+      "o110",
+      "o111",
+      "o112",
+      "o113",
+      "o114",
+      "o115",
+      "o116",
+      "o117",
+      "o118",
+      "o119",
+      "o120",
+      "o121",
+      "o122",
+      "o123",
+      "o124",
+      "o125",
+      "o126",
+      "o127",
+      "o128",
+      "o129",
+      "o130",
+      "o131",
+      "o132",
+      "o133",
+      "o134",
+      "o135",
+      "o136",
+      "o137",
+      "o138",
+      "o139",
+      "o140",
+      "o141",
+      "o142",
+      "o143",
+      "o144",
+      "o145",
+      "o146",
+      "o147",
+      "o148",
+      "o149",
+      "o150",
+      "o151",
+      "o152",
+      "o153",
+      "o154",
+      "o155",
+      "o156",
+      "o157",
+      "o158",
+      "o159",
+      "o160",
+      "o161",
+      "o162",
+      "o163",
+      "o164",
+      "o165",
+      "o166",
+      "o167",
+      "o168",
+      "o169",
+      "o170",
+      "o171",
+      "o172",
+      "o173",
+      "o174",
+      "o175",
+      "o176",
+      "o177",
+      "o178",
+      "o179",
+      "o180",
+      "o181",
+      "o182",
+      "o183",
+      "o184",
+      "o185",
+      "o186",
+      "o187",
+      "o188",
+      "o189",
+      "o190",
+      "o191",
+      "o192",
+      "o193",
+      "o194",
+      "o195",
+      "o196",
+      "o197",
+      "o198",
+      "o199",
+      "o200",
+      "o201",
+      "o202",
+      "o203",
+      "o204",
+      "o205",
+      "o206",
+      "o207",
+      "o208",
+      "o209",
+      "o210",
+      "o211",
+      "o212",
+      "o213",
+      "o214",
+      "o215",
+      "o216",
+      "o217",
+      "o218",
+      "o219",
+      "o220",
+      "o221",
+      "o222",
+      "o223",
+      "o224",
+      "o225",
+      "o226",
+      "o227",
+      "o228",
+      "o229",
+      "o230",
+      "o231",
+      "o232",
+      "o233",
+      "o234",
+      "o235",
+      "o236",
+      "o237",
+      "o238",
+      "o239",
+      "o240",
+      "o241",
+      "o242",
+      "o243",
+      "o244",
+      "o245",
+      "o246",
+      "o247",
+      "o248",
+      "o249",
+      "o250",
+      "o251",
+      "o252",
+      "o253",
+      "o254"
+     ],
+     200
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     46,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58,
+     59,
+     60,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68,
+     69,
+     70,
+     71,
+     72,
+     73,
+     74,
+     75,
+     76,
+     77,
+     78,
+     79,
+     80,
+     81,
+     82,
+     83,
+     84,
+     85,
+     86,
+     87,
+     88,
+     89,
+     90,
+     91,
+     92,
+     93,
+     94,
+     95,
+     96,
+     97,
+     98,
+     99,
+     100,
+     101,
+     102,
+     103,
+     104,
+     105,
+     106,
+     107,
+     108,
+     109,
+     110,
+     111,
+     112,
+     113,
+     114,
+     115,
+     116,
+     117,
+     118,
+     119,
+     120,
+     121,
+     122,
+     123,
+     124,
+     125,
+     126,
+     127,
+     128,
+     129,
+     130,
+     131,
+     132,
+     133,
+     134,
+     135,
+     136,
+     137,
+     138,
+     139,
+     140,
+     141,
+     142,
+     143,
+     144,
+     145,
+     146,
+     147,
+     148,
+     149,
+     150,
+     151,
+     152,
+     153,
+     154,
+     155,
+     156,
+     157,
+     158,
+     159,
+     160,
+     161,
+     162,
+     163,
+     164,
+     165,
+     166,
+     167,
+     168,
+     169,
+     170,
+     171,
+     172,
+     173,
+     174,
+     175,
+     176,
+     177,
+     178,
+     179,
+     180,
+     181,
+     182,
+     183,
+     184,
+     185,
+     186,
+     187,
+     188,
+     189,
+     190,
+     191,
+     192,
+     193,
+     194,
+     195,
+     196,
+     197,
+     198,
+     199,
+     200,
+     201,
+     202,
+     203,
+     204,
+     205,
+     206,
+     207,
+     208,
+     209,
+     210,
+     211,
+     212,
+     213,
+     214,
+     215,
+     216,
+     217,
+     218,
+     219,
+     220,
+     221,
+     222,
+     223,
+     224,
+     225,
+     226,
+     227,
+     228,
+     229,
+     230,
+     231,
+     232,
+     233,
+     234,
+     235,
+     236,
+     237,
+     238,
+     239,
+     240,
+     241,
+     242,
+     243,
+     244,
+     245,
+     246,
+     247,
+     248,
+     249,
+     250,
+     251,
+     252,
+     253,
+     254
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide 255/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "o0",
+      "o1",
+      "o2",
+      "o3",
+      "o4",
+      "o5",
+      "o6",
+      "o7",
+      "o8",
+      "o9",
+      "o10",
+      "o11",
+      "o12",
+      "o13",
+      "o14",
+      "o15",
+      "o16",
+      "o17",
+      "o18",
+      "o19",
+      "o20",
+      "o21",
+      "o22",
+      "o23",
+      "o24",
+      "o25",
+      "o26",
+      "o27",
+      "o28",
+      "o29",
+      "o30",
+      "o31",
+      "o32",
+      "o33",
+      "o34",
+      "o35",
+      "o36",
+      "o37",
+      "o38",
+      "o39",
+      "o40",
+      "o41",
+      "o42",
+      "o43",
+      "o44",
+      "o45",
+      "o46",
+      "o47",
+      "o48",
+      "o49",
+      "o50",
+      "o51",
+      "o52",
+      "o53",
+      "o54",
+      "o55",
+      "o56",
+      "o57",
+      "o58",
+      "o59",
+      "o60",
+      "o61",
+      "o62",
+      "o63",
+      "o64",
+      "o65",
+      "o66",
+      "o67",
+      "o68",
+      "o69",
+      "o70",
+      "o71",
+      "o72",
+      "o73",
+      "o74",
+      "o75",
+      "o76",
+      "o77",
+      "o78",
+      "o79",
+      "o80",
+      "o81",
+      "o82",
+      "o83",
+      "o84",
+      "o85",
+      "o86",
+      "o87",
+      "o88",
+      "o89",
+      "o90",
+      "o91",
+      "o92",
+      "o93",
+      "o94",
+      "o95",
+      "o96",
+      "o97",
+      "o98",
+      "o99",
+      "o100",
+      "o101",
+      "o102",
+      "o103",
+      "o104",
+      "o105",
+      "o106",
+      "o107",
+      "o108",
+      "o109",
+      "o110",
+      "o111",
+      "o112",
+      "o113",
+      "o114",
+      "o115",
+      "o116",
+      "o117",
+      "o118",
+      "o119",
+      "o120",
+      "o121",
+      "o122",
+      "o123",
+      "o124",
+      "o125",
+      "o126",
+      "o127",
+      "o128",
+      "o129",
+      "o130",
+      "o131",
+      "o132",
+      "o133",
+      "o134",
+      "o135",
+      "o136",
+      "o137",
+      "o138",
+      "o139",
+      "o140",
+      "o141",
+      "o142",
+      "o143",
+      "o144",
+      "o145",
+      "o146",
+      "o147",
+      "o148",
+      "o149",
+      "o150",
+      "o151",
+      "o152",
+      "o153",
+      "o154",
+      "o155",
+      "o156",
+      "o157",
+      "o158",
+      "o159",
+      "o160",
+      "o161",
+      "o162",
+      "o163",
+      "o164",
+      "o165",
+      "o166",
+      "o167",
+      "o168",
+      "o169",
+      "o170",
+      "o171",
+      "o172",
+      "o173",
+      "o174",
+      "o175",
+      "o176",
+      "o177",
+      "o178",
+      "o179",
+      "o180",
+      "o181",
+      "o182",
+      "o183",
+      "o184",
+      "o185",
+      "o186",
+      "o187",
+      "o188",
+      "o189",
+      "o190",
+      "o191",
+      "o192",
+      "o193",
+      "o194",
+      "o195",
+      "o196",
+      "o197",
+      "o198",
+      "o199",
+      "o200",
+      "o201",
+      "o202",
+      "o203",
+      "o204",
+      "o205",
+      "o206",
+      "o207",
+      "o208",
+      "o209",
+      "o210",
+      "o211",
+      "o212",
+      "o213",
+      "o214",
+      "o215",
+      "o216",
+      "o217",
+      "o218",
+      "o219",
+      "o220",
+      "o221",
+      "o222",
+      "o223",
+      "o224",
+      "o225",
+      "o226",
+      "o227",
+      "o228",
+      "o229",
+      "o230",
+      "o231",
+      "o232",
+      "o233",
+      "o234",
+      "o235",
+      "o236",
+      "o237",
+      "o238",
+      "o239",
+      "o240",
+      "o241",
+      "o242",
+      "o243",
+      "o244",
+      "o245",
+      "o246",
+      "o247",
+      "o248",
+      "o249",
+      "o250",
+      "o251",
+      "o252",
+      "o253",
+      "o254"
+     ],
+     200
+    ]
+   ],
+   "perms": [
+    [
+     130,
+     217,
+     10,
+     98,
+     200,
+     194,
+     228,
+     107,
+     66,
+     248
+    ]
+   ]
+  },
+  "prompt:schema_prefix/wide 255": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which label?",
+     [
+      "o0",
+      "o1",
+      "o2",
+      "o3",
+      "o4",
+      "o5",
+      "o6",
+      "o7",
+      "o8",
+      "o9",
+      "o10",
+      "o11",
+      "o12",
+      "o13",
+      "o14",
+      "o15",
+      "o16",
+      "o17",
+      "o18",
+      "o19",
+      "o20",
+      "o21",
+      "o22",
+      "o23",
+      "o24",
+      "o25",
+      "o26",
+      "o27",
+      "o28",
+      "o29",
+      "o30",
+      "o31",
+      "o32",
+      "o33",
+      "o34",
+      "o35",
+      "o36",
+      "o37",
+      "o38",
+      "o39",
+      "o40",
+      "o41",
+      "o42",
+      "o43",
+      "o44",
+      "o45",
+      "o46",
+      "o47",
+      "o48",
+      "o49",
+      "o50",
+      "o51",
+      "o52",
+      "o53",
+      "o54",
+      "o55",
+      "o56",
+      "o57",
+      "o58",
+      "o59",
+      "o60",
+      "o61",
+      "o62",
+      "o63",
+      "o64",
+      "o65",
+      "o66",
+      "o67",
+      "o68",
+      "o69",
+      "o70",
+      "o71",
+      "o72",
+      "o73",
+      "o74",
+      "o75",
+      "o76",
+      "o77",
+      "o78",
+      "o79",
+      "o80",
+      "o81",
+      "o82",
+      "o83",
+      "o84",
+      "o85",
+      "o86",
+      "o87",
+      "o88",
+      "o89",
+      "o90",
+      "o91",
+      "o92",
+      "o93",
+      "o94",
+      "o95",
+      "o96",
+      "o97",
+      "o98",
+      "o99",
+      "o100",
+      "o101",
+      "o102",
+      "o103",
+      "o104",
+      "o105",
+      "o106",
+      "o107",
+      "o108",
+      "o109",
+      "o110",
+      "o111",
+      "o112",
+      "o113",
+      "o114",
+      "o115",
+      "o116",
+      "o117",
+      "o118",
+      "o119",
+      "o120",
+      "o121",
+      "o122",
+      "o123",
+      "o124",
+      "o125",
+      "o126",
+      "o127",
+      "o128",
+      "o129",
+      "o130",
+      "o131",
+      "o132",
+      "o133",
+      "o134",
+      "o135",
+      "o136",
+      "o137",
+      "o138",
+      "o139",
+      "o140",
+      "o141",
+      "o142",
+      "o143",
+      "o144",
+      "o145",
+      "o146",
+      "o147",
+      "o148",
+      "o149",
+      "o150",
+      "o151",
+      "o152",
+      "o153",
+      "o154",
+      "o155",
+      "o156",
+      "o157",
+      "o158",
+      "o159",
+      "o160",
+      "o161",
+      "o162",
+      "o163",
+      "o164",
+      "o165",
+      "o166",
+      "o167",
+      "o168",
+      "o169",
+      "o170",
+      "o171",
+      "o172",
+      "o173",
+      "o174",
+      "o175",
+      "o176",
+      "o177",
+      "o178",
+      "o179",
+      "o180",
+      "o181",
+      "o182",
+      "o183",
+      "o184",
+      "o185",
+      "o186",
+      "o187",
+      "o188",
+      "o189",
+      "o190",
+      "o191",
+      "o192",
+      "o193",
+      "o194",
+      "o195",
+      "o196",
+      "o197",
+      "o198",
+      "o199",
+      "o200",
+      "o201",
+      "o202",
+      "o203",
+      "o204",
+      "o205",
+      "o206",
+      "o207",
+      "o208",
+      "o209",
+      "o210",
+      "o211",
+      "o212",
+      "o213",
+      "o214",
+      "o215",
+      "o216",
+      "o217",
+      "o218",
+      "o219",
+      "o220",
+      "o221",
+      "o222",
+      "o223",
+      "o224",
+      "o225",
+      "o226",
+      "o227",
+      "o228",
+      "o229",
+      "o230",
+      "o231",
+      "o232",
+      "o233",
+      "o234",
+      "o235",
+      "o236",
+      "o237",
+      "o238",
+      "o239",
+      "o240",
+      "o241",
+      "o242",
+      "o243",
+      "o244",
+      "o245",
+      "o246",
+      "o247",
+      "o248",
+      "o249",
+      "o250",
+      "o251",
+      "o252",
+      "o253",
+      "o254"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide and narrow/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "label 0",
+      "label 1",
+      "label 2",
+      "label 3",
+      "label 4",
+      "label 5",
+      "label 6",
+      "label 7",
+      "label 8",
+      "label 9",
+      "label 10",
+      "label 11",
+      "label 12",
+      "label 13",
+      "label 14",
+      "label 15",
+      "label 16",
+      "label 17",
+      "label 18",
+      "label 19",
+      "label 20",
+      "label 21",
+      "label 22",
+      "label 23"
+     ],
+     5
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide and narrow/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 3,
+   "cap": 64,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "label 0",
+      "label 1",
+      "label 2",
+      "label 3",
+      "label 4",
+      "label 5",
+      "label 6",
+      "label 7",
+      "label 8",
+      "label 9",
+      "label 10",
+      "label 11",
+      "label 12",
+      "label 13",
+      "label 14",
+      "label 15",
+      "label 16",
+      "label 17",
+      "label 18",
+      "label 19",
+      "label 20",
+      "label 21",
+      "label 22",
+      "label 23"
+     ],
+     5
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide and narrow/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 3,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "label 0",
+      "label 1",
+      "label 2",
+      "label 3",
+      "label 4",
+      "label 5",
+      "label 6",
+      "label 7",
+      "label 8",
+      "label 9",
+      "label 10",
+      "label 11",
+      "label 12",
+      "label 13",
+      "label 14",
+      "label 15",
+      "label 16",
+      "label 17",
+      "label 18",
+      "label 19",
+      "label 20",
+      "label 21",
+      "label 22",
+      "label 23"
+     ],
+     5
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/state_first/wide and narrow/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "label 0",
+      "label 1",
+      "label 2",
+      "label 3",
+      "label 4",
+      "label 5",
+      "label 6",
+      "label 7",
+      "label 8",
+      "label 9",
+      "label 10",
+      "label 11",
+      "label 12",
+      "label 13",
+      "label 14",
+      "label 15",
+      "label 16",
+      "label 17",
+      "label 18",
+      "label 19",
+      "label 20",
+      "label 21",
+      "label 22",
+      "label 23"
+     ],
+     5
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     5,
+     17,
+     8,
+     23,
+     13,
+     14,
+     10,
+     1,
+     9,
+     16
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide and narrow/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "label 0",
+      "label 1",
+      "label 2",
+      "label 3",
+      "label 4",
+      "label 5",
+      "label 6",
+      "label 7",
+      "label 8",
+      "label 9",
+      "label 10",
+      "label 11",
+      "label 12",
+      "label 13",
+      "label 14",
+      "label 15",
+      "label 16",
+      "label 17",
+      "label 18",
+      "label 19",
+      "label 20",
+      "label 21",
+      "label 22",
+      "label 23"
+     ],
+     5
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide and narrow/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 3,
+   "cap": 64,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "label 0",
+      "label 1",
+      "label 2",
+      "label 3",
+      "label 4",
+      "label 5",
+      "label 6",
+      "label 7",
+      "label 8",
+      "label 9",
+      "label 10",
+      "label 11",
+      "label 12",
+      "label 13",
+      "label 14",
+      "label 15",
+      "label 16",
+      "label 17",
+      "label 18",
+      "label 19",
+      "label 20",
+      "label 21",
+      "label 22",
+      "label 23"
+     ],
+     5
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide and narrow/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 3,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "label 0",
+      "label 1",
+      "label 2",
+      "label 3",
+      "label 4",
+      "label 5",
+      "label 6",
+      "label 7",
+      "label 8",
+      "label 9",
+      "label 10",
+      "label 11",
+      "label 12",
+      "label 13",
+      "label 14",
+      "label 15",
+      "label 16",
+      "label 17",
+      "label 18",
+      "label 19",
+      "label 20",
+      "label 21",
+      "label 22",
+      "label 23"
+     ],
+     5
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:build/schema_first/wide and narrow/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which label?",
+     [
+      "label 0",
+      "label 1",
+      "label 2",
+      "label 3",
+      "label 4",
+      "label 5",
+      "label 6",
+      "label 7",
+      "label 8",
+      "label 9",
+      "label 10",
+      "label 11",
+      "label 12",
+      "label 13",
+      "label 14",
+      "label 15",
+      "label 16",
+      "label 17",
+      "label 18",
+      "label 19",
+      "label 20",
+      "label 21",
+      "label 22",
+      "label 23"
+     ],
+     5
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ],
+     0
+    ]
+   ],
+   "perms": [
+    [
+     5,
+     17,
+     8,
+     23,
+     13,
+     14,
+     10,
+     1,
+     9,
+     16
+    ],
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "prompt:schema_prefix/wide and narrow": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which label?",
+     [
+      "label 0",
+      "label 1",
+      "label 2",
+      "label 3",
+      "label 4",
+      "label 5",
+      "label 6",
+      "label 7",
+      "label 8",
+      "label 9",
+      "label 10",
+      "label 11",
+      "label 12",
+      "label 13",
+      "label 14",
+      "label 15",
+      "label 16",
+      "label 17",
+      "label 18",
+      "label 19",
+      "label 20",
+      "label 21",
+      "label 22",
+      "label 23"
+     ]
+    ],
+    [
+     "Urgent?",
+     [
+      "no",
+      "yes"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/ten options/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ],
+     9
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9
+    ]
+   ]
+  },
+  "prompt:build/state_first/ten options/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ],
+     9
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9
+    ]
+   ]
+  },
+  "prompt:build/state_first/ten options/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ],
+     9
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9
+    ]
+   ]
+  },
+  "prompt:build/state_first/ten options/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ],
+     9
+    ]
+   ],
+   "perms": [
+    [
+     7,
+     8,
+     1,
+     5,
+     3,
+     4,
+     2,
+     0,
+     9,
+     6
+    ]
+   ]
+  },
+  "prompt:build/schema_first/ten options/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ],
+     9
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9
+    ]
+   ]
+  },
+  "prompt:build/schema_first/ten options/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ],
+     9
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9
+    ]
+   ]
+  },
+  "prompt:build/schema_first/ten options/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ],
+     9
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9
+    ]
+   ]
+  },
+  "prompt:build/schema_first/ten options/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ],
+     9
+    ]
+   ],
+   "perms": [
+    [
+     7,
+     8,
+     1,
+     5,
+     3,
+     4,
+     2,
+     0,
+     9,
+     6
+    ]
+   ]
+  },
+  "prompt:schema_prefix/ten options": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ]
+    ]
+   ]
+  },
+  "prompt:build/state_first/eleven options/cap1536/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+     ],
+     10
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ]
+   ]
+  },
+  "prompt:build/state_first/eleven options/cap64/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+     ],
+     10
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ]
+   ]
+  },
+  "prompt:build/state_first/eleven options/cap32768/keep": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+     ],
+     10
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ]
+   ]
+  },
+  "prompt:build/state_first/eleven options/rng0": {
+   "kind": "build",
+   "layout": "state_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+     ],
+     10
+    ]
+   ],
+   "perms": [
+    [
+     10,
+     4,
+     8,
+     5,
+     6,
+     9,
+     1,
+     0,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:build/schema_first/eleven options/cap1536/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+     ],
+     10
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ]
+   ]
+  },
+  "prompt:build/schema_first/eleven options/cap64/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 64,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+     ],
+     10
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ]
+   ]
+  },
+  "prompt:build/schema_first/eleven options/cap32768/keep": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 32768,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+     ],
+     10
+    ]
+   ],
+   "perms": [
+    [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ]
+   ]
+  },
+  "prompt:build/schema_first/eleven options/rng0": {
+   "kind": "build",
+   "layout": "schema_first",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+     ],
+     10
+    ]
+   ],
+   "perms": [
+    [
+     10,
+     4,
+     8,
+     5,
+     6,
+     9,
+     1,
+     0,
+     2,
+     3
+    ]
+   ]
+  },
+  "prompt:schema_prefix/eleven options": {
+   "kind": "schema_prefix",
+   "questions": [
+    [
+     "Which digit?",
+     [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+     ]
+    ]
+   ]
+  },
+  "prompt:schema_suffix/0/1/64": {
+   "kind": "schema_suffix",
+   "context": 0,
+   "n_q": 1,
+   "cap": 64
+  },
+  "prompt:schema_suffix/0/1/1536": {
+   "kind": "schema_suffix",
+   "context": 0,
+   "n_q": 1,
+   "cap": 1536
+  },
+  "prompt:schema_suffix/0/3/64": {
+   "kind": "schema_suffix",
+   "context": 0,
+   "n_q": 3,
+   "cap": 64
+  },
+  "prompt:schema_suffix/0/3/1536": {
+   "kind": "schema_suffix",
+   "context": 0,
+   "n_q": 3,
+   "cap": 1536
+  },
+  "prompt:build_rows/0/independent/32768": {
+   "kind": "build_rows",
+   "context": 0,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/0/independent/64": {
+   "kind": "build_rows",
+   "context": 0,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/0/packed/32768": {
+   "kind": "build_rows",
+   "context": 0,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/0/packed/64": {
+   "kind": "build_rows",
+   "context": 0,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/0/many/32768": {
+   "kind": "build_rows",
+   "context": 0,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/0/many/64": {
+   "kind": "build_rows",
+   "context": 0,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:schema_suffix/1/1/64": {
+   "kind": "schema_suffix",
+   "context": 1,
+   "n_q": 1,
+   "cap": 64
+  },
+  "prompt:schema_suffix/1/1/1536": {
+   "kind": "schema_suffix",
+   "context": 1,
+   "n_q": 1,
+   "cap": 1536
+  },
+  "prompt:schema_suffix/1/3/64": {
+   "kind": "schema_suffix",
+   "context": 1,
+   "n_q": 3,
+   "cap": 64
+  },
+  "prompt:schema_suffix/1/3/1536": {
+   "kind": "schema_suffix",
+   "context": 1,
+   "n_q": 3,
+   "cap": 1536
+  },
+  "prompt:build_rows/1/independent/32768": {
+   "kind": "build_rows",
+   "context": 1,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/1/independent/64": {
+   "kind": "build_rows",
+   "context": 1,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/1/packed/32768": {
+   "kind": "build_rows",
+   "context": 1,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/1/packed/64": {
+   "kind": "build_rows",
+   "context": 1,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/1/many/32768": {
+   "kind": "build_rows",
+   "context": 1,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/1/many/64": {
+   "kind": "build_rows",
+   "context": 1,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:schema_suffix/2/1/64": {
+   "kind": "schema_suffix",
+   "context": 2,
+   "n_q": 1,
+   "cap": 64
+  },
+  "prompt:schema_suffix/2/1/1536": {
+   "kind": "schema_suffix",
+   "context": 2,
+   "n_q": 1,
+   "cap": 1536
+  },
+  "prompt:schema_suffix/2/3/64": {
+   "kind": "schema_suffix",
+   "context": 2,
+   "n_q": 3,
+   "cap": 64
+  },
+  "prompt:schema_suffix/2/3/1536": {
+   "kind": "schema_suffix",
+   "context": 2,
+   "n_q": 3,
+   "cap": 1536
+  },
+  "prompt:build_rows/2/independent/32768": {
+   "kind": "build_rows",
+   "context": 2,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/2/independent/64": {
+   "kind": "build_rows",
+   "context": 2,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/2/packed/32768": {
+   "kind": "build_rows",
+   "context": 2,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/2/packed/64": {
+   "kind": "build_rows",
+   "context": 2,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/2/many/32768": {
+   "kind": "build_rows",
+   "context": 2,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/2/many/64": {
+   "kind": "build_rows",
+   "context": 2,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:schema_suffix/3/1/64": {
+   "kind": "schema_suffix",
+   "context": 3,
+   "n_q": 1,
+   "cap": 64
+  },
+  "prompt:schema_suffix/3/1/1536": {
+   "kind": "schema_suffix",
+   "context": 3,
+   "n_q": 1,
+   "cap": 1536
+  },
+  "prompt:schema_suffix/3/3/64": {
+   "kind": "schema_suffix",
+   "context": 3,
+   "n_q": 3,
+   "cap": 64
+  },
+  "prompt:schema_suffix/3/3/1536": {
+   "kind": "schema_suffix",
+   "context": 3,
+   "n_q": 3,
+   "cap": 1536
+  },
+  "prompt:build_rows/3/independent/32768": {
+   "kind": "build_rows",
+   "context": 3,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/3/independent/64": {
+   "kind": "build_rows",
+   "context": 3,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/3/packed/32768": {
+   "kind": "build_rows",
+   "context": 3,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/3/packed/64": {
+   "kind": "build_rows",
+   "context": 3,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/3/many/32768": {
+   "kind": "build_rows",
+   "context": 3,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/3/many/64": {
+   "kind": "build_rows",
+   "context": 3,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:schema_suffix/4/1/64": {
+   "kind": "schema_suffix",
+   "context": 4,
+   "n_q": 1,
+   "cap": 64
+  },
+  "prompt:schema_suffix/4/1/1536": {
+   "kind": "schema_suffix",
+   "context": 4,
+   "n_q": 1,
+   "cap": 1536
+  },
+  "prompt:schema_suffix/4/3/64": {
+   "kind": "schema_suffix",
+   "context": 4,
+   "n_q": 3,
+   "cap": 64
+  },
+  "prompt:schema_suffix/4/3/1536": {
+   "kind": "schema_suffix",
+   "context": 4,
+   "n_q": 3,
+   "cap": 1536
+  },
+  "prompt:build_rows/4/independent/32768": {
+   "kind": "build_rows",
+   "context": 4,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/4/independent/64": {
+   "kind": "build_rows",
+   "context": 4,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ]
+    ],
+    [
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/4/packed/32768": {
+   "kind": "build_rows",
+   "context": 4,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/4/packed/64": {
+   "kind": "build_rows",
+   "context": 4,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Which queue?",
+      [
+       "billing",
+       "technical",
+       "sales"
+      ]
+     ],
+     [
+      "Urgent?",
+      [
+       "no",
+       "yes"
+      ]
+     ],
+     [
+      "Which label?",
+      [
+       "option 0",
+       "option 1",
+       "option 2",
+       "option 3",
+       "option 4",
+       "option 5",
+       "option 6",
+       "option 7",
+       "option 8",
+       "option 9",
+       "option 10",
+       "option 11",
+       "option 12",
+       "option 13",
+       "option 14",
+       "option 15",
+       "option 16",
+       "option 17",
+       "option 18",
+       "option 19",
+       "option 20",
+       "option 21",
+       "option 22",
+       "option 23",
+       "option 24",
+       "option 25",
+       "option 26",
+       "option 27",
+       "option 28",
+       "option 29",
+       "option 30",
+       "option 31",
+       "option 32",
+       "option 33",
+       "option 34",
+       "option 35",
+       "option 36",
+       "option 37",
+       "option 38",
+       "option 39"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/4/many/32768": {
+   "kind": "build_rows",
+   "context": 4,
+   "cap": 32768,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "prompt:build_rows/4/many/64": {
+   "kind": "build_rows",
+   "context": 4,
+   "cap": 64,
+   "rows": [
+    [
+     [
+      "Question number 0?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 1?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 2?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 3?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 4?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 5?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 6?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 7?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 8?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 9?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 10?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ],
+    [
+     [
+      "Question number 11?",
+      [
+       "no",
+       "yes"
+      ]
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=True:prepare/0/True/False/32768": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": true,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/0/True/False/64": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": true,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/0/True/True/32768": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": true,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/0/True/True/64": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": true,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/0/False/False/32768": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": false,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/0/False/False/64": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": false,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/0/False/True/32768": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": false,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/0/False/True/64": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": false,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/1/True/False/32768": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": true,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/1/True/False/64": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": true,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/1/True/True/32768": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": true,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/1/True/True/64": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": true,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/1/False/False/32768": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": false,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/1/False/False/64": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": false,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/1/False/True/32768": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": false,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/1/False/True/64": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": false,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/2/True/False/32768": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": true,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/2/True/False/64": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": true,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/2/True/True/32768": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": true,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/2/True/True/64": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": true,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/2/False/False/32768": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": false,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/2/False/False/64": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": false,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/2/False/True/32768": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": false,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/2/False/True/64": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": false,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/3/True/False/32768": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": true,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/3/True/False/64": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": true,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/3/True/True/32768": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": true,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/3/True/True/64": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": true,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/3/False/False/32768": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": false,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/3/False/False/64": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": false,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=True:prepare/3/False/True/32768": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": false,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=True:prepare/3/False/True/64": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": false,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=True:decide/0": {
+   "kind": "decide",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "not listed here"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=True:decide/1": {
+   "kind": "decide",
+   "context": 1,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "not listed here"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=True:decide/2": {
+   "kind": "decide",
+   "context": 2,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "not listed here"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=True:decide/3": {
+   "kind": "decide",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "not listed here"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=True:decide/4": {
+   "kind": "decide",
+   "context": 4,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "not listed here"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=False:prepare/0/True/False/32768": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": true,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/0/True/False/64": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": true,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/0/True/True/32768": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": true,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/0/True/True/64": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": true,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/0/False/False/32768": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": false,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/0/False/False/64": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": false,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/0/False/True/32768": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": false,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/0/False/True/64": {
+   "kind": "prepare",
+   "state": 0,
+   "independent": false,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/1/True/False/32768": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": true,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/1/True/False/64": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": true,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/1/True/True/32768": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": true,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/1/True/True/64": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": true,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/1/False/False/32768": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": false,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/1/False/False/64": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": false,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/1/False/True/32768": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": false,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/1/False/True/64": {
+   "kind": "prepare",
+   "state": 1,
+   "independent": false,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/2/True/False/32768": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": true,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/2/True/False/64": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": true,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/2/True/True/32768": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": true,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/2/True/True/64": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": true,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/2/False/False/32768": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": false,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/2/False/False/64": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": false,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/2/False/True/32768": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": false,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/2/False/True/64": {
+   "kind": "prepare",
+   "state": 2,
+   "independent": false,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/3/True/False/32768": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": true,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/3/True/False/64": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": true,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/3/True/True/32768": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": true,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/3/True/True/64": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": true,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/3/False/False/32768": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": false,
+   "isolated": false,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/3/False/False/64": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": false,
+   "isolated": false,
+   "cap": 64
+  },
+  "serve:neutralize=False:prepare/3/False/True/32768": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": false,
+   "isolated": true,
+   "cap": 32768
+  },
+  "serve:neutralize=False:prepare/3/False/True/64": {
+   "kind": "prepare",
+   "state": 3,
+   "independent": false,
+   "isolated": true,
+   "cap": 64
+  },
+  "serve:neutralize=False:decide/0": {
+   "kind": "decide",
+   "context": 0,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "none of the above"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=False:decide/1": {
+   "kind": "decide",
+   "context": 1,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "none of the above"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=False:decide/2": {
+   "kind": "decide",
+   "context": 2,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "none of the above"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=False:decide/3": {
+   "kind": "decide",
+   "context": 3,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "none of the above"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  },
+  "serve:neutralize=False:decide/4": {
+   "kind": "decide",
+   "context": 4,
+   "cap": 1536,
+   "questions": [
+    [
+     "Which team?",
+     [
+      "billing",
+      "technical",
+      "none of the above"
+     ]
+    ],
+    [
+     "Refund?",
+     [
+      "no",
+      "yes"
+     ]
+    ],
+    [
+     "Severity?",
+     [
+      "0: none",
+      "1: low",
+      "2: high"
+     ]
+    ],
+    [
+     "Wide?",
+     [
+      "w0",
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+      "w6",
+      "w7",
+      "w8",
+      "w9",
+      "w10",
+      "w11",
+      "w12",
+      "w13",
+      "w14",
+      "w15",
+      "w16",
+      "w17",
+      "w18",
+      "w19",
+      "w20",
+      "w21",
+      "w22",
+      "w23",
+      "w24",
+      "w25",
+      "w26",
+      "w27",
+      "w28",
+      "w29"
+     ]
+    ]
+   ]
+  }
+ }
+}

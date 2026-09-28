@@ -24,10 +24,17 @@ Contracts are binding, its Requirements are the definition of done.
 
 - `cargo xtask env` prints the sandbox environment as shell exports; `cargo xtask env --claude` writes it (all but
   `HOME`) into `.claude/settings.local.json` `env`.
-- `cargo xtask fetch` installs every `xtask/fetch.toml` entry into `tmp/`; `cargo xtask fetch --check` verifies them.
+- `cargo xtask fetch` installs every `xtask/fetch.toml` entry into `tmp/` (tools, research clones in `tmp/src`, Hub
+  models in `tmp/hf/hub`); `cargo xtask fetch --check` verifies them. Run it before `cargo test`: tests read the
+  decider-2b tokenizer from `tmp/hf`.
 - `cargo xtask build` builds the playground `dist/` with the fetched trunk, offline.
 - `cargo xtask check-deps`, `cargo xtask check-docs` check the workspace shape and these documents.
-- `cargo xtask e2e <suite>` runs an end-to-end suite (`smoke` today).
+- `cargo xtask export-decider` regenerates the vendored decider prompt goldens in
+  `crates/ardana-core/tests/data/decider/` by running decider@23579f7 from `tmp/src/decider`.
+- `cargo xtask e2e <suite>` runs an end-to-end suite: `smoke`, or `rust` (`cargo test --workspace --
+  --include-ignored`, the real-model tests included).
+- `ardana run --gguf <file> --tokenizer <tokenizer.json> --config <decider_config.json> --request <file>
+  [--gpu-layers -1|0] [--n-ctx N]` prints one `/v1/systemone` response as JSON.
 - Before reporting work: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo build --workspace`, `cargo test --workspace`, plus the item's Verify command.
 

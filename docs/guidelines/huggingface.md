@@ -22,6 +22,11 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 - `HFClient` wraps an `Arc` and is `Clone + Send + Sync`: build one per process and clone it; never rebuild per file.
 - Only `cargo xtask fetch` reads the real `~/.cache/huggingface/hub`, and only for `[[hf_local]]` entries it copies
   read-only into `tmp/hf/hub`. Ardana itself never reads or writes the user's real HF cache.
+- `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`. `cargo xtask fetch` lists
+  the revision through `https://huggingface.co/api/models/<repo>/revision/<rev>?blobs=true`, downloads each file from
+  `resolve/<rev>/<file>` with `curl` into `blobs/<LFS sha256 or git blob id>`, verifies that hash (`shasum -a 256`,
+  `git hash-object`), links `snapshots/<rev>/<file>` relatively and writes `refs/main` with the pinned revision, so an
+  offline `main` lookup resolves to the pinned snapshot. No `hf-hub` in xtask: it keeps xtask small.
 - `ardana rm` deletes only the registry entry; never delete, prune or rewrite files in the hub cache.
 
 ### Downloading with hf-hub
@@ -64,10 +69,18 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 - Prefer ungated sources for any new target (ggml-org GGUFs, Qwen/Qwen3.5-0.8B, HuggingFaceTB/SmolLM3-3B tokenizers).
 
 ### Tokenizers
+- Depend on `tokenizers` with `default-features = false, features = ["onig"]`: `onig` is the regex engine the Python
+  package uses for `Split` pre-tokenizers (Qwen's), while the default `progressbar` and `esaxx_fast` only serve
+  training.
 - Load with `Tokenizer::from_file(path)`; map its `Box<dyn Error + Send + Sync>` into a typed error naming the path.
-  `Tokenizer` is `Clone + Send + Sync`: load once per model and share it.
-- Encode with `tokenizer.encode(text, false)`: the prompt builder and the chat head/tail own every special token,
-  and `true` would let the post-processor add its own (a double BOS). Assert the head ids in tests (R3.1, R3.3).
+  `Tokenizer` is `Clone + Send + Sync`: load once per model and share it. Loading decider-2b's 20 MB
+  `tokenizer.json` takes about a second in a debug build, so tests load it once and clone.
+- Encode with `tokenizer.encode_fast(text, false)` (`encode` without offsets): the prompt builder and the chat
+  head/tail own every special token, and `true` would let the post-processor add its own (a double BOS). Assert the
+  head ids in tests (R3.1, R3.3).
+- transformers 5.17 builds decider-2b's `Qwen2Tokenizer` from `tokenizer.json`'s pre-tokenizer and ignores the
+  differing `pretokenize_regex` in its `tokenizer_config.json` (checked: equal ids on text with combining marks), so
+  `tokenizer.json` alone reproduces decider's ids.
 - Keep ids as `u32` end to end (`Encoding::get_ids() -> &[u32]`); convert to llama.cpp's `i32` only inside
   `ardana-llama`.
 - Look up label ids with `token_to_id` and check each label encodes to exactly one token (`labels_single_token`).
@@ -100,6 +113,8 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 
 ## Sources
 - https://docs.rs/tokenizers/0.23.2/tokenizers/index.html — crate overview, `http`/`onig`/`fancy-regex` features
+- https://docs.rs/tokenizers/0.23.2/tokenizers/tokenizer/struct.TokenizerImpl.html#method.encode_fast — `encode_fast`
+- https://huggingface.co/docs/hub/api — `/api/models/{repo}/revision/{revision}`, sibling `blobId`, `lfs.sha256`, `size`
 - https://docs.rs/tokenizers/0.23.2/tokenizers/tokenizer/struct.Tokenizer.html — `from_file`, `encode(.., add_special_tokens)`, `token_to_id`, `get_vocab_size`, Send/Sync
 - https://docs.rs/tokenizers/0.23.2/tokenizers/tokenizer/struct.Encoding.html — `get_ids() -> &[u32]`
 - https://docs.rs/tokenizers/0.23.2/tokenizers/tokenizer/struct.AddedToken.html — special/added token flags

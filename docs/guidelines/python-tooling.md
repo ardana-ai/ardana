@@ -64,6 +64,12 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
   pinned rev, and run them with a venv under `tmp/py/<name>`, never with a global interpreter.
 - Vendored outputs (for example `crates/ardana-core/tests/data/decider/*.json`) are committed with their upstream
   license notice; the clone and venv that produced them are not.
+- `cargo xtask export-decider` regenerates the decider goldens: it creates `tmp/py/decider-export` with a managed
+  CPython 3.12 (`UV_PYTHON_PREFERENCE=only-managed`; decider needs >= 3.11, and 3.12 is the first CPython whose
+  float `sum()` is compensated, which Ardana's readout reproduces), installs the pinned `torch`, `transformers`,
+  `numpy`, `fastapi`, `jinja2` and `huggingface-hub` its `layout_cases.py` imports, runs
+  `xtask/scripts/decider_layout_cases.py` against `tmp/src/decider` offline, and recreates the venv whenever
+  `pyvenv.cfg` points outside `tmp/uv/python`. decider itself is imported from the clone, never installed into it.
 
 ### Checks
 - `cargo xtask fetch --check` must fail, naming the entry, when a tool is missing from `tmp/bin`, a venv lacks its

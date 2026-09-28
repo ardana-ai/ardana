@@ -8,6 +8,15 @@
 #            binaries in tmp/bin, recorded in tmp/.crates2.json)
 #            `github`: the release archive at `url`, checked against `url`.sha256, extracted
 #            to tmp/tools/<name>/<version>, with `path` inside it linked into tmp/bin
+#            `git`: the repository at `url`, checked out at the full commit `rev` into
+#            tmp/src/<name> (research clones)
+#
+# [[hf]] fields:
+#   repo      `org/name` on huggingface.co
+#   revision  the full commit id the files come from; also written to `refs/main`
+#   files     files downloaded into tmp/hf/hub/models--<org>--<name> in the Hub cache
+#            layout (blobs/, snapshots/<revision>/, refs/main), each verified against
+#            its LFS sha256 or git blob id
 
 [[tool]]
 name = "trunk"
@@ -25,3 +34,15 @@ version = "version_133"
 source = "github"
 url = "https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-arm64-macos.tar.gz"
 path = "binaryen-version_133/bin/wasm-opt"
+
+[[tool]]
+name = "decider"
+version = "1.6.0"
+source = "git"
+url = "https://github.com/Mapika/decider"
+rev = "23579f7a7e8f10e1045be492af3c1c05a005d67c"
+
+[[hf]]
+repo = "Mapika/decider-2b-GGUF"
+revision = "ff2e5e687327eda9ac34e9a3ca84d3f400672c87"
+files = ["decider-2b-v11-Q4_K_M.gguf", "tokenizer.json", "tokenizer_config.json", "decider_config.json"]

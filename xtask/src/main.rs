@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result, bail};
 use xtask::sandbox::Sandbox;
-use xtask::{deps, docs, e2e, env, fetch, playground};
+use xtask::{deps, docs, e2e, env, export, fetch, playground};
 
 const USAGE: &str = "usage: cargo xtask <step>
   env [--claude]   print the sandbox environment as shell exports, or write it
@@ -12,6 +12,7 @@ const USAGE: &str = "usage: cargo xtask <step>
   build            build the playground dist with trunk
   check-deps       check the workspace members and dependency direction
   check-docs       check CLAUDE.md, AGENTS.md and docs/guidelines
+  export-decider   export decider's prompt layout cases into crates/ardana-core/tests/data/decider
   e2e <suite>      run an end-to-end suite";
 
 fn main() -> ExitCode {
@@ -43,6 +44,7 @@ fn run() -> Result<()> {
         ["build"] => sandbox()?.guarded("build", playground::build)?,
         ["check-deps"] => deps::check_deps(&deps::metadata(root)?)?,
         ["check-docs"] => docs::check_docs(root)?,
+        ["export-decider"] => sandbox()?.guarded("export-decider", export::export_decider)?,
         ["e2e", suite] => sandbox()?.guarded(&format!("e2e {suite}"), |s| e2e::run(s, suite))?,
         _ => bail!("{USAGE}"),
     }

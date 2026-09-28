@@ -2,15 +2,14 @@
 
 use std::process::ExitCode;
 
+use clap::Parser;
+
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    match args.as_slice() {
-        [flag] if flag == "--version" || flag == "-V" => {
-            println!("ardana {}", env!("CARGO_PKG_VERSION"));
-            ExitCode::SUCCESS
-        }
-        _ => {
-            eprintln!("usage: ardana --version");
+    let cli = ardana::Cli::parse();
+    match ardana::run(cli) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("error: {err:#}");
             ExitCode::FAILURE
         }
     }

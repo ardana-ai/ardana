@@ -16,6 +16,8 @@ llama.cpp.
 ### Build
 - Keep the dependency in `ardana-llama` only (`llama-cpp-2 = { workspace = true }`); `cargo xtask check-deps`
   rejects it anywhere else, and `ardana-server` must never see it.
+- Declare it with `default-features = false`: the defaults add `openmp` (no OpenMP in Apple clang; the macOS build
+  had it off anyway), `common` (llama.cpp's `common` library, which Ardana does not call) and an Android-only feature.
 - Expect a from-source C/C++ build: `llama-cpp-sys-2` drives llama.cpp's CMake through the `cmake` crate, so `cmake`
   (4.4.3 on the dev machine) and a C/C++ toolchain must be on `PATH`. Build output stays under the repo's `target/`.
 - Pass llama.cpp build options through `CMAKE_*` or `GGML_*` environment variables (the build script forwards both);
@@ -29,8 +31,9 @@ llama.cpp.
   exists (store it in the runtime behind an `Arc` or a `OnceLock`). A second `init` while one is alive returns
   `BackendAlreadyInitialized`; never `init` per request or per model.
 - `LlamaBackend` is `Send + Sync`; share one handle between every loaded model.
-- Route llama.cpp logs through `send_logs_to_tracing(LogOptions::default().with_logs_enabled(verbose))` (or
-  `backend.void_logs()`), so its stderr chatter never mixes into `ardana run` JSON output.
+- Call `send_logs_to_tracing(LogOptions::default().with_logs_enabled(verbose))` before `LlamaBackend::init()`, so
+  llama.cpp's and ggml's stderr chatter never mixes into `ardana run` output. `backend.void_logs()` needs the backend,
+  so it runs too late: ggml still prints its Metal device lines (`ggml_metal_device_init: ...`) at the first load.
 
 ### Loading a model
 - Load with `LlamaModel::load_from_file(&backend, path, &params)` where `params` is `LlamaModelParams`. Keep the
@@ -51,14 +54,18 @@ llama.cpp.
   can never move between threads nor live in the same struct as the model it borrows.
 - Implement `LoadedModel: Send` by owning the model and its single context on one dedicated worker thread and handing
   the caller a `Send` handle (a channel sender plus reply channel); `slot_logits` sends one prompt and waits. Do not
-  write `unsafe impl Send` around a context.
+  write `unsafe impl Send` around a context. `ardana-llama`'s `LlamaModelHandle` does this; dropping it closes the
+  channel and joins the thread, which frees the context before the model.
+- `LlamaModelParams` holds raw pointers and is not `Send` either: build it on the worker thread from plain values.
 
 > Plan note: the Contract `LoadedModel: Send` cannot hold a `LlamaContext` directly because 0.1.157 marks it
 > `!Send`; the worker-thread handle above (or a fresh context per call) satisfies the trait.
 
-- Build `LlamaContextParams` with `with_n_ctx(NonZeroU32::new(n_ctx))` and `with_n_batch(n_ctx)`, as decider does,
-  so any prompt that fits the window goes to one `decode` call; keep `n_seq_max` at its default of 1. The defaults
-  (n_ctx 512, n_batch 2048) are never right for Ardana, so always set both.
+- Build `LlamaContextParams` with `with_n_ctx(NonZeroU32::new(n_ctx))`, `with_n_batch(n_ctx)` and
+  `with_n_ubatch(min(2048, n_ctx))`, as decider's `engine_gguf.py` does, so any prompt that fits the window goes to
+  one `decode` call; keep `n_seq_max` at its default of 1 and the other defaults (threads, flash attention auto)
+  that decider also keeps. The defaults (n_ctx 512, n_batch 2048, n_ubatch 512) are never right for Ardana.
+- `LoadOptions::default()` is decider's GGUF engine default: `n_ctx` 40,960, every layer offloaded.
 - Report `LoadedModel::n_ctx()` from `ctx.n_ctx()` after creation, not from the requested value.
 
 ### One prompt per decode
@@ -84,6 +91,15 @@ llama.cpp.
 - Tokenize with the HF `tokenizer.json` in `ardana-core` (decider does the same); never use `model.str_to_token`
   or the GGUF vocab for prompts.
 
+### Numerics against decider
+- Given the same slot logits, Ardana's readout equals decider 1.6.0's (`engine_gguf.py` float32 softmax plus
+  `systemone.assemble`) answer for answer, and its prompt ids equal decider's; checked on decider-2b Q4_K_M with
+  decider's own code in a sandbox venv, on Metal and at `--gpu-layers 0`.
+- The logits themselves depend on the llama.cpp build. decider's `llama-cpp-python` 0.3.35 bundles ggml 0.20 with
+  Accelerate BLAS; `llama-cpp-2` 0.1.157 bundles `26394b4` (ggml 0.24) without BLAS. On the ticket fixture the two
+  differ by up to 3e-4 in a probability on Metal and up to 1e-2 at `--gpu-layers 0`; argmaxes agree. Compare
+  against decider through logits, not through final probabilities, and assert argmaxes and ranges end to end.
+
 ## Testing
 - Unit tests in `ardana-core` use fake `LoadedModel`s; tests that load a GGUF are `#[ignore]` and run through
   `cargo xtask e2e rust` against the official models in `tmp/hf` (decider-2b Q4_K_M, Qwen3.5-0.8B Q4_0,
@@ -102,7 +118,9 @@ llama.cpp.
 - https://docs.rs/llama-cpp-2/0.1.157/src/llama_cpp_2/context/kv_cache.rs.html — `clear_kv_cache` wraps `llama_memory_clear`
 - https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/llama_batch/struct.LlamaBatch.html — `new`, `add`, `BatchAddError`
 - https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/token/struct.LlamaToken.html — `LlamaToken(i32)` wrapper
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/fn.send_logs_to_tracing.html — llama.cpp logs into `tracing`
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/fn.send_logs_to_tracing.html — llama.cpp and ggml logs into `tracing`, callable before backend init
+- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/context/params/struct.LlamaContextParams.html#method.with_n_ubatch — `with_n_ubatch`
+- https://github.com/utilityai/llama-cpp-rs/blob/0.1.157/llama-cpp-2/Cargo.toml — default features `openmp`, `common`, `android-shared-stdcxx`
 - https://github.com/utilityai/llama-cpp-rs — README: build from source, semver policy, cuda feature
 - https://github.com/utilityai/llama-cpp-rs/tree/0.1.157/llama-cpp-sys-2 — llama.cpp submodule at `26394b4`
 - https://github.com/utilityai/llama-cpp-rs/blob/0.1.157/llama-cpp-sys-2/build.rs — cmake build, `CMAKE_`/`GGML_` env forwarding, cuda/vulkan, watchOS Metal off

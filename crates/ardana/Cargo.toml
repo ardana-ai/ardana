@@ -5,3 +5,16 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+
+[features]
+cuda = ["ardana-llama/cuda"]
+vulkan = ["ardana-llama/vulkan"]
+
+[dependencies]
+anyhow.workspace = true
+ardana-api.workspace = true
+ardana-core.workspace = true
+ardana-llama.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+tokenizers.workspace = true

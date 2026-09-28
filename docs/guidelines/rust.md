@@ -28,6 +28,9 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   `Runtimes`. A new runtime is a new crate plus one registration line, never a server or playground change.
 - Keep `ardana-api` and `ardana-playground` free of native-only dependencies; `ardana-api` must pass
   `cargo check -p ardana-api --target wasm32-unknown-unknown`.
+- Current third-party pins: `anyhow` 1, `thiserror` 2 (library error enums), `indexmap` 2 with `serde` (ordered wire
+  maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts), `clap` 4
+  with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), plus the library pins in their own guidelines.
 - Commit `Cargo.lock`: Ardana ships a binary, and the lockfile is also the source of the wasm-bindgen version that
   `xtask/fetch.toml` reads via `cargo-lock:wasm-bindgen`. Pass `--locked` in xtask steps that must not re-resolve.
 
@@ -78,7 +81,10 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Put test temp files under `$ARDANA_TMP` (or `std::env::temp_dir()`, which `[env]` points at `tmp/sys`); never under
   the real home.
 - Prefer tests returning `anyhow::Result<()>` with `?` over chains of `unwrap()`.
-- Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice.
+- Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice. The decider goldens in
+  `crates/ardana-core/tests/data/decider/` are regenerated only by `cargo xtask export-decider`.
+- Tests that read only tokenizer or config files from `tmp/hf` (no weights) are not `#[ignore]`d: they are fast and
+  offline once `cargo xtask fetch` has run, and fail with a message naming that command when the file is missing.
 
 ### Lints and formatting
 - `cargo clippy --workspace --all-targets -- -D warnings` must pass before every commit; this also fails on rustc
@@ -89,7 +95,8 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 
 ## xtask
 - `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check]`, `build`, `check-deps`,
-  `check-docs`, `e2e <suite>`; keep its dependency set small so `cargo xtask` compiles quickly.
+  `check-docs`, `export-decider`, `e2e <suite>` (`smoke`, `rust`); keep its dependency set small so `cargo xtask`
+  compiles quickly: downloads go through `curl` and `git` run by `Sandbox::command`, not HTTP crates.
 - Run every external tool through `Sandbox::command` (sandbox env, `PATH` prefixed with `tmp/bin`), and wrap `fetch`,
   `build` and every `e2e` suite in `Sandbox::guarded`.
 - Install cargo tools only through `Sandbox::cargo_install` (`CARGO_HOME=tmp/cargo`, root `tmp`); never
@@ -116,6 +123,8 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - https://rust-lang.github.io/api-guidelines/interoperability.html — C-GOOD-ERR, C-COMMON-TRAITS
 - https://docs.rs/thiserror/latest/thiserror/ — derive for library error types; points to anyhow for applications
 - https://docs.rs/anyhow/latest/anyhow/ — `Context`, `bail!`, `ensure!`
+- https://docs.rs/clap/4/clap/_derive/index.html — `Parser`, `Subcommand`, `Args` derive for the `ardana` CLI
+- https://docs.rs/indexmap/2/indexmap/ — insertion-ordered maps with `serde` support
 - https://github.com/rust-lang/rustfmt — `cargo fmt --all -- --check`, `rustfmt.toml`, `style_edition`
 - https://github.com/rust-lang/cargo/issues/8938 — nested cargo from a build script deadlocks on the target-dir lock
 - https://github.com/matklad/cargo-xtask — xtask alias, workspace member layout, keep xtask fast to compile

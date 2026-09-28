@@ -1,0 +1,15 @@
+{
+  "model": "jev-latest",
+  "state": "My card was charged twice for order A-104. Please refund the duplicate.",
+  "questions": {
+    "department": {
+      "type": "choice",
+      "instructions": "Which department should handle this?",
+      "criteria": ["billing", "technical", "sales"]
+    },
+    "refund": {
+      "type": "noul",
+      "instructions": "Does the customer ask for a refund?"
+    }
+  }
+}

@@ -4,11 +4,12 @@ use anyhow::{Context, Result, bail};
 
 use crate::sandbox::{Sandbox, cargo};
 
-pub const SUITES: &[&str] = &["smoke"];
+pub const SUITES: &[&str] = &["smoke", "rust"];
 
 pub fn run(sandbox: &Sandbox, suite: &str) -> Result<()> {
     match suite {
         "smoke" => smoke(sandbox),
+        "rust" => rust(sandbox),
         other => bail!("unknown e2e suite `{other}`; suites: {}", SUITES.join(", ")),
     }
 }
@@ -31,5 +32,19 @@ fn smoke(sandbox: &Sandbox) -> Result<()> {
         );
     }
     println!("e2e smoke: {}", stdout.trim());
+    Ok(())
+}
+
+/// Every workspace test, including the `#[ignore]`d end-to-end tests on real models.
+fn rust(sandbox: &Sandbox) -> Result<()> {
+    let status = sandbox
+        .command(cargo())
+        .current_dir(sandbox.repo_root())
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .status()
+        .context("running cargo test")?;
+    if !status.success() {
+        bail!("cargo test --workspace -- --include-ignored failed ({status})");
+    }
     Ok(())
 }
