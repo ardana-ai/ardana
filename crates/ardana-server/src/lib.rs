@@ -2,7 +2,7 @@
 //!
 //! `ardana serve` answers `POST /v1/systemone`, `GET /v1/models` and `GET /health` for the models of an Ardana
 //! registry ([`Models`]). The binary passes in the registry and the [`ardana_core::Runtimes`] it is built with, so
-//! this crate never sees a concrete runtime.
+//! this crate never sees a concrete runtime. Every other path serves the playground embedded at build time.
 
 mod body;
 pub mod error;
@@ -16,12 +16,13 @@ use ardana_core::LoadOptions;
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
 use axum::extract::{DefaultBodyLimit, Request, State};
-use axum::http::{HeaderMap, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use clap::Args;
+use memory_serve::CacheControl;
 use serde_json::Value;
 use tower_http::compression::CompressionLayer;
 
@@ -101,8 +102,8 @@ pub fn parse_duration(text: &str) -> Result<Duration, String> {
     }
 }
 
-/// The API: `/health` (open) and the `/v1` routes, behind the key when one is set. Unknown `/v1/*` paths are 404
-/// `{"detail":"Not Found"}` and never fall through to what is mounted at `/`.
+/// The API: `/health` (open) and the `/v1` routes, behind the key when one is set, plus the embedded playground. Unknown
+/// `/v1/*` paths are 404 `{"detail":"Not Found"}` and never fall through to the playground.
 pub fn router(models: Arc<Models>, api_key: Option<String>) -> Router {
     let mut v1 = Router::new()
         .route("/systemone", post(systemone))
@@ -122,6 +123,19 @@ pub fn router(models: Arc<Models>, api_key: Option<String>) -> Router {
         .route("/health", get(health))
         .nest("/v1", v1)
         .with_state(models)
+        .merge(playground())
+}
+
+/// The playground `build.rs` embedded (or its placeholder), from memory: `index.html` at `/` and for every path no
+/// file matches (the SPA fallback). HTML is never cached, so a new binary's page is picked up at once; trunk's
+/// content-hashed assets keep memory-serve's default cache time.
+fn playground() -> Router {
+    memory_serve::load!()
+        .index_file(Some("/index.html"))
+        .fallback(Some("/index.html"))
+        .fallback_status(StatusCode::OK)
+        .html_cache_control(CacheControl::NoCache)
+        .into_router()
 }
 
 /// Serves `app` on `listener` until Ctrl-C or SIGTERM, lets the requests in flight finish, then unloads every model.

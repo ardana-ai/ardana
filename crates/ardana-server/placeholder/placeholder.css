@@ -1,0 +1,39 @@
+:root {
+  color-scheme: light;
+  --surround: #e6dfc9;
+  --ink: #1b1b1b;
+  --ink-soft: #3d3a33;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--surround);
+  color: var(--ink);
+  font: 1rem/1.5 system-ui, sans-serif;
+}
+
+main {
+  max-width: 60ch;
+  padding: 1.5rem;
+}
+
+h1 {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0 0 0.75rem;
+  color: var(--ink-soft);
+}
+
+code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9375em;
+  color: var(--ink);
+}

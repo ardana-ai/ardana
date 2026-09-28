@@ -1,0 +1,675 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-28T15:18:35+00:00",
+  "title": "Design System: Ardana",
+  "extensions": {
+    "colorMeta": {
+      "amber": {
+        "role": "primary",
+        "displayName": "LED Amber",
+        "canonical": "#ffb000",
+        "tonalRamp": [
+          "oklch(15% 0.170 76.4)",
+          "oklch(26% 0.170 76.4)",
+          "oklch(38% 0.170 76.4)",
+          "oklch(50% 0.170 76.4)",
+          "oklch(62% 0.170 76.4)",
+          "oklch(73% 0.170 76.4)",
+          "oklch(84% 0.170 76.4)",
+          "oklch(95% 0.170 76.4)"
+        ]
+      },
+      "amber-dim": {
+        "role": "primary",
+        "displayName": "Amber Filament",
+        "canonical": "#cc7a00",
+        "tonalRamp": [
+          "oklch(15% 0.147 65.0)",
+          "oklch(26% 0.147 65.0)",
+          "oklch(38% 0.147 65.0)",
+          "oklch(50% 0.147 65.0)",
+          "oklch(62% 0.147 65.0)",
+          "oklch(73% 0.147 65.0)",
+          "oklch(84% 0.147 65.0)",
+          "oklch(95% 0.147 65.0)"
+        ]
+      },
+      "amber-off": {
+        "role": "primary",
+        "displayName": "Unlit Amber",
+        "canonical": "#3d2e0d",
+        "tonalRamp": [
+          "oklch(15% 0.052 84.0)",
+          "oklch(26% 0.052 84.0)",
+          "oklch(38% 0.052 84.0)",
+          "oklch(50% 0.052 84.0)",
+          "oklch(62% 0.052 84.0)",
+          "oklch(73% 0.052 84.0)",
+          "oklch(84% 0.052 84.0)",
+          "oklch(95% 0.052 84.0)"
+        ]
+      },
+      "amber-ghost": {
+        "role": "primary",
+        "displayName": "Ghost Matrix",
+        "canonical": "#282010",
+        "tonalRamp": [
+          "oklch(15% 0.030 83.8)",
+          "oklch(26% 0.030 83.8)",
+          "oklch(38% 0.030 83.8)",
+          "oklch(50% 0.030 83.8)",
+          "oklch(62% 0.030 83.8)",
+          "oklch(73% 0.030 83.8)",
+          "oklch(84% 0.030 83.8)",
+          "oklch(95% 0.030 83.8)"
+        ],
+        "note": "Inlined as %23282010 in the matrix ghost-grid SVG data URI; change both together."
+      },
+      "fault-ink": {
+        "role": "secondary",
+        "displayName": "Fault Ink",
+        "canonical": "#8f1d17",
+        "tonalRamp": [
+          "oklch(15% 0.150 28.5)",
+          "oklch(26% 0.150 28.5)",
+          "oklch(38% 0.150 28.5)",
+          "oklch(50% 0.150 28.5)",
+          "oklch(62% 0.150 28.5)",
+          "oklch(73% 0.150 28.5)",
+          "oklch(84% 0.150 28.5)",
+          "oklch(95% 0.150 28.5)"
+        ]
+      },
+      "fault-lamp": {
+        "role": "secondary",
+        "displayName": "Fault Lamp",
+        "canonical": "#e0301e",
+        "tonalRamp": [
+          "oklch(15% 0.213 30.2)",
+          "oklch(26% 0.213 30.2)",
+          "oklch(38% 0.213 30.2)",
+          "oklch(50% 0.213 30.2)",
+          "oklch(62% 0.213 30.2)",
+          "oklch(73% 0.213 30.2)",
+          "oklch(84% 0.213 30.2)",
+          "oklch(95% 0.213 30.2)"
+        ]
+      },
+      "fault-paper": {
+        "role": "secondary",
+        "displayName": "Fault Paper",
+        "canonical": "#f7e4df",
+        "tonalRamp": [
+          "oklch(15% 0.022 35.1)",
+          "oklch(26% 0.022 35.1)",
+          "oklch(38% 0.022 35.1)",
+          "oklch(50% 0.022 35.1)",
+          "oklch(62% 0.022 35.1)",
+          "oklch(73% 0.022 35.1)",
+          "oklch(84% 0.022 35.1)",
+          "oklch(95% 0.022 35.1)"
+        ]
+      },
+      "surround": {
+        "role": "neutral",
+        "displayName": "Beige Surround",
+        "canonical": "#e6dfc9",
+        "tonalRamp": [
+          "oklch(15% 0.030 92.3)",
+          "oklch(26% 0.030 92.3)",
+          "oklch(38% 0.030 92.3)",
+          "oklch(50% 0.030 92.3)",
+          "oklch(62% 0.030 92.3)",
+          "oklch(73% 0.030 92.3)",
+          "oklch(84% 0.030 92.3)",
+          "oklch(95% 0.030 92.3)"
+        ]
+      },
+      "surround-shade": {
+        "role": "neutral",
+        "displayName": "Surround Shadow",
+        "canonical": "#cfc6aa",
+        "tonalRamp": [
+          "oklch(15% 0.039 92.3)",
+          "oklch(26% 0.039 92.3)",
+          "oklch(38% 0.039 92.3)",
+          "oklch(50% 0.039 92.3)",
+          "oklch(62% 0.039 92.3)",
+          "oklch(73% 0.039 92.3)",
+          "oklch(84% 0.039 92.3)",
+          "oklch(95% 0.039 92.3)"
+        ]
+      },
+      "alu-hi": {
+        "role": "neutral",
+        "displayName": "Aluminium Highlight",
+        "canonical": "#e4e7ea",
+        "tonalRamp": [
+          "oklch(15% 0.005 247.9)",
+          "oklch(26% 0.005 247.9)",
+          "oklch(38% 0.005 247.9)",
+          "oklch(50% 0.005 247.9)",
+          "oklch(62% 0.005 247.9)",
+          "oklch(73% 0.005 247.9)",
+          "oklch(84% 0.005 247.9)",
+          "oklch(95% 0.005 247.9)"
+        ]
+      },
+      "alu": {
+        "role": "neutral",
+        "displayName": "Aluminium",
+        "canonical": "#c7ccd1",
+        "tonalRamp": [
+          "oklch(15% 0.009 247.9)",
+          "oklch(26% 0.009 247.9)",
+          "oklch(38% 0.009 247.9)",
+          "oklch(50% 0.009 247.9)",
+          "oklch(62% 0.009 247.9)",
+          "oklch(73% 0.009 247.9)",
+          "oklch(84% 0.009 247.9)",
+          "oklch(95% 0.009 247.9)"
+        ]
+      },
+      "alu-lo": {
+        "role": "neutral",
+        "displayName": "Aluminium Shade",
+        "canonical": "#a9afb5",
+        "tonalRamp": [
+          "oklch(15% 0.011 248.0)",
+          "oklch(26% 0.011 248.0)",
+          "oklch(38% 0.011 248.0)",
+          "oklch(50% 0.011 248.0)",
+          "oklch(62% 0.011 248.0)",
+          "oklch(73% 0.011 248.0)",
+          "oklch(84% 0.011 248.0)",
+          "oklch(95% 0.011 248.0)"
+        ]
+      },
+      "chrome-hi": {
+        "role": "neutral",
+        "displayName": "Chrome Highlight",
+        "canonical": "#f7f8f9",
+        "tonalRamp": [
+          "oklch(15% 0.002 247.8)",
+          "oklch(26% 0.002 247.8)",
+          "oklch(38% 0.002 247.8)",
+          "oklch(50% 0.002 247.8)",
+          "oklch(62% 0.002 247.8)",
+          "oklch(73% 0.002 247.8)",
+          "oklch(84% 0.002 247.8)",
+          "oklch(95% 0.002 247.8)"
+        ]
+      },
+      "chrome-lo": {
+        "role": "neutral",
+        "displayName": "Chrome Shade",
+        "canonical": "#b0b6bc",
+        "tonalRamp": [
+          "oklch(15% 0.011 248.0)",
+          "oklch(26% 0.011 248.0)",
+          "oklch(38% 0.011 248.0)",
+          "oklch(50% 0.011 248.0)",
+          "oklch(62% 0.011 248.0)",
+          "oklch(73% 0.011 248.0)",
+          "oklch(84% 0.011 248.0)",
+          "oklch(95% 0.011 248.0)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Engraving Ink",
+        "canonical": "#1b1b1b",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(26% 0.000 89.9)",
+          "oklch(38% 0.000 89.9)",
+          "oklch(50% 0.000 89.9)",
+          "oklch(62% 0.000 89.9)",
+          "oklch(73% 0.000 89.9)",
+          "oklch(84% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Soft Engraving",
+        "canonical": "#35383b",
+        "tonalRamp": [
+          "oklch(15% 0.007 248.0)",
+          "oklch(26% 0.007 248.0)",
+          "oklch(38% 0.007 248.0)",
+          "oklch(50% 0.007 248.0)",
+          "oklch(62% 0.007 248.0)",
+          "oklch(73% 0.007 248.0)",
+          "oklch(84% 0.007 248.0)",
+          "oklch(95% 0.007 248.0)"
+        ]
+      },
+      "engrave": {
+        "role": "neutral",
+        "displayName": "Engrave Light",
+        "canonical": "rgb(255 255 255 / 0.6)",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(26% 0.000 89.9)",
+          "oklch(38% 0.000 89.9)",
+          "oklch(50% 0.000 89.9)",
+          "oklch(62% 0.000 89.9)",
+          "oklch(73% 0.000 89.9)",
+          "oklch(84% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ],
+        "note": "White at 60% alpha; the ramp is the neutral white axis."
+      },
+      "glass": {
+        "role": "neutral",
+        "displayName": "Smoked Glass",
+        "canonical": "#15140f",
+        "tonalRamp": [
+          "oklch(15% 0.010 97.9)",
+          "oklch(26% 0.010 97.9)",
+          "oklch(38% 0.010 97.9)",
+          "oklch(50% 0.010 97.9)",
+          "oklch(62% 0.010 97.9)",
+          "oklch(73% 0.010 97.9)",
+          "oklch(84% 0.010 97.9)",
+          "oklch(95% 0.010 97.9)"
+        ]
+      },
+      "glass-text": {
+        "role": "neutral",
+        "displayName": "Glass Text",
+        "canonical": "#e9e4d4",
+        "tonalRamp": [
+          "oklch(15% 0.022 92.5)",
+          "oklch(26% 0.022 92.5)",
+          "oklch(38% 0.022 92.5)",
+          "oklch(50% 0.022 92.5)",
+          "oklch(62% 0.022 92.5)",
+          "oklch(73% 0.022 92.5)",
+          "oklch(84% 0.022 92.5)",
+          "oklch(95% 0.022 92.5)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Label Paper",
+        "canonical": "#f4efe0",
+        "tonalRamp": [
+          "oklch(15% 0.021 91.6)",
+          "oklch(26% 0.021 91.6)",
+          "oklch(38% 0.021 91.6)",
+          "oklch(50% 0.021 91.6)",
+          "oklch(62% 0.021 91.6)",
+          "oklch(73% 0.021 91.6)",
+          "oklch(84% 0.021 91.6)",
+          "oklch(95% 0.021 91.6)"
+        ]
+      },
+      "paper-shade": {
+        "role": "neutral",
+        "displayName": "Paper Shade",
+        "canonical": "#e3dcc7",
+        "tonalRamp": [
+          "oklch(15% 0.029 91.7)",
+          "oklch(26% 0.029 91.7)",
+          "oklch(38% 0.029 91.7)",
+          "oklch(50% 0.029 91.7)",
+          "oklch(62% 0.029 91.7)",
+          "oklch(73% 0.029 91.7)",
+          "oklch(84% 0.029 91.7)",
+          "oklch(95% 0.029 91.7)"
+        ]
+      },
+      "paper-hint": {
+        "role": "neutral",
+        "displayName": "Paper Hint",
+        "canonical": "#5e584a",
+        "tonalRamp": [
+          "oklch(15% 0.023 87.6)",
+          "oklch(26% 0.023 87.6)",
+          "oklch(38% 0.023 87.6)",
+          "oklch(50% 0.023 87.6)",
+          "oklch(62% 0.023 87.6)",
+          "oklch(73% 0.023 87.6)",
+          "oklch(84% 0.023 87.6)",
+          "oklch(95% 0.023 87.6)"
+        ]
+      },
+      "shell": {
+        "role": "neutral",
+        "displayName": "Cassette Shell",
+        "canonical": "#282620",
+        "tonalRamp": [
+          "oklch(15% 0.011 91.7)",
+          "oklch(26% 0.011 91.7)",
+          "oklch(38% 0.011 91.7)",
+          "oklch(50% 0.011 91.7)",
+          "oklch(62% 0.011 91.7)",
+          "oklch(73% 0.011 91.7)",
+          "oklch(84% 0.011 91.7)",
+          "oklch(95% 0.011 91.7)"
+        ]
+      },
+      "shell-hi": {
+        "role": "neutral",
+        "displayName": "Shell Highlight",
+        "canonical": "#3a372f",
+        "tonalRamp": [
+          "oklch(15% 0.014 89.9)",
+          "oklch(26% 0.014 89.9)",
+          "oklch(38% 0.014 89.9)",
+          "oklch(50% 0.014 89.9)",
+          "oklch(62% 0.014 89.9)",
+          "oklch(73% 0.014 89.9)",
+          "oklch(84% 0.014 89.9)",
+          "oklch(95% 0.014 89.9)"
+        ]
+      },
+      "bevel-deep": {
+        "role": "neutral",
+        "displayName": "Bevel Deep",
+        "canonical": "#050403",
+        "tonalRamp": [
+          "oklch(15% 0.005 71.3)",
+          "oklch(26% 0.005 71.3)",
+          "oklch(38% 0.005 71.3)",
+          "oklch(50% 0.005 71.3)",
+          "oklch(62% 0.005 71.3)",
+          "oklch(73% 0.005 71.3)",
+          "oklch(84% 0.005 71.3)",
+          "oklch(95% 0.005 71.3)"
+        ]
+      },
+      "bevel-side": {
+        "role": "neutral",
+        "displayName": "Bevel Side",
+        "canonical": "#1d1c17",
+        "tonalRamp": [
+          "oklch(15% 0.010 97.8)",
+          "oklch(26% 0.010 97.8)",
+          "oklch(38% 0.010 97.8)",
+          "oklch(50% 0.010 97.8)",
+          "oklch(62% 0.010 97.8)",
+          "oklch(73% 0.010 97.8)",
+          "oklch(84% 0.010 97.8)",
+          "oklch(95% 0.010 97.8)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The maker's plate in the rail; one per page. Uppercase."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Engraved panel headings (State, Questions, Raw exchange). Uppercase."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "A channel's question id, shown exactly as in the request."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text and option names (500 for option names); tabular numerals throughout."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "Channel instructions (max 65ch); 0.875rem variant for notes and level-fit lines."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Engraved legends under and beside every control and window. Uppercase, 1px engrave under-shadow."
+      },
+      "key-legend": {
+        "displayName": "Key Legend",
+        "purpose": "The RUN transport key's legend. Uppercase."
+      },
+      "switch": {
+        "displayName": "Switch",
+        "purpose": "The model name on the chrome model switch."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "Returned text values (the chosen answer), amber on glass."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "The state tape and questions editor."
+      },
+      "code-small": {
+        "displayName": "Code Small",
+        "purpose": "The wire and raw answers."
+      },
+      "matrix": {
+        "displayName": "Matrix",
+        "purpose": "Dot-matrix counters (latency, tokens); 1.375rem at phone width."
+      },
+      "matrix-readout": {
+        "displayName": "Matrix Readout",
+        "purpose": "Per-option percent readouts and figure readouts; 1.125rem at phone width."
+      }
+    },
+    "shadows": [
+      {
+        "name": "engraving",
+        "value": "0 1px 0 rgb(255 255 255 / 0.6)",
+        "purpose": "text-shadow: legends and headings cut into aluminium; dropped on paper and the dark shell."
+      },
+      {
+        "name": "groove",
+        "value": "0 1px 0 #a9afb5, 0 2px 0 #e4e7ea",
+        "purpose": "The two-line rule under the rail and panel heads (inset variant above the figures row); replaces every divider."
+      },
+      {
+        "name": "chrome-plate",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(0 0 0 / 0.18), 0 1px 2px rgb(0 0 0 / 0.3)",
+        "purpose": "The model switch plate."
+      },
+      {
+        "name": "channel-module",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.8), 0 2px 4px rgb(0 0 0 / 0.18), 0 6px 12px -8px rgb(0 0 0 / 0.35)",
+        "purpose": "Bolted question modules raised off the fascia."
+      },
+      {
+        "name": "cassette",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.12), 0 8px 16px -8px rgb(0 0 0 / 0.55), 0 1px 2px rgb(0 0 0 / 0.35)",
+        "purpose": "The heavier cassette shell."
+      },
+      {
+        "name": "fault-panel",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.6), 0 2px 4px rgb(0 0 0 / 0.18)",
+        "purpose": "Fault panels."
+      },
+      {
+        "name": "key-rest",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -2px 0 rgb(0 0 0 / 0.2), 0 3px 0 #7d838a, 0 5px 10px rgb(0 0 0 / 0.3)",
+        "purpose": "RUN key only: the 3px skirt is the key's travel."
+      },
+      {
+        "name": "key-pressed",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.8), inset 0 -1px 0 rgb(0 0 0 / 0.2), 0 0 0 #7d838a, 0 2px 4px rgb(0 0 0 / 0.3)",
+        "purpose": "RUN key pressed or busy, with translateY(3px)."
+      },
+      {
+        "name": "sunk-window-bevel",
+        "value": "border-width: 2px 1px 1px; border-color: #050403 #1d1c17 #e4e7ea #1d1c17",
+        "purpose": "Not a shadow: the border bevel that sinks every glass window (3px top for the larger wells)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The only easing: key press and ladder climb."
+      },
+      {
+        "name": "key-press",
+        "value": "80ms",
+        "purpose": "RUN key transform and shadow transition; none under reduced motion."
+      },
+      {
+        "name": "ladder-climb",
+        "value": "900ms",
+        "purpose": "Lit ladder segments climb from zero to the returned level via clip-path; static under reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "rail-restack",
+        "value": "1080px"
+      },
+      {
+        "name": "single-column",
+        "value": "960px"
+      },
+      {
+        "name": "phone",
+        "value": "720px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "RUN Transport Key",
+      "kind": "button",
+      "refersTo": "run-key",
+      "description": "The only button: a chrome transport key with an LED strip; pressing or running drops it 3px and burns the strip amber.",
+      "html": "<button type=\"button\" class=\"ds-run-key\"><span class=\"ds-run-led\" aria-hidden=\"true\"></span><svg class=\"ds-run-glyph\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 2.5v11l9-5.5z\"/></svg><span class=\"ds-run-legend\">Run</span></button>",
+      "css": ".ds-run-key { position: relative; display: grid; justify-items: center; align-content: center; gap: 6px; width: 104px; height: 80px; padding: 14px 10px 10px; border: 0; border-radius: var(--radius-control); background: linear-gradient(180deg, var(--chrome-hi), #d9dde1 45%, var(--chrome-lo)); color: var(--ink); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -2px 0 rgb(0 0 0 / 0.2), 0 3px 0 #7d838a, 0 5px 10px rgb(0 0 0 / 0.3); cursor: pointer; transition: transform 80ms var(--ease-out), box-shadow 80ms var(--ease-out); } .ds-run-led { position: absolute; top: 6px; left: 14px; right: 14px; height: 4px; border-radius: 2px; background: var(--amber-off); border: 1px solid #1a1407; } .ds-run-glyph { width: 22px; height: 22px; fill: var(--ink); } .ds-run-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.875rem; line-height: 1; letter-spacing: 0.16em; text-transform: uppercase; } .ds-run-key:hover { background: linear-gradient(180deg, #ffffff, #e2e6e9 45%, #bcc2c7); } .ds-run-key:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), inset 0 -1px 0 rgb(0 0 0 / 0.2), 0 0 0 #7d838a, 0 2px 4px rgb(0 0 0 / 0.3); } .ds-run-key:active .ds-run-led { background: linear-gradient(180deg, #ffe08a, var(--amber) 60%); border-color: var(--amber-dim); } .ds-run-key:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; } @media (prefers-reduced-motion: reduce) { .ds-run-key { transition: none; } }"
+    },
+    {
+      "name": "Model Switch",
+      "kind": "input",
+      "refersTo": "model-switch",
+      "description": "A real select on a chrome plate with an engraved chevron and the Model legend beneath.",
+      "html": "<div class=\"ds-switch\"><div class=\"ds-switch-plate\"><select id=\"ds-model\" class=\"ds-switch-select\"><option>jev-latest (default model)</option><option>decider-2b-v11</option></select></div><label class=\"ds-legend\" for=\"ds-model\">Model</label></div>",
+      "css": ".ds-switch { display: grid; gap: var(--space-1); max-width: 22rem; } .ds-switch-plate { position: relative; border-radius: var(--radius-control); background: linear-gradient(180deg, var(--chrome-hi), #d3d8dc 48%, var(--chrome-lo)); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(0 0 0 / 0.18), 0 1px 2px rgb(0 0 0 / 0.3); } .ds-switch-plate::after { content: \"\"; position: absolute; top: 50%; right: 14px; width: 8px; height: 8px; margin-top: -6px; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg); pointer-events: none; } .ds-switch-select { appearance: none; width: 100%; padding: 10px 40px 10px 14px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--ink); font: 600 1rem/1.2 var(--font-legend); letter-spacing: 0.04em; cursor: pointer; } .ds-switch-select:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; } .ds-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); }"
+    },
+    {
+      "name": "Dot-Matrix Counter",
+      "kind": "custom",
+      "refersTo": "counter-window",
+      "description": "A sunk smoked-glass window: amber Doto digits over an unlit 5x7 ghost grid, engraved legend beneath.",
+      "html": "<div class=\"ds-counter\"><div class=\"ds-matrix\"><span class=\"ds-matrix-digits\">106</span></div><span class=\"ds-legend\">Latency ms</span></div>",
+      "css": ".ds-counter { display: inline-grid; justify-items: center; gap: var(--space-1); } .ds-matrix { min-width: 6.5rem; padding: 6px 12px 4px; border-radius: 5px; background-color: var(--glass); border-style: solid; border-width: 2px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); text-align: right; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 70'%3E%3Cpath fill='%23282010' d='M1 1h8.25v8.25h-8.25zM1 11h8.25v8.25h-8.25zM1 21h8.25v8.25h-8.25zM1 31h8.25v8.25h-8.25zM1 41h8.25v8.25h-8.25zM1 51h8.25v8.25h-8.25zM1 61h8.25v8.25h-8.25zM11 1h8.25v8.25h-8.25zM11 11h8.25v8.25h-8.25zM11 21h8.25v8.25h-8.25zM11 31h8.25v8.25h-8.25zM11 41h8.25v8.25h-8.25zM11 51h8.25v8.25h-8.25zM11 61h8.25v8.25h-8.25zM21 1h8.25v8.25h-8.25zM21 11h8.25v8.25h-8.25zM21 21h8.25v8.25h-8.25zM21 31h8.25v8.25h-8.25zM21 41h8.25v8.25h-8.25zM21 51h8.25v8.25h-8.25zM21 61h8.25v8.25h-8.25zM31 1h8.25v8.25h-8.25zM31 11h8.25v8.25h-8.25zM31 21h8.25v8.25h-8.25zM31 31h8.25v8.25h-8.25zM31 41h8.25v8.25h-8.25zM31 51h8.25v8.25h-8.25zM31 61h8.25v8.25h-8.25zM41 1h8.25v8.25h-8.25zM41 11h8.25v8.25h-8.25zM41 21h8.25v8.25h-8.25zM41 31h8.25v8.25h-8.25zM41 41h8.25v8.25h-8.25zM41 51h8.25v8.25h-8.25zM41 61h8.25v8.25h-8.25z'/%3E%3C/svg%3E\"); background-repeat: repeat-x; background-origin: content-box; background-size: 0.6em 0.7em; background-position: right top 0.15em; font-family: var(--font-matrix); font-weight: 800; font-size: 1.75rem; line-height: 1; letter-spacing: 0.04em; } .ds-matrix-digits { color: var(--amber); } .ds-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); color: var(--ink); }"
+    },
+    {
+      "name": "Ladder Row",
+      "kind": "custom",
+      "refersTo": "ladder",
+      "description": "One option: lamp, name, amber LED ladder clipped to the returned level with a quarter-tick scale, and a dot-matrix readout. The lit row is the answer.",
+      "html": "<ol class=\"ds-ladders\"><li class=\"ds-ladder-row ds-lit\"><span class=\"ds-lamp\" aria-hidden=\"true\"></span><span class=\"ds-ladder-name\">billing</span><span class=\"ds-ladder\" style=\"--level:0.9346\" aria-hidden=\"true\"><span class=\"ds-ladder-fill\"></span></span><span class=\"ds-readout\">93<span class=\"ds-point\">.</span>5%</span></li><li class=\"ds-ladder-row\"><span class=\"ds-lamp\" aria-hidden=\"true\"></span><span class=\"ds-ladder-name\">sales</span><span class=\"ds-ladder\" style=\"--level:0.0605\" aria-hidden=\"true\"><span class=\"ds-ladder-fill\"></span></span><span class=\"ds-readout\">6<span class=\"ds-point\">.</span>1%</span></li></ol>",
+      "css": ".ds-ladders { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; } .ds-ladder-row { display: grid; grid-template-columns: 8px minmax(6rem, 13rem) minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); } .ds-lamp { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--amber-off); border: 1px solid #1a1407; } .ds-lit > .ds-lamp { background: radial-gradient(circle at 40% 35%, #fff1c9, var(--amber) 55%, var(--amber-dim)); border-color: var(--amber-dim); } .ds-ladder-name { font-family: var(--font-text); font-weight: 500; font-size: 1rem; line-height: 1.25; color: var(--ink); } .ds-lit .ds-ladder-name { text-decoration: underline; text-decoration-color: var(--amber-dim); text-decoration-thickness: 2px; text-underline-offset: 4px; } .ds-ladder { position: relative; height: 16px; padding: 2px; border-radius: 3px; background: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='10'%3E%3Crect width='6' height='10' fill='%233d2e0d'/%3E%3C/svg%3E\") 0 0 / 8px 10px repeat-x, var(--glass); background-origin: content-box, padding-box; background-clip: content-box, padding-box; border-style: solid; border-width: 2px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); } .ds-ladder::after { content: \"\"; position: absolute; left: -1px; right: -1px; top: calc(100% + 3px); height: 4px; background: linear-gradient(var(--alu-lo), var(--alu-lo)) 0 0 / 1px 100% no-repeat, linear-gradient(var(--alu-lo), var(--alu-lo)) 25% 100% / 1px 50% no-repeat, linear-gradient(var(--alu-lo), var(--alu-lo)) 50% 0 / 1px 100% no-repeat, linear-gradient(var(--alu-lo), var(--alu-lo)) 75% 100% / 1px 50% no-repeat, linear-gradient(var(--alu-lo), var(--alu-lo)) 100% 0 / 1px 100% no-repeat; } .ds-ladder-fill { position: absolute; inset: 2px; background: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='10'%3E%3Crect width='6' height='10' fill='%23ffb000'/%3E%3C/svg%3E\") 0 0 / 8px 10px repeat-x; clip-path: inset(0 calc((1 - var(--level, 0)) * 100%) 0 0); animation: ds-ladder-climb 900ms var(--ease-out) both; } @keyframes ds-ladder-climb { from { clip-path: inset(0 100% 0 0); } } .ds-readout { min-width: 5.25rem; padding: 3px 8px 1px; border-radius: 4px; background-color: var(--glass); border-style: solid; border-width: 2px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); color: var(--amber); font-family: var(--font-matrix); font-weight: 800; font-size: 1.25rem; line-height: 1.1; text-align: right; } .ds-point { color: transparent; } .ds-point::before { content: \"\"; display: inline-block; width: 0.085em; height: 0.085em; margin: 0 -0.2925em 0.009em 0.2075em; border-radius: 0.012em; background: var(--amber); } @media (prefers-reduced-motion: reduce) { .ds-ladder-fill { animation: none; } }"
+    },
+    {
+      "name": "Channel Module",
+      "kind": "card",
+      "refersTo": "channel",
+      "description": "A bolted aluminium module per question: id title, instructions, read-only engraved type legend, ladders, then figures under a groove.",
+      "html": "<div class=\"ds-channel\"><div class=\"ds-channel-head\"><div><h3 class=\"ds-channel-id\">department</h3><p class=\"ds-channel-instructions\">Which department should handle this?</p></div><p class=\"ds-type\"><span class=\"ds-type-key\">Type</span> <span class=\"ds-type-name\">choice</span></p></div><dl class=\"ds-figures\"><div><dt class=\"ds-legend\">Answer</dt><dd class=\"ds-figure-text\">billing</dd></div></dl></div>",
+      "css": ".ds-channel { display: grid; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-module); background: linear-gradient(180deg, #e0e3e6, #cdd1d5 40%, #c3c8cd); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), 0 2px 4px rgb(0 0 0 / 0.18), 0 6px 12px -8px rgb(0 0 0 / 0.35); color: var(--ink); } .ds-channel-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); } .ds-channel-id { margin: 0; font-family: var(--font-legend); font-weight: 600; font-size: 1.25rem; line-height: 1.15; letter-spacing: 0.02em; text-shadow: 0 1px 0 var(--engrave); } .ds-channel-instructions { margin: 2px 0 0; font-family: var(--font-text); font-size: 0.9375rem; line-height: 1.4; color: var(--ink-soft); max-width: 65ch; } .ds-type { margin: 0; padding-top: 4px; font-family: var(--font-legend); font-weight: 600; text-transform: uppercase; text-shadow: 0 1px 0 var(--engrave); } .ds-type-key { font-size: 0.75rem; letter-spacing: 0.12em; color: var(--ink-soft); } .ds-type-name { font-size: 0.9375rem; letter-spacing: 0.1em; } .ds-figures { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-4); margin: 0; padding-top: var(--space-3); box-shadow: inset 0 1px 0 var(--alu-lo), inset 0 2px 0 var(--alu-hi); } .ds-figures dd { margin: 4px 0 0; } .ds-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); } .ds-figure-text { display: inline-block; min-width: 5.25rem; padding: 3px 10px; border-radius: 4px; background: var(--glass); border-style: solid; border-width: 2px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); color: var(--amber); font-family: var(--font-legend); font-weight: 600; font-size: 1.125rem; letter-spacing: 0.04em; }"
+    },
+    {
+      "name": "State Cassette",
+      "kind": "input",
+      "refersTo": "cassette",
+      "description": "A dark cassette shell with screw heads, a paper label carrying the engraved heading and Text/JSON mode lamps, and a sunk window holding a real text area.",
+      "html": "<section class=\"ds-cassette\"><div class=\"ds-cassette-label\"><label class=\"ds-engraved\" for=\"ds-state\">State</label><span class=\"ds-mode ds-on\"><span class=\"ds-lamp\"></span>Text</span></div><div class=\"ds-cassette-window\"><textarea id=\"ds-state\" class=\"ds-tape\" placeholder=\"Paste the state: a ticket, a transcript, a resume or a JSON record.\"></textarea></div></section>",
+      "css": ".ds-cassette { display: grid; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-module); background: radial-gradient(circle at 12px 12px, #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px), radial-gradient(circle at calc(100% - 12px) 12px, #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px), radial-gradient(circle at 12px calc(100% - 12px), #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px), radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px), linear-gradient(180deg, var(--shell-hi), var(--shell) 30%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 8px 16px -8px rgb(0 0 0 / 0.55), 0 1px 2px rgb(0 0 0 / 0.35); } .ds-cassette-label { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-inline: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: 4px; background: linear-gradient(180deg, var(--paper), var(--paper-shade)); border: 1px solid #a9a18a; } .ds-engraved { font-family: var(--font-legend); font-weight: 600; font-size: 1.125rem; line-height: 1.1; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); } .ds-mode { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-hint); } .ds-mode.ds-on { color: var(--ink); } .ds-lamp { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--amber-off); border: 1px solid #1a1407; } .ds-on > .ds-lamp { background: radial-gradient(circle at 40% 35%, #fff1c9, var(--amber) 55%, var(--amber-dim)); border-color: var(--amber-dim); } .ds-cassette-window { padding: 6px; border-radius: 6px; background: #0d0c09; border-style: solid; border-width: 3px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--shell-hi) var(--bevel-side); } .ds-tape { display: block; width: 100%; min-height: 220px; padding: var(--space-3) var(--space-4); border: 0; border-radius: 4px; background: var(--paper); color: var(--ink); font: 400 0.875rem/1.55 var(--font-code); resize: vertical; } .ds-tape::placeholder { color: var(--paper-hint); opacity: 1; } .ds-tape:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }"
+    },
+    {
+      "name": "Wire",
+      "kind": "custom",
+      "refersTo": "wire",
+      "description": "The raw exchange: a sunk smoked-glass pane of the exact bytes sent or received, focusable and scrollable.",
+      "html": "<div class=\"ds-exchange-side\"><h3 class=\"ds-legend\">Received · HTTP 200</h3><pre class=\"ds-wire\" tabindex=\"0\">{\"model\":\"decider-2b-v11\",\"answers\":{\"refund\":{\"type\":\"noul\",\"noul\":0.9261}}}</pre></div>",
+      "css": ".ds-exchange-side { display: grid; gap: var(--space-2); } .ds-legend { margin: 0; font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); color: var(--ink); } .ds-wire { margin: 0; max-height: 22rem; overflow: auto; padding: var(--space-3) var(--space-4); border-radius: 6px; background: var(--glass); border-style: solid; border-width: 3px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); color: var(--glass-text); font: 400 0.8125rem/1.55 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; } .ds-wire::selection { background: var(--amber); color: var(--glass); } .ds-wire:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }"
+    },
+    {
+      "name": "Fault Panel",
+      "kind": "card",
+      "refersTo": "fault",
+      "description": "A refused request, shown as the API reported it: red lamp, fault ink, pale red paper; each issue as location then message.",
+      "html": "<div class=\"ds-fault\" role=\"alert\"><p class=\"ds-fault-title\"><span class=\"ds-fault-lamp\" aria-hidden=\"true\"></span>422 · The request was refused</p><ul class=\"ds-fault-issues\"><li><code class=\"ds-fault-loc\">body › questions › department</code><span class=\"ds-fault-msg\">choice needs at least 2 criteria</span></li></ul></div>",
+      "css": ".ds-fault { display: grid; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-module); background: var(--fault-paper); color: var(--fault-ink); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 2px 4px rgb(0 0 0 / 0.18); } .ds-fault-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-family: var(--font-legend); font-weight: 600; font-size: 1rem; letter-spacing: 0.03em; } .ds-fault-lamp { width: 10px; height: 10px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #ffb4a8, var(--fault-lamp) 60%); border: 1px solid var(--fault-ink); } .ds-fault-issues { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; } .ds-fault-issues li { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); align-items: baseline; } .ds-fault-loc { font-family: var(--font-code); font-size: 0.875em; color: var(--fault-ink); } .ds-fault-msg { font-family: var(--font-text); font-weight: 500; color: var(--ink); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Tape-Deck Fascia",
+    "overview": "The playground is one piece of consumer hardware: a brushed-aluminium fascia set into a beige plastic surround, lit from above. The state loads into a dark cassette shell behind a paper label; each question is a bolted channel module; every option's probability climbs an amber LED ladder behind smoked glass and lands on a dot-matrix readout. Nothing on the fascia is decoration without a hardware reason: legends are engraved, windows are sunk, keys travel, and lamps are dark until something is live.\n\nDensity is instrument-panel density: small engraved caps under every control, generous module padding, and figures set large enough to read at a glance. The world is light-only (`color-scheme: light`); the beige surround and aluminium are the page, and the only dark surfaces are windows into the machine (glass, the cassette shell, the wire). The confirmed rejection is the two-pane API console of grey borders and a blue Run button: no flat grey rules, no blue, no generic primary button.\n\nAmber is signal, not paint. It appears where the machine has something to say (a returned figure, the winning answer, the busy RUN strip) and nowhere else. Red is spent on faults only.",
+    "keyCharacteristics": [
+      "Aluminium fascia on beige surround, lit from above; every surface has a light-from-above reason.",
+      "Engraved narrow-grotesk caps (Barlow Condensed) as the legend under or beside every control and window.",
+      "Smoked-glass windows with a sunk bevel for every live figure; amber dot-matrix numerals (Doto) inside.",
+      "Amber LED ladders on an 8px segment pitch with a quarter-tick scale beneath.",
+      "One pressable chrome transport key (RUN) with real key travel.",
+      "Red reserved for faults; amber reserved for live signal."
+    ],
+    "rules": [
+      {
+        "name": "The Amber Is Live Rule",
+        "body": "Amber marks live signal only: returned figures, the winning answer's lamp and underline, the busy RUN strip, selection and editor focus. It is never a border, a background panel, a heading colour or an ornament.",
+        "section": "colors"
+      },
+      {
+        "name": "The Red Is a Fault Rule",
+        "body": "The three fault colours appear only when a request or input was refused. No red for emphasis, warnings or destructive-looking controls.",
+        "section": "colors"
+      },
+      {
+        "name": "The Unlit Is Not Text Rule",
+        "body": "Unlit Amber and Ghost Matrix sit at about 1.4:1 on glass by design; they draw dark dots and segments only. An idle window shows an empty cell with a visually hidden \"not run yet\" / \"none yet\", never dim digits.",
+        "section": "colors"
+      },
+      {
+        "name": "The Four Faces Rule",
+        "body": "Each face has one job: Barlow Condensed engraves, Barlow Semi Condensed reads, IBM Plex Mono is copied, Doto reports. Doto never sets words; Plex never sets legends.",
+        "section": "typography"
+      },
+      {
+        "name": "The Engraved Legend Rule",
+        "body": "Every control and every window carries a legend in the Label role, cut into the panel with a 1px Engrave Light under-shadow. On paper or on the dark shell the under-shadow is dropped, since there is no aluminium to cut into.",
+        "section": "typography"
+      },
+      {
+        "name": "The Doto Point Rule",
+        "body": "Doto's own full stop is a cross of dots that reads as \"+\". Every decimal point in a dot-matrix figure is set in its own span that keeps the glyph cell transparent and seats one square dot (0.085em on the 0.1em pitch) on the baseline, so the text stays exact and the point reads as a point.",
+        "section": "typography"
+      },
+      {
+        "name": "The Figures As Returned Rule",
+        "body": "Probabilities show as percent with one decimal; confidence, noul, score and extras with two decimals; counts and names verbatim. Each figure carries its raw value and JSON pointer, and no figure is restyled into something the API did not say.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sunk Window Rule",
+        "body": "Every glass window (counters, readouts, figures, ladders, the wire, the cassette window) is sunk with a bevel border: top 2px (3px for the larger wells) Bevel Deep, sides 1px Bevel Side, bottom 1px Aluminium Highlight. Windows never cast shadows.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Key Travel Rule",
+        "body": "The 3px solid skirt under the RUN key is the key's travel, consumed when it is pressed or busy. It belongs to pressable transport keys only; nothing else gets a hard offset shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** set every live figure in amber Doto inside a sunk Smoked Glass window over the ghost grid, and set decimal points with the Doto Point treatment.",
+      "**Do** engrave a Label legend (Barlow Condensed 600, 0.75rem, 0.12em, uppercase, 1px Engrave Light under-shadow) under or beside every control and window.",
+      "**Do** separate regions with the two-line Groove (Aluminium Shade over Aluminium Highlight), never a flat border.",
+      "**Do** light surfaces from above: white top highlights on raised parts, dark top walls on sunk windows.",
+      "**Do** keep motion to the RUN key press (80ms) and the ladder climb (900ms), both on `cubic-bezier(0.16, 1, 0.3, 1)` and both off under reduced motion.",
+      "**Do** keep the state on the left and the questions on the right; restack as cassette, channels, exchange in one column."
+    ],
+    "donts": [
+      "**Don't** build the two-pane API console of grey borders and a blue Run button; no blue anywhere on the fascia.",
+      "**Don't** use amber for borders, panel fills, headings or decoration; it marks live signal only.",
+      "**Don't** use the fault reds for anything but a refused request or invalid input.",
+      "**Don't** put a readable figure in Unlit Amber or Ghost Matrix; idle windows are empty cells with hidden text.",
+      "**Don't** set words in Doto, legends in Plex, or prose in Barlow Condensed.",
+      "**Don't** give any surface other than a pressable transport key a hard offset shadow.",
+      "**Don't** round, restyle or re-derive a returned value; show it at the stated precision with its raw value attached."
+    ]
+  }
+}

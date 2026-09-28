@@ -1,0 +1,9 @@
+{
+  "name": "ardana-playground-e2e",
+  "private": true,
+  "description": "Playwright suites of the embedded playground; run with `cargo xtask e2e playground`.",
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "lz-string": "1.5.0"
+  }
+}

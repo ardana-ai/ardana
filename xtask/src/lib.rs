@@ -1,5 +1,6 @@
 //! Ardana's task runner (Q19), run as `cargo xtask <step>`.
 
+pub mod browser;
 pub mod deps;
 pub mod docs;
 pub mod e2e;

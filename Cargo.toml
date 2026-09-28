@@ -35,10 +35,16 @@ minijinja-contrib = { version = "2.24.0", features = ["pycompat"] }
 sha2 = "0.10"
 thiserror = "2"
 tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"] }
+js-sys = "0.3"
 leptos = { version = "0.8", features = ["csr"] }
+lz-str = "0.2"
+memory-serve = "2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tokio = "1"
 toml = "1"
 tower = "0.5"
 tower-http = "0.7"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3"

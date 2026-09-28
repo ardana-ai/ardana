@@ -1,16 +1,26 @@
-//! `cargo xtask build`: the playground's `dist/` through trunk. It runs here and
-//! not in a build script, which would deadlock on cargo's lock (rust-lang/cargo#8938).
+//! `cargo xtask build`: the playground's `dist/` through trunk, then the release
+//! `ardana` that embeds it. Trunk runs here and not in a build script, which would
+//! deadlock on cargo's lock (rust-lang/cargo#8938).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
 use crate::fetch::lockfile_version;
 use crate::sandbox::Sandbox;
+use crate::serve::build_ardana;
+
+/// Builds `dist/` and the release `ardana` serving it from memory; returns the binary.
+pub fn build(sandbox: &Sandbox) -> Result<PathBuf> {
+    build_dist(sandbox)?;
+    let ardana = build_ardana(sandbox)?;
+    println!("build: {}", ardana.display());
+    Ok(ardana)
+}
 
 /// Runs the fetched trunk offline, so it takes wasm-bindgen and wasm-opt from
 /// `tmp/bin` at the versions `Trunk.toml` pins and never downloads them.
-pub fn build(sandbox: &Sandbox) -> Result<()> {
+fn build_dist(sandbox: &Sandbox) -> Result<()> {
     let trunk = sandbox.bin_dir().join("trunk");
     if !trunk.is_file() {
         bail!("{} is missing; run `cargo xtask fetch`", trunk.display());

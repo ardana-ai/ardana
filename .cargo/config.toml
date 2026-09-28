@@ -10,3 +10,6 @@ HF_HOME = { value = "tmp/hf", relative = true, force = true }
 ARDANA_HOME = { value = "tmp/ardana", relative = true, force = true }
 ARDANA_TMP = { value = "tmp/ardana-tmp", relative = true, force = true }
 TMPDIR = { value = "tmp/sys", relative = true, force = true }
+# memory-serve logs every embedded asset as a cargo warning unless quiet; only
+# `ardana-server`'s own warning (no playground dist) should show.
+MEMORY_SERVE_QUIET = "1"

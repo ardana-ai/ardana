@@ -1,8 +1,8 @@
 # Playwright guidelines
 
 Scope: the browser end-to-end suite for the embedded Leptos playground (`crates/ardana-playground`, served by
-`crates/ardana-server` from the `ardana` binary). It lives in `e2e/playground/` (`package.json`, `package-lock.json`,
-`playwright.config.ts`, `tests/`, `fixtures/jev-share-links.json`) and runs through `cargo xtask e2e playground`
+`crates/ardana-server` from the `ardana` binary). It lives in `e2e/playground/` (`package.json`, `package-lock.json`, `.npmrc`,
+`playwright.config.ts`, `tests/helpers.ts`, `tests/*.spec.ts`, `fixtures/jev-share-links.json`) and runs through `cargo xtask e2e playground`
 (W6 R6.3-R6.7, W7 R7.1-R7.6), next to the `impeccable detect` URL scans of `cargo xtask e2e design` (Q24, R6.2).
 It covers npm setup inside the sandbox, config, browsers, locators, assertions, network timing, screenshots and
 share-link decoding.
@@ -60,6 +60,11 @@ share-link decoding.
 - `projects`: two Chrome projects differing only in viewport, e.g. `{ name: 'desktop', use: { channel: 'chrome',
   viewport: { width: 1280, height: 800 } } }` and `{ name: 'mobile', use: { channel: 'chrome', viewport: { width: 390,
   height: 844 } } }`. Do not spread `devices['iPhone ...']` descriptors: they switch the browser type away from Chrome.
+- Ardana's choice: `cargo xtask e2e playground` starts the server (the release binary copied alone into
+  `tmp/e2e/playground-binary`, decider-2b pulled offline, `crates/ardana-playground/dist` moved away while it runs)
+  and passes `ARDANA_BASE_URL` and `ARDANA_REPO_ROOT`; the config has no `webServer` and throws without
+  `ARDANA_BASE_URL`. The R6.4 `placeholder_without_dist` case is a cargo build plus `ardana-server`'s `playground`
+  test in `tmp/e2e/placeholder/target`, run by xtask before Playwright.
 - `webServer`: either the config launches the binary that `cargo xtask build` produced (`command`, `url` pointing at
   `http://127.0.0.1:<port>/health`, `reuseExistingServer: false`, `timeout` covering startup, `stdout: 'pipe'`), or
   `cargo xtask e2e playground` starts the server itself and passes the base URL in; pick one per case and never both.
@@ -68,6 +73,20 @@ share-link decoding.
   test or in xtask and stop it in `afterAll`.
 
 ## Patterns
+- Screenshots, Ardana's naming: each case's final state is `tmp/screens/<case>/<project>.png`; intermediate states it
+  also captures are `<state>-<project>.png` (`answers_match_api/loaded-*`, `picker_raw_errors/413-*`,
+  `picker_raw_errors/unknown-type-*`). xtask checks every case's pair exists at 1280 and 390 px wide. Screenshots
+  pass `animations: 'disabled'` so the ladder climb shows its final state.
+- Figures (R6.5): `expectFiguresMatch` in `tests/helpers.ts` reads every `[data-field]` element, resolves its JSON
+  pointer in the response the page received, and checks `data-value` (numbers compared as numbers) and the text in
+  its `data-format`; `roundDecimal` implements the display rounding independently of the Rust code (BigInt, half up
+  on the decimal text).
+- Exact text: `toHaveText` normalises whitespace, so the raw panels are compared with
+  `toHaveJSProperty('textContent', exact)`, which retries and compares byte for byte.
+- The only routed step is R6.6's unknown answer `type`: the server never returns one, so `picker_raw_errors` fetches
+  the real response with `route.fetch()`, renames one answer's type and fulfils it; nothing else is routed.
+- Same-origin check: trunk's loader fetches the wasm with `fetch`, so the check allows `fetch` requests for `.wasm`
+  and requires every other `fetch`/`xhr` request to go to `<origin>/v1/`.
 - Screenshots (R6.7): every case ends with `await page.screenshot({ path: <root>/tmp/screens/<case>/<project>.png,
   fullPage: true })` using `testInfo.project.name`; the two projects together produce the 1280x800 and 390x844 pair.
   Automatic `use.screenshot`/`trace` artifacts stay in `outputDir`.
@@ -77,6 +96,8 @@ share-link decoding.
   with `timing.responseEnd` (fail if it is `-1`) within 20 ms.
 - Same-origin check (R6.6): collect `page.on('request', r => urls.push(r.url()))` from the first `goto` and assert every
   API URL starts with `<baseURL>/v1/`; use `request.postDataJSON()` to compare the sent body with the raw panel.
+- Share links in W6 cases are written with `lz-string`'s `compressToEncodedURIComponent` (`shareHash` in
+  `tests/helpers.ts`), as Jev's playground writes them, so the Rust decoder is checked against the JS encoder.
 - Share links (R7.3, R7.4): take the text after `#share/`, run `decompressFromEncodedURIComponent`, and assert the
   result is a non-empty string before `JSON.parse` (the 1.5.0 function returns `null` for `""` and does not throw on
   garbage). Check `apiVersion`, `documentText`, `promptsText`, `selectedModels`. `lz-string` 1.5.0 is CommonJS
@@ -85,6 +106,11 @@ share-link decoding.
   through the server and assert the rendered `detail` with `toHaveText`.
 
 ## impeccable detect alongside (Q24)
+- `cargo xtask e2e design` builds the share links with `lz-str` (the ticket fixture, and the same with a one-option
+  `department` choice for the 422 state), warms decider-2b with one request, writes each JSON report to
+  `tmp/evals/design/<state>-<desktop|mobile>.json`, and first checks R6.1's context (doctor, PRODUCT.md, DESIGN.md,
+  the surface brief's Operate mode and six contract blocks, `.impeccable/config.json`, the hook in
+  `.claude/settings.local.json`).
 - `cargo xtask e2e design` runs `$IMPECCABLE_BIN detect --json --viewport 1280x800 <url>` and `--viewport 390x844` on
   `/`, `/#share/<ticket>`, `/?autorun=1#share/<ticket>` and `/?autorun=1#share/<invalid>` of a running server; exit 0
   is clean, 1 means a target was not scanned, 2 means primary findings. Treat any non-zero exit as a failure.

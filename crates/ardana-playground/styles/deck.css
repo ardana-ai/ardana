@@ -1,0 +1,625 @@
+/* The deck: the state cassette on the left, the question channels on the right, the raw exchange below. */
+
+.deck {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-areas:
+    "cassette channels"
+    "exchange exchange";
+  align-items: start;
+  gap: var(--space-5);
+  padding: var(--space-5);
+}
+
+/* ---- Cassette: a dark shell with a paper label strip and the tape window, a real text area. ---- */
+
+.cassette {
+  grid-area: cassette;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-module);
+  background:
+    radial-gradient(circle at 12px 12px, #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 12px) 12px, #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px),
+    radial-gradient(circle at 12px calc(100% - 12px), #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px),
+    linear-gradient(180deg, var(--shell-hi), var(--shell) 30%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 8px 16px -8px rgb(0 0 0 / 0.55),
+    0 1px 2px rgb(0 0 0 / 0.35);
+}
+
+.cassette-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin-inline: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--paper), var(--paper-shade));
+  border: 1px solid #a9a18a;
+}
+
+.cassette-label .engraved {
+  text-shadow: none;
+}
+
+.cassette-label label {
+  cursor: text;
+}
+
+.mode-lamps {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.mode-lamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-legend);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--paper-hint);
+}
+
+.mode-lamp.on {
+  color: var(--ink);
+}
+
+.cassette-window {
+  padding: 6px;
+  border-radius: 6px;
+  background: #0d0c09;
+  border-style: solid;
+  border-width: 3px 1px 1px;
+  border-color: var(--bevel-deep) var(--bevel-side) var(--shell-hi) var(--bevel-side);
+}
+
+.tape,
+.program-text {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  caret-color: var(--ink);
+  font: 400 0.875rem/1.55 var(--font-code);
+  resize: vertical;
+  scrollbar-color: var(--paper-hint) var(--paper-shade);
+}
+
+.tape {
+  min-height: clamp(260px, 50vh, 560px);
+  padding: var(--space-3) var(--space-4);
+}
+
+.tape::placeholder,
+.program-text::placeholder {
+  color: var(--paper-hint);
+  opacity: 1;
+}
+
+.tape:focus-visible,
+.program-text:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.cassette-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-inline: var(--space-3);
+}
+
+.cassette-foot .counter .legend {
+  color: var(--paper);
+  text-shadow: none;
+}
+
+.cassette-foot .fault-line {
+  flex: 1 1 16rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 4px;
+  background: var(--fault-paper);
+}
+
+/* ---- Channels: one module per question. ---- */
+
+.channels {
+  grid-area: channels;
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.channels .panel-head {
+  margin-bottom: 0;
+}
+
+.channels-empty {
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-module);
+  background: linear-gradient(180deg, #b9bec3, #c1c6cb);
+  border-style: solid;
+  border-width: 2px 1px 1px;
+  border-color: var(--alu-lo) var(--alu-lo) var(--alu-hi);
+  color: var(--ink-soft);
+}
+
+.channels-empty p {
+  max-width: 70ch;
+}
+
+.channels-empty code {
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.channel-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.channel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-4);
+  border-radius: var(--radius-module);
+  background: linear-gradient(180deg, #e0e3e6, #cdd1d5 40%, #c3c8cd);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.8),
+    0 2px 4px rgb(0 0 0 / 0.18),
+    0 6px 12px -8px rgb(0 0 0 / 0.35);
+}
+
+.channel-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.channel-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.channel-id {
+  font-family: var(--font-legend);
+  font-weight: 600;
+  font-size: 1.25rem;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 0 var(--engrave);
+  overflow-wrap: anywhere;
+}
+
+.channel-instructions {
+  color: var(--ink-soft);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  max-width: 65ch;
+}
+
+/* Type: an engraved legend, read only. */
+.type-legend {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-top: 4px;
+  font-family: var(--font-legend);
+  font-weight: 600;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 var(--engrave);
+}
+
+.type-key {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-soft);
+}
+
+.type-name {
+  font-size: 0.9375rem;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+}
+
+/* Ladders: one per option, amber segments climbing to the returned probability. */
+.ladders {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ladder-row {
+  display: grid;
+  grid-template-columns: 8px minmax(6rem, 13rem) minmax(0, 1fr) auto;
+  grid-template-areas: "lamp name ladder readout";
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ladder-row > .lamp {
+  grid-area: lamp;
+}
+
+.ladder-name {
+  grid-area: name;
+  min-width: 0;
+  font-weight: 500;
+  font-size: 1rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ladder-row.lit .ladder-name {
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--amber-dim);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.ladder-note {
+  display: block;
+  color: var(--ink-soft);
+  font-weight: 400;
+  font-size: 0.875rem;
+}
+
+.ladder {
+  grid-area: ladder;
+  position: relative;
+  height: 16px;
+  border-radius: 3px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='10'%3E%3Crect width='6' height='10' fill='%233d2e0d'/%3E%3C/svg%3E") 0 0 / 8px 10px repeat-x,
+    var(--glass);
+  background-origin: content-box, padding-box;
+  background-clip: content-box, padding-box;
+  padding: 2px;
+  border-style: solid;
+  border-width: 2px 1px 1px;
+  border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side);
+}
+
+.ladder::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: calc(100% + 3px);
+  height: 4px;
+  background:
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 0 0 / 1px 100% no-repeat,
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 25% 100% / 1px 50% no-repeat,
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 50% 0 / 1px 100% no-repeat,
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 75% 100% / 1px 50% no-repeat,
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 100% 0 / 1px 100% no-repeat;
+}
+
+.ladder-fill {
+  position: absolute;
+  inset: 2px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='10'%3E%3Crect width='6' height='10' fill='%23ffb000'/%3E%3C/svg%3E") 0 0 / 8px 10px repeat-x;
+  clip-path: inset(0 calc((1 - var(--level, 0)) * 100%) 0 0);
+  animation: ladder-climb 900ms var(--ease-out) both;
+}
+
+@keyframes ladder-climb {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
+.readout {
+  grid-area: readout;
+  min-width: 5.25rem;
+  padding: 3px 8px 1px;
+  border-radius: 4px;
+  background-color: var(--glass);
+  border-style: solid;
+  border-width: 2px 1px 1px;
+  border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side);
+  color: var(--amber);
+  font-family: var(--font-matrix);
+  font-weight: 800;
+  font-size: 1.25rem;
+  line-height: 1.1;
+  text-align: right;
+  background-position: right top 0.2em;
+}
+
+.readout.idle {
+  color: var(--amber-off);
+}
+
+.ladder-fit {
+  grid-column: 3 / -1;
+  justify-self: end;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.ladder-fit .fit {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* Figures under the ladders: engraved legend over a smoked window. */
+.figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  padding-top: var(--space-3);
+  box-shadow: inset 0 1px 0 var(--alu-lo), inset 0 2px 0 var(--alu-hi);
+}
+
+.figure {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.figure dt {
+  color: var(--ink-soft);
+}
+
+.figure .readout,
+.figure-text {
+  display: inline-block;
+}
+
+.figure-text {
+  min-width: 5.25rem;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: var(--glass);
+  border-style: solid;
+  border-width: 2px 1px 1px;
+  border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side);
+  color: var(--amber);
+  font-family: var(--font-legend);
+  font-weight: 600;
+  font-size: 1.125rem;
+  letter-spacing: 0.04em;
+}
+
+.raw-answer {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.raw-answer pre,
+.fault-raw {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: 6px;
+  background: var(--glass);
+  color: var(--glass-text);
+  font: 400 0.8125rem/1.5 var(--font-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Fault: the request was refused. Red lamp, red ink, pale red paper. ---- */
+
+.fault {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-module);
+  background: var(--fault-paper);
+  color: var(--fault-ink);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 2px 4px rgb(0 0 0 / 0.18);
+}
+
+.fault-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-legend);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.03em;
+}
+
+.fault-lamp {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffb4a8, var(--fault-lamp) 60%);
+  border: 1px solid var(--fault-ink);
+}
+
+.fault-issues {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.fault-issues li,
+.fault p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+}
+
+.fault-loc {
+  color: var(--fault-ink);
+  font-weight: 400;
+}
+
+.fault-msg {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ---- Program: the questions JSON the channels are read from. ---- */
+
+.program {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.program-text {
+  min-height: 200px;
+  padding: var(--space-3) var(--space-4);
+  border: 6px solid #0d0c09;
+  border-radius: 8px;
+}
+
+.program-text[aria-invalid="true"] {
+  border-color: var(--fault-ink);
+}
+
+/* ---- Raw exchange ---- */
+
+.exchange {
+  grid-area: exchange;
+  min-width: 0;
+}
+
+.exchange-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.exchange-side {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.wire {
+  margin: 0;
+  max-height: 22rem;
+  overflow: auto;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 6px;
+  background: var(--glass);
+  border-style: solid;
+  border-width: 3px 1px 1px;
+  border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side);
+  color: var(--glass-text);
+  font: 400 0.8125rem/1.55 var(--font-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-color: var(--alu-lo) var(--glass);
+}
+
+.wire::selection,
+.wire *::selection {
+  background: var(--amber);
+  color: var(--glass);
+}
+
+.wire-empty {
+  padding: var(--space-3) var(--space-4);
+  border-radius: 6px;
+  color: var(--ink-soft);
+  background: #bec3c8;
+  border-style: solid;
+  border-width: 2px 1px 1px;
+  border-color: var(--alu-lo) var(--alu-lo) var(--alu-hi);
+}
+
+@media (max-width: 960px) {
+  .deck {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "cassette"
+      "channels"
+      "exchange";
+  }
+
+  .tape {
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 720px) {
+  .deck {
+    gap: var(--space-4);
+    padding: var(--space-3);
+  }
+
+  .cassette {
+    padding: var(--space-3);
+  }
+
+  .cassette-label {
+    margin-inline: var(--space-2);
+  }
+
+  .channel {
+    padding: var(--space-3);
+  }
+
+  .channel-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .type-legend {
+    grid-column: 1 / -1;
+    justify-self: start;
+    padding-top: 0;
+  }
+
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ladder-row {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "lamp name readout"
+      ". ladder ladder";
+    gap: var(--space-1) var(--space-2);
+  }
+
+  .readout,
+  .figure-text {
+    min-width: 4.5rem;
+    font-size: 1.125rem;
+  }
+
+  .exchange-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ladder::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: calc(100% + 3px);
+  height: 4px;
+  background:
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 0 0 / 1px 100% no-repeat,
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 25% 100% / 1px 50% no-repeat,
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 50% 0 / 1px 100% no-repeat,
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 75% 100% / 1px 50% no-repeat,
+    linear-gradient(var(--alu-lo), var(--alu-lo)) 100% 0 / 1px 100% no-repeat;
+}
+
+.ladder-fill {
+    animation: none;
+  }
+}

@@ -31,9 +31,11 @@ pub struct Tool {
     pub version: String,
     pub source: Source,
     /// `github`: the release asset, a `.tar.gz` with a `.sha256` next to it. `uv-venv`: a requirements source
-    /// inside `tmp/` (a clone's `pyproject.toml`) installed instead of `<name>==<version>`.
+    /// inside `tmp/` (a clone's `pyproject.toml`) installed instead of `<name>==<version>`. `local-copy`: the file
+    /// to copy, relative to the real home.
     pub url: Option<String>,
     /// `github`: the executable inside the archive, linked into `tmp/bin`. `uv-venv`: the venv inside `tmp/`.
+    /// `npm`: the package directory, relative to the repo root. `local-copy`: the copy inside `tmp/`.
     pub path: Option<String>,
     /// `git`: the full commit checked out into `tmp/src/<name>`.
     pub rev: Option<String>,
@@ -52,6 +54,10 @@ pub enum Source {
     UvTool,
     /// A uv venv at `tmp/<path>` holding `<name>==<version>`, or the requirements `url` names.
     UvVenv,
+    /// `npm ci` in the package directory `path`, whose `package.json` pins `<name>` at exactly `version`.
+    Npm,
+    /// A file of the real home (`url`) copied, read only, to `tmp/<path>`.
+    LocalCopy,
 }
 
 impl Source {
@@ -62,6 +68,8 @@ impl Source {
             Source::Git => "git",
             Source::UvTool => "uv-tool",
             Source::UvVenv => "uv-venv",
+            Source::Npm => "npm",
+            Source::LocalCopy => "local-copy",
         }
     }
 }
@@ -177,6 +185,24 @@ impl Tool {
                 run_stdout(uv(sandbox).args(args).arg(pin)).map(drop)
             }
             Source::UvVenv => self.install_venv(sandbox, version),
+            Source::Npm => {
+                let dir = self.npm_dir(sandbox)?;
+                run_stdout(sandbox.command("npm").current_dir(&dir).args([
+                    "ci",
+                    "--no-audit",
+                    "--no-fund",
+                ]))
+                .with_context(|| format!("npm ci in {}", dir.display()))
+                .map(drop)
+            }
+            Source::LocalCopy => {
+                let (source, copy) = self.local_copy_paths(sandbox)?;
+                std::fs::create_dir_all(copy.parent().context("the copy has no parent")?)?;
+                std::fs::copy(&source, &copy).with_context(|| {
+                    format!("copying {} to {}", source.display(), copy.display())
+                })?;
+                Ok(())
+            }
         }
     }
 
@@ -210,7 +236,78 @@ impl Tool {
             }
             Source::UvTool => self.check_uv_tool(sandbox, version),
             Source::UvVenv => self.check_venv(sandbox, version),
+            Source::Npm => self.check_npm(sandbox, version),
+            Source::LocalCopy => self.check_local_copy(sandbox),
         }
+    }
+
+    /// The npm package directory `path`, inside the repo.
+    fn npm_dir(&self, sandbox: &Sandbox) -> Result<PathBuf> {
+        let path = self
+            .path
+            .as_deref()
+            .ok_or_else(|| anyhow!("tool {} needs `path`", self.name))?;
+        Ok(sandbox.repo_root().join(path))
+    }
+
+    /// `package.json` pins `<name>` at exactly `version` and `node_modules` holds that version.
+    fn check_npm(&self, sandbox: &Sandbox, version: &str) -> Result<()> {
+        let dir = self.npm_dir(sandbox)?;
+        let read = |path: PathBuf| -> Result<serde_json::Value> {
+            let text = std::fs::read_to_string(&path)
+                .with_context(|| format!("{} is missing", path.display()))?;
+            serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+        };
+        let manifest = read(dir.join("package.json"))?;
+        let pinned = ["dependencies", "devDependencies"]
+            .iter()
+            .find_map(|section| manifest[section][&self.name].as_str());
+        if pinned != Some(version) {
+            bail!(
+                "{} pins {} at {pinned:?}, not exactly {version}",
+                dir.join("package.json").display(),
+                self.name
+            );
+        }
+        let installed = read(
+            dir.join("node_modules")
+                .join(&self.name)
+                .join("package.json"),
+        )?;
+        if installed["version"].as_str() != Some(version) {
+            bail!(
+                "{} has {} {}, not {version}",
+                dir.join("node_modules").display(),
+                self.name,
+                installed["version"]
+            );
+        }
+        Ok(())
+    }
+
+    /// The real-home source and the `tmp/` copy of a `local-copy` entry.
+    fn local_copy_paths(&self, sandbox: &Sandbox) -> Result<(PathBuf, PathBuf)> {
+        let source = sandbox.real_home().join(self.url()?);
+        let path = self
+            .path
+            .as_deref()
+            .ok_or_else(|| anyhow!("tool {} needs `path`", self.name))?;
+        Ok((source, sandbox.tmp().join(path)))
+    }
+
+    /// The copy is an executable file, byte for byte the source while the source still exists.
+    fn check_local_copy(&self, sandbox: &Sandbox) -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let (source, copy) = self.local_copy_paths(sandbox)?;
+        let meta =
+            std::fs::metadata(&copy).with_context(|| format!("{} is missing", copy.display()))?;
+        if !meta.is_file() || meta.len() == 0 || meta.permissions().mode() & 0o111 == 0 {
+            bail!("{} is not a non-empty executable file", copy.display());
+        }
+        if source.exists() && std::fs::read(&source)? != std::fs::read(&copy)? {
+            bail!("{} differs from {}", copy.display(), source.display());
+        }
+        Ok(())
     }
 
     /// `uv tool list` shows the tool at `version`, its env runs a uv-managed Python and its executable is in

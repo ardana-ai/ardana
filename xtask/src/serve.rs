@@ -41,7 +41,7 @@ pub struct Server {
 }
 
 impl Server {
-    /// Pulls decider-2b into `tmp/e2e/<name>/home` and starts `ardana serve` there, with `ARDANA_API_KEY` set to
+    /// Pulls decider-2b into `tmp/e2e/<name>/home` and starts `ardana serve` there (from the binary's own directory), with `ARDANA_API_KEY` set to
     /// `api_key` when given; returns once `/health` answers.
     pub fn start(
         sandbox: &Sandbox,
@@ -57,6 +57,9 @@ impl Server {
         std::fs::create_dir_all(&home)?;
         let ardana_command = || {
             let mut cmd = sandbox.command(ardana);
+            if let Some(dir) = ardana.parent() {
+                cmd.current_dir(dir);
+            }
             cmd.env("ARDANA_HOME", &home)
                 .env("HF_HUB_OFFLINE", "1")
                 .env_remove("ARDANA_API_KEY");

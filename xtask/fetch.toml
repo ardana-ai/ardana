@@ -16,6 +16,10 @@
 #            <name>==<version>, or, when `url` names a requirements source inside tmp/
 #            (a research clone's pyproject.toml), that source's declared dependencies;
 #            `version` then names the source's pinned revision
+#            `npm`: `npm ci` in the repo directory `path` (package.json and its lock), which must
+#            pin <name> at exactly `version` and hold it under `path`/node_modules
+#            `local-copy`: the real home's file `url` (relative to it) copied, read only, to
+#            tmp/<path>; checked to be executable and, while the source exists, identical
 #
 # [[hf]] fields:
 #   repo      `org/name` on huggingface.co
@@ -83,6 +87,25 @@ version = "fd54ea7"
 source = "uv-venv"
 path = "py/jevbench"
 url = "src/jevbench/pyproject.toml"
+
+[[tool]]
+name = "@playwright/test"
+version = "1.63.0"
+source = "npm"
+path = "e2e/playground"
+
+[[tool]]
+name = "lz-string"
+version = "1.5.0"
+source = "npm"
+path = "e2e/playground"
+
+[[tool]]
+name = "impeccable"
+version = "0.1.5"
+source = "local-copy"
+url = ".impeccable/bin/0.1.5/impeccable"
+path = "impeccable/bin/0.1.5/impeccable"
 
 [[hf]]
 repo = "Mapika/decider-2b-GGUF"

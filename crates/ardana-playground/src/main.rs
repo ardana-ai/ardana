@@ -1,17 +1,12 @@
-//! The Ardana playground: a Leptos CSR app built by `cargo xtask build` with trunk.
+//! The Ardana playground: a Leptos CSR app built by `cargo xtask build` with trunk and embedded into `ardana serve`.
 
-use leptos::prelude::*;
+mod api;
+mod deck;
+mod format;
+mod request;
+mod share;
+mod ui;
 
 fn main() {
-    leptos::mount::mount_to_body(App);
-}
-
-#[component]
-fn App() -> impl IntoView {
-    view! {
-        <main>
-            <h1>"Ardana playground"</h1>
-            <p>"The playground is not built yet."</p>
-        </main>
-    }
+    leptos::mount::mount_to_body(ui::App);
 }

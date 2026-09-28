@@ -12,6 +12,12 @@ design workflow that gates every UI change (Q23, Q27).
 - `wasm-bindgen` matches Cargo.lock — the crate version is resolved by leptos; the CLI in `tmp/bin` and `Trunk.toml` `[tools] wasm_bindgen` must equal the Cargo.lock version exactly
 - `binaryen` version_133 — `wasm-opt` for release trunk builds; trunk 0.21.9's default `version_116` rejects rustc 1.97 output
 - `lz-str` 0.2 — Rust port of lz-string's `compressToEncodedURIComponent` codec for Jev share links (docs.rs shows 0.2.1)
+- `web-sys`, `js-sys` 0.3 and `wasm-bindgen-futures` 0.4 — the versions leptos already resolves (no new crates);
+  the playground names them for `fetch`, `performance.now()` and `URLSearchParams`, with only the `web-sys` features
+  it calls (`Headers`, `KeyboardEvent`, `Location`, `Performance`, `Request`, `RequestInit`, `Response`,
+  `UrlSearchParams`, `Window`)
+- `serde_json` with `float_roundtrip` in the playground — numbers read from a response keep their exact `f64`, so a
+  re-serialised `data-value` equals the API's JSON text
 
 ## Rules
 - Depend on `leptos` with `features = ["csr"]` and nothing else from its mode set; exactly one of `csr`, `hydrate`,
@@ -46,6 +52,22 @@ design workflow that gates every UI change (Q23, Q27).
   token counts equal to `usage` (R6.5).
 - Keep pure logic (share codec, state-mode detection, number formatting, snippet generation) in plain Rust modules
   with no DOM access, so it is unit-testable and reusable by the snippet and share code.
+- Layout of `crates/ardana-playground/src`: `api.rs` (`ApiClient`, the only network code), `share.rs`, `request.rs`
+  (state mode, questions parsing, the request body, reading replies into typed answers or raw JSON and error
+  `detail`s), `format.rs`, `deck.rs` (`Deck`: every signal of the page, `Copy`, passed whole to components, plus the
+  `Action` that runs and the `Memo` of the last run) and `ui/` with one module per region: `rail` (model switch,
+  counters, RUN), `cassette` (state), `channels` (one channel per question, the questions JSON editor, faults),
+  `exchange` (raw request/response), `figure` (the `data-value` figures). New editors (the W7 builder, presets,
+  snippets, share output) are new `ui/` modules over the same `Deck`.
+- Figures: every API value on screen is a `ui::figure` element with `data-field` (a JSON pointer into the response),
+  `data-value` (the raw value: a number as the shortest JSON text, a string as is) and `data-format` (`percent`,
+  `fixed2`, `verbatim`). Formatting rounds the number's decimal text half up (`format::round_decimal`), never the
+  binary value, so `0.1235` shows `12.4%` on every platform; the Playwright helpers apply the same rule with BigInt.
+- The model picker offers `jev-latest` (the server's default model, as Jev's share links name it) and then every
+  `/v1/models` name; a share link naming another model adds it. `?autorun=1` runs once after `/v1/models` answers.
+- Per-run visuals (the ladder climb) restart because `For` keys each channel by id, spec, run number and answer.
+- Set dynamic CSS custom properties with a style tuple, `style=("--level", value.to_string())`; the rules that read
+  them live in `.css`.
 
 ## Share links
 - Format: `#share/<compressToEncodedURIComponent(JSON)>`, payload
@@ -76,9 +98,17 @@ design workflow that gates every UI change (Q23, Q27).
   Size work for the wasm goes through `data-wasm-opt`, dependency choices, and brotli from memory-serve.
 
 ## CSS and design
-- Styles live only in plain `.css` files under `crates/ardana-playground/styles/`, linked with
-  `<link data-trunk rel="css">`. No inline style strings, no CSS-in-Rust crates, no Tailwind: the /impeccable design
-  hook scans `.css`, `.html`, `.ts`, `.js`, not `.rs`.
+- Styles live only in plain `.css` files under `crates/ardana-playground/styles/` (`fonts.css`, `base.css` for
+  tokens and materials, `rail.css`, `deck.css`), linked with `<link data-trunk rel="css">`. No inline style strings,
+  no CSS-in-Rust crates, no Tailwind: the /impeccable design hook scans `.css`, `.html`, `.ts`, `.js`, not `.rs`.
+- Fonts are self-hosted: the Google Fonts latin woff2 subsets of Barlow Condensed, Barlow Semi Condensed, IBM Plex
+  Mono and Doto (SIL OFL, `assets/fonts/OFL.txt`) live in `crates/ardana-playground/assets/fonts/`, copied to
+  `dist/fonts/` by `<link data-trunk rel="copy-dir" href="assets/fonts">` and named by absolute `/fonts/...` URLs.
+  The page loads nothing from another origin.
+- Dot-matrix figures: Doto's own full stop is a cross of dots, so `ui::figure::matrix` sets each `.` in a
+  `.matrix-point` span (the text stays the same) and CSS seats one square Doto-sized dot on the baseline. The unlit
+  matrix behind figures and the ladder segments are SVG data-URI tiles, never `repeating-*-gradient` (the detector
+  reads those as decorative stripes).
 - Dynamic visuals (bar widths) set a CSS custom property or a class from the view; the rules that use them stay in
   `.css`. Class names come from DESIGN.md's tokens and components.
 - Every UI change, from the first component on, goes through the /impeccable skill: PRODUCT.md, DESIGN.md and the

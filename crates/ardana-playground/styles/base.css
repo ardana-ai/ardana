@@ -1,0 +1,207 @@
+/* The deck's materials: beige plastic surround, brushed aluminium fascia, engraved ink legends, amber LEDs behind
+   smoked display glass, and a red reserved for faults. */
+
+:root {
+  color-scheme: light;
+
+  --surround: #e6dfc9;
+  --surround-shade: #cfc6aa;
+  --alu-hi: #e4e7ea;
+  --alu: #c7ccd1;
+  --alu-lo: #a9afb5;
+  --chrome-hi: #f7f8f9;
+  --chrome-lo: #b0b6bc;
+  --ink: #1b1b1b;
+  --ink-soft: #35383b;
+  --engrave: rgb(255 255 255 / 0.6);
+  --glass: #15140f;
+  --glass-edge: #2b2a24;
+  --glass-text: #e9e4d4;
+  --amber: #ffb000;
+  --amber-dim: #cc7a00;
+  --amber-off: #3d2e0d;
+  --amber-ghost: #282010;
+  --paper: #f4efe0;
+  --paper-shade: #e3dcc7;
+  --paper-hint: #5e584a;
+  --shell: #282620;
+  --bevel-deep: #050403;
+  --bevel-side: #1d1c17;
+  --shell-hi: #3a372f;
+  --fault-ink: #8f1d17;
+  --fault-lamp: #e0301e;
+  --fault-paper: #f7e4df;
+
+  --font-legend: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-text: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, monospace;
+  --font-matrix: "Doto", "IBM Plex Mono", ui-monospace, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-fascia: 16px;
+  --radius-module: 10px;
+  --radius-control: 6px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--surround);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: var(--space-5);
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgb(255 255 255 / 0.35), transparent 70%),
+    var(--surround);
+  color: var(--ink);
+  font: 400 1rem/1.45 var(--font-text);
+  font-variant-numeric: tabular-nums;
+  scrollbar-color: var(--alu-lo) var(--surround-shade);
+}
+
+h1,
+h2,
+h3,
+p,
+ol,
+ul,
+dl,
+dd {
+  margin: 0;
+}
+
+ol,
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+code {
+  font-family: var(--font-code);
+  font-size: 0.875em;
+}
+
+::selection {
+  background: var(--amber);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The fascia: one aluminium panel set into the beige surround, lit from above. */
+.fascia {
+  max-width: 1440px;
+  margin: 0 auto;
+  border-radius: var(--radius-fascia);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.4), transparent 18%, transparent 82%, rgb(0 0 0 / 0.07)),
+    var(--alu);
+  border-style: solid;
+  border-width: 1px 1px 4px;
+  border-color: var(--alu-hi) #9f9a88 #8c8674;
+}
+
+/* Engraved legend: narrow caps cut into the panel, lit from above. */
+.legend,
+.engraved {
+  font-family: var(--font-legend);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-shadow: 0 1px 0 var(--engrave);
+}
+
+.legend {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+}
+
+.engraved {
+  font-size: 1.125rem;
+  line-height: 1.1;
+  letter-spacing: 0.1em;
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-3);
+  box-shadow: 0 1px 0 var(--alu-lo), 0 2px 0 var(--alu-hi);
+}
+
+.panel-head .legend {
+  color: var(--ink-soft);
+}
+
+/* LED lamp: dark until lit. */
+.lamp {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--amber-off);
+  border: 1px solid #1a1407;
+}
+
+.on > .lamp,
+.lit > .lamp {
+  background: radial-gradient(circle at 40% 35%, #fff1c9, var(--amber) 55%, var(--amber-dim));
+  border-color: var(--amber-dim);
+}
+
+/* A fault line: red is spent on errors only. */
+.fault-line {
+  color: var(--fault-ink);
+  font-weight: 500;
+}
+
+.fault-line:empty {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  body {
+    padding: var(--space-2);
+  }
+
+  .fascia {
+    border-radius: var(--radius-module);
+  }
+}

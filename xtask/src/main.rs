@@ -9,7 +9,7 @@ const USAGE: &str = "usage: cargo xtask <step>
   env [--claude]   print the sandbox environment as shell exports, or write it
                    into .claude/settings.local.json
   fetch [--check]  install, or verify, the xtask/fetch.toml entries into tmp/
-  build            build the playground dist with trunk
+  build            build the playground dist with trunk, then the release ardana
   check-deps       check the workspace members and dependency direction
   check-docs       check CLAUDE.md, AGENTS.md and docs/guidelines
   export-decider   export decider's prompt layout cases into crates/ardana-core/tests/data/decider
@@ -41,7 +41,7 @@ fn run() -> Result<()> {
         }
         ["fetch"] => sandbox()?.guarded("fetch", fetch::fetch)?,
         ["fetch", "--check"] => fetch::check(&sandbox()?)?,
-        ["build"] => sandbox()?.guarded("build", playground::build)?,
+        ["build"] => sandbox()?.guarded("build", playground::build).map(drop)?,
         ["check-deps"] => deps::check_deps(&deps::metadata(root)?)?,
         ["check-docs"] => docs::check_docs(root)?,
         ["export-decider"] => sandbox()?.guarded("export-decider", export::export_decider)?,

@@ -27,16 +27,23 @@ Contracts are binding, its Requirements are the definition of done.
 - `cargo xtask fetch` installs every `xtask/fetch.toml` entry into `tmp/` (tools, research clones in `tmp/src`
   (decider, jevcompat, JevBench), the jevcompat uv tool, the `tmp/py/sdk` and `tmp/py/jevbench` venvs, Hub models in
   `tmp/hf/hub`, `[[hf_local]]` copies of gated repos from the real `~/.cache/huggingface/hub`);
-  `cargo xtask fetch --check` verifies them. Run it before `cargo test`: tests read the decider-2b, Qwen3.5,
+  `cargo xtask fetch --check` verifies them. It also runs `npm ci` in `e2e/playground` (`@playwright/test`,
+  `lz-string`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it before `cargo test`: tests read the decider-2b, Qwen3.5,
   SmolLM3 and Llama 3.2 tokenizers and chat templates from `tmp/hf`.
-- `cargo xtask build` builds the playground `dist/` with the fetched trunk, offline.
+- `cargo xtask build` builds the playground `dist/` with the fetched trunk, offline, then the release `ardana`, which
+  embeds it (memory-serve, `force-embed`) and serves it at `/`. Building `ardana-server` without a dist (or with
+  `ARDANA_PLAYGROUND_DIST` at a directory without `index.html`) warns and embeds a placeholder page.
 - `cargo xtask check-deps`, `cargo xtask check-docs` check the workspace shape and these documents.
 - `cargo xtask export-decider` regenerates the vendored decider prompt goldens in
   `crates/ardana-core/tests/data/decider/` by running decider@23579f7 from `tmp/src/decider`.
 - `cargo xtask e2e <suite>` runs an end-to-end suite: `smoke`, `rust` (`cargo test --workspace --
   --include-ignored`, the real-model tests included), or one of the API suites against a release `ardana serve` on
   decider-2b: `jevcompat` (jevcompat 0.1.0, open and with a key, every MUST must pass), `sdk` (typesafe-sdk 0.7.2
-  parses `ticket.json`) and `jevbench` (231 public items, zero failed requests; output in `tmp/evals/jevbench/`).
+  parses `ticket.json`) and `jevbench` (231 public items, zero failed requests; output in `tmp/evals/jevbench/`); the browser suites
+  `playground` (Playwright on the installed Chrome against the built binary copied alone into `tmp/`, plus the
+  placeholder build; screenshots in `tmp/screens/<case>/`, reports in `tmp/playwright/`) and `design` (/impeccable
+  context, then `impeccable detect` of the empty, loaded, results and 422 states at 1280x800 and 390x844; reports in
+  `tmp/evals/design/`).
 - `ardana pull <ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model in
   `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo); refs are `hf.co/<org>/<repo>[:<quant>]`
   (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]` (read in place from

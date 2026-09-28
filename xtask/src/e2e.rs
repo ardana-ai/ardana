@@ -1,15 +1,25 @@
 //! `cargo xtask e2e <suite>`: end-to-end suites, each run under the home guard. The API suites (`jevcompat`, `sdk`,
-//! `jevbench`) run their harness from `tmp/` against a release `ardana serve` on decider-2b.
+//! `jevbench`) run their harness from `tmp/` against a release `ardana serve` on decider-2b; the browser suites
+//! (`playground`, `design`) live in [`crate::browser`].
 
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
+use crate::browser;
 use crate::sandbox::{Sandbox, cargo};
 use crate::serve::{Server, build_ardana};
 
-pub const SUITES: &[&str] = &["smoke", "rust", "jevcompat", "sdk", "jevbench"];
+pub const SUITES: &[&str] = &[
+    "smoke",
+    "rust",
+    "jevcompat",
+    "sdk",
+    "jevbench",
+    "playground",
+    "design",
+];
 
 /// The request fixture the SDK suite sends.
 const SDK_REQUEST: &str = "tests/fixtures/requests/ticket.json";
@@ -27,6 +37,8 @@ pub fn run(sandbox: &Sandbox, suite: &str) -> Result<()> {
         "jevcompat" => jevcompat(sandbox),
         "sdk" => sdk(sandbox),
         "jevbench" => jevbench(sandbox),
+        "playground" => browser::playground(sandbox),
+        "design" => browser::design(sandbox),
         other => bail!("unknown e2e suite `{other}`; suites: {}", SUITES.join(", ")),
     }
 }
@@ -235,7 +247,7 @@ fn jevbench(sandbox: &Sandbox) -> Result<()> {
     Ok(())
 }
 
-fn read_json(path: &Path) -> Result<Value> {
+pub(crate) fn read_json(path: &Path) -> Result<Value> {
     let text =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))

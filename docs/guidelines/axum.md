@@ -98,17 +98,23 @@ runtime, and serving the Leptos playground's `dist` from memory with `memory-ser
 ## Embedded playground (memory-serve)
 - List `memory-serve` in both `[dependencies]` and `[build-dependencies]` of `ardana-server`; the build script and
   the runtime both use it.
-- `crates/ardana-server/build.rs` calls `memory_serve::load_directory(path)` with the playground `dist` directory
-  (overridable by an env var for R6.4). If `index.html` is missing there, print `cargo:warning=...` and load a
-  checked-in placeholder directory instead; never fail the build. Emit `cargo:rerun-if-env-changed` for the override
-  and `cargo:rerun-if-changed` for the dist path; memory-serve's docs do not promise rebuild tracking.
-- `build.rs` never runs trunk (rust-lang/cargo#8938 deadlock); `cargo xtask build` builds `dist` first.
-- Build the router once at startup: `memory_serve::load!().index_file(Some("/index.html"))`
+- `crates/ardana-server/build.rs` calls `memory_serve::load_directory(path)` with the playground `dist` directory,
+  or the directory `ARDANA_PLAYGROUND_DIST` names (R6.4). If `index.html` is missing there, it prints
+  `cargo::warning=no playground at <dir> ...` and loads the checked-in `crates/ardana-server/placeholder/` instead;
+  never fail the build. Emit `cargo::rerun-if-env-changed` for the override and `cargo::rerun-if-changed` for the
+  dist path; memory-serve's docs do not promise rebuild tracking.
+- memory-serve prints every embedded asset as a cargo warning unless `MEMORY_SERVE_QUIET=1`; `.cargo/config.toml`
+  `[env]` sets it, so the only build warning left is the missing-dist one.
+- `build.rs` never runs trunk (rust-lang/cargo#8938 deadlock); `cargo xtask build` builds `dist` first, then the
+  release `ardana`.
+- `ardana_server::router` merges the playground router, built with `memory_serve::load!().index_file(Some("/index.html"))`
   `.fallback(Some("/index.html")).fallback_status(StatusCode::OK).html_cache_control(CacheControl::NoCache)`
-  `.into_router()`, then `merge` it with the API router. `into_router` leaks memory by design; call it once.
-  `fallback_status` defaults to 404, so set it for the SPA.
-- Debug builds read and compress files from disk at request time; only release builds (or the `force-embed`
-  feature) embed them. R6.3's "binary in an empty directory" check must use the release binary or `force-embed`.
+  `.into_router()`; the binary calls `router` once. `into_router` leaks memory by design (tests may leak a little).
+  `fallback_status` defaults to 404, so set it for the SPA. The `/v1` router's own fallback keeps unknown `/v1/*`
+  paths on the API's 404.
+- `ardana-server` depends on memory-serve with `force-embed`, so debug builds embed too and every binary serves from
+  memory, never from the source tree (R6.3). `crates/ardana-server/tests/playground.rs` checks that `/`, unknown
+  paths and every asset come from the directory `build.rs` embedded.
 
 ## Testing
 - Test handlers in `crates/ardana-server/tests/*.rs` without binding a port: build the app with a fake `Runtime`

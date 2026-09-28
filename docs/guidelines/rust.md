@@ -101,9 +101,10 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 
 ## xtask
 - `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check]`, `build`, `check-deps`,
-  `check-docs`, `export-decider`, `e2e <suite>` (`smoke`, `rust`, `jevcompat`, `sdk`, `jevbench`); keep its
+  `check-docs`, `export-decider`, `e2e <suite>` (`smoke`, `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`,
+  `design`); keep its
   dependency set small so `cargo xtask` compiles quickly: downloads and HTTP probes go through `curl` and `git` run by
-  `Sandbox::command`, not HTTP crates.
+  `Sandbox::command`, not HTTP crates. Its one codec is `lz-str` (the `design` suite's Jev share links).
 - The API suites (`jevcompat`, `sdk`, `jevbench`) build `ardana` with `--release --locked` (llama.cpp in a debug build
   is too slow for 231 JevBench items) and run it through `xtask/src/serve.rs#Server`, which kills the server on drop.
 - Run every external tool through `Sandbox::command` (sandbox env, `PATH` prefixed with `tmp/bin`), and wrap `fetch`,
