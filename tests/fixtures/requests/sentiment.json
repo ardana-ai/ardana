@@ -1,0 +1,15 @@
+{
+  "model": "jev-latest",
+  "state": "I absolutely love this product, it works perfectly.",
+  "questions": {
+    "sentiment": {
+      "type": "choice",
+      "instructions": "What is the sentiment of this message?",
+      "criteria": ["positive", "negative", "neutral"]
+    },
+    "happy": {
+      "type": "noul",
+      "instructions": "Is the customer happy?"
+    }
+  }
+}

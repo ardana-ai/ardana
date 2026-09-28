@@ -25,7 +25,7 @@ pub const NARROW: usize = 10;
 pub const MAX_OPTIONS: usize = 255;
 
 /// The text of the chat answer piece before `": ("`.
-const ANSWER: &str = "Answer";
+pub const ANSWER: &str = "Answer";
 
 #[derive(Debug, thiserror::Error)]
 pub enum PromptError {

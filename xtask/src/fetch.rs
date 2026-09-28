@@ -1,6 +1,6 @@
 //! `cargo xtask fetch [--check]`: installs, or verifies, every entry of
-//! `xtask/fetch.toml` inside `tmp/`: `[[tool]]` entries and `[[hf]]` model
-//! repositories.
+//! `xtask/fetch.toml` inside `tmp/`: `[[tool]]` entries, `[[hf]]` model
+//! repositories and `[[hf_local]]` copies from the user's own Hub cache.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -17,6 +17,9 @@ pub struct Manifest {
     pub tool: Vec<Tool>,
     #[serde(default)]
     pub hf: Vec<Hf>,
+    /// Gated repositories (Q18): copied read-only from the real home's Hub cache.
+    #[serde(default)]
+    pub hf_local: Vec<Hf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,6 +87,19 @@ pub fn fetch(sandbox: &Sandbox) -> Result<()> {
         repo.install(sandbox)?;
         repo.check(sandbox)?;
     }
+    for repo in &manifest.hf_local {
+        if repo.check(sandbox).is_ok() {
+            continue;
+        }
+        println!(
+            "fetch: copying {}@{} from {}",
+            repo.repo,
+            repo.revision,
+            repo.local_dir(sandbox).display()
+        );
+        repo.install_local(sandbox)?;
+        repo.check(sandbox)?;
+    }
     Ok(())
 }
 
@@ -106,6 +122,11 @@ pub fn check(sandbox: &Sandbox) -> Result<()> {
     for repo in &manifest.hf {
         if let Err(err) = repo.check(sandbox) {
             missing.push(format!("hf {}@{}: {err:#}", repo.repo, repo.revision));
+        }
+    }
+    for repo in &manifest.hf_local {
+        if let Err(err) = repo.check(sandbox) {
+            missing.push(format!("hf_local {}@{}: {err:#}", repo.repo, repo.revision));
         }
     }
     if !missing.is_empty() {
@@ -285,7 +306,8 @@ impl Tool {
 }
 
 /// A Hugging Face model repository pinned at a commit; `files` are downloaded
-/// into `tmp/hf/hub` in the official cache layout.
+/// (`[[hf]]`) or copied from the real home's Hub cache (`[[hf_local]]`) into
+/// `tmp/hf/hub` in the official cache layout.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Hf {
@@ -305,12 +327,21 @@ struct HubFile {
 }
 
 impl Hf {
+    fn cache_name(&self) -> String {
+        format!("models--{}", self.repo.replace('/', "--"))
+    }
+
     /// `tmp/hf/hub/models--<org>--<name>`.
     pub fn repo_dir(&self, sandbox: &Sandbox) -> PathBuf {
+        sandbox.tmp().join("hf/hub").join(self.cache_name())
+    }
+
+    /// The repo in the real home's Hub cache, the source of `[[hf_local]]`.
+    pub fn local_dir(&self, sandbox: &Sandbox) -> PathBuf {
         sandbox
-            .tmp()
-            .join("hf/hub")
-            .join(format!("models--{}", self.repo.replace('/', "--")))
+            .real_home()
+            .join(".cache/huggingface/hub")
+            .join(self.cache_name())
     }
 
     fn validate(&self) -> Result<()> {
@@ -383,16 +414,54 @@ impl Hf {
                     .with_context(|| format!("verifying {file} of {}", self.repo))?;
                 std::fs::rename(&partial, &blob)?;
             }
-            let link = snapshot.join(file);
-            let parent = link.parent().context("snapshot link has no parent")?;
-            std::fs::create_dir_all(parent)?;
-            let depth = Path::new(file).components().count() + 1;
-            let target = Path::new(&"../".repeat(depth))
-                .join("blobs")
-                .join(&meta.blob);
-            remove_if_present(&link)?;
-            std::os::unix::fs::symlink(&target, &link)
-                .with_context(|| format!("linking {}", link.display()))?;
+            link_snapshot(&snapshot, file, &meta.blob)?;
+        }
+        std::fs::create_dir_all(dir.join("refs"))?;
+        std::fs::write(dir.join("refs/main"), &self.revision)?;
+        Ok(())
+    }
+
+    /// Copies every file of the pinned snapshot from the real home's Hub
+    /// cache, reading it only: the blob named by the snapshot link is copied
+    /// into `blobs/`, verified against that name (a git blob id or an LFS
+    /// sha256), linked from `snapshots/` and `refs/main` is written.
+    fn install_local(&self, sandbox: &Sandbox) -> Result<()> {
+        self.validate()?;
+        let source = self
+            .local_dir(sandbox)
+            .join("snapshots")
+            .join(&self.revision);
+        let dir = self.repo_dir(sandbox);
+        let blobs = dir.join("blobs");
+        let snapshot = dir.join("snapshots").join(&self.revision);
+        std::fs::create_dir_all(&blobs)?;
+        for file in &self.files {
+            let link = source.join(file);
+            let resolved = std::fs::canonicalize(&link).with_context(|| {
+                format!(
+                    "{} is missing; the Hub cache of this machine must hold {}@{}",
+                    link.display(),
+                    self.repo,
+                    self.revision
+                )
+            })?;
+            let blob = resolved
+                .file_name()
+                .and_then(|name| name.to_str())
+                .with_context(|| format!("{} has no blob name", resolved.display()))?
+                .to_string();
+            let meta = HubFile {
+                lfs: blob.len() == 64,
+                size: std::fs::metadata(&resolved)?.len(),
+                blob,
+            };
+            let partial = blobs.join(format!("{}.incomplete", meta.blob));
+            std::fs::copy(&resolved, &partial)
+                .with_context(|| format!("copying {}", resolved.display()))?;
+            verify_blob(sandbox, &partial, &meta)
+                .with_context(|| format!("verifying {file} of {}", self.repo))?;
+            std::fs::rename(&partial, blobs.join(&meta.blob))?;
+            link_snapshot(&snapshot, file, &meta.blob)?;
         }
         std::fs::create_dir_all(dir.join("refs"))?;
         std::fs::write(dir.join("refs/main"), &self.revision)?;
@@ -441,6 +510,18 @@ impl Hf {
         }
         Ok(files)
     }
+}
+
+/// Links `snapshots/<rev>/<file>` relatively to `blobs/<blob>`.
+fn link_snapshot(snapshot: &Path, file: &str, blob: &str) -> Result<()> {
+    let link = snapshot.join(file);
+    let parent = link.parent().context("snapshot link has no parent")?;
+    std::fs::create_dir_all(parent)?;
+    let depth = Path::new(file).components().count() + 1;
+    let target = Path::new(&"../".repeat(depth)).join("blobs").join(blob);
+    remove_if_present(&link)?;
+    std::os::unix::fs::symlink(&target, &link)
+        .with_context(|| format!("linking {}", link.display()))
 }
 
 /// An LFS file must hash to its sha256, any other file to its git blob id.

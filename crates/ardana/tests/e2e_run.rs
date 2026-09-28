@@ -1,58 +1,26 @@
 //! R2.7: `ardana run` answers the ticket fixture with the official decider-2b Q4_K_M GGUF, on Metal (all layers
 //! offloaded) and on the CPU (`--gpu-layers 0`).
 
-use std::path::PathBuf;
-use std::process::Command;
+mod common;
 
-use anyhow::{Context, Result, ensure};
+use std::ffi::OsString;
+
+use anyhow::{Context, Result};
 use serde_json::Value;
 
-/// A file of the pinned decider-2b-GGUF snapshot that `cargo xtask fetch` put into `$HF_HOME/hub` (`tmp/hf`).
-fn decider_2b_file(name: &str) -> Result<PathBuf> {
-    let hf_home = std::env::var_os("HF_HOME").context("HF_HOME is not set")?;
-    let repo = PathBuf::from(hf_home).join("hub/models--Mapika--decider-2b-GGUF");
-    let rev = std::fs::read_to_string(repo.join("refs/main")).with_context(|| {
-        format!(
-            "{} has no refs/main; run `cargo xtask fetch`",
-            repo.display()
-        )
-    })?;
-    let path = repo.join("snapshots").join(rev.trim()).join(name);
-    ensure!(
-        path.is_file(),
-        "{} is missing; run `cargo xtask fetch`",
-        path.display()
-    );
-    Ok(path)
-}
-
-fn ticket() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/requests/ticket.json")
-}
+const DECIDER_2B: &str = "Mapika/decider-2b-GGUF";
 
 fn ardana_run(extra: &[&str]) -> Result<Value> {
-    let output = Command::new(env!("CARGO_BIN_EXE_ardana"))
-        .arg("run")
-        .arg("--gguf")
-        .arg(decider_2b_file("decider-2b-v11-Q4_K_M.gguf")?)
-        .arg("--tokenizer")
-        .arg(decider_2b_file("tokenizer.json")?)
-        .arg("--config")
-        .arg(decider_2b_file("decider_config.json")?)
-        .arg("--request")
-        .arg(ticket())
-        .args(extra)
-        .output()
-        .context("running ardana run")?;
-    ensure!(
-        output.status.success(),
-        "ardana run {extra:?} failed ({}): {}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let stdout = String::from_utf8(output.stdout)?;
-    println!("ardana run {extra:?}:\n{stdout}");
-    serde_json::from_str(&stdout).context("ardana run printed JSON")
+    let mut args: Vec<OsString> = vec!["--gguf".into()];
+    args.push(common::hf_file(DECIDER_2B, "decider-2b-v11-Q4_K_M.gguf")?.into());
+    args.push("--tokenizer".into());
+    args.push(common::hf_file(DECIDER_2B, "tokenizer.json")?.into());
+    args.push("--config".into());
+    args.push(common::hf_file(DECIDER_2B, "decider_config.json")?.into());
+    args.push("--request".into());
+    args.push(common::request("ticket.json").into());
+    args.extend(extra.iter().map(OsString::from));
+    common::ardana_run(args)
 }
 
 /// The ticket checks; returns the argmax of every answer.
@@ -68,7 +36,7 @@ fn check_ticket(resp: &Value) -> Result<(String, bool)> {
         probabilities.keys().collect::<Vec<_>>(),
         ["billing", "technical", "sales"]
     );
-    let sum: f64 = probabilities.values().filter_map(Value::as_f64).sum();
+    let sum = common::probability_sum(department)?;
     assert!((sum - 1.0).abs() <= 0.001, "probabilities sum to {sum}");
     let refund = resp["answers"]["refund"]["noul"]
         .as_f64()

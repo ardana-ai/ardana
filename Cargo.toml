@@ -26,6 +26,8 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 indexmap = { version = "2", features = ["serde"] }
 llama-cpp-2 = { version = "=0.1.157", default-features = false }
+minijinja = { version = "2.24.0", features = ["loop_controls"] }
+minijinja-contrib = { version = "2.24.0", features = ["pycompat"] }
 sha2 = "0.10"
 thiserror = "2"
 tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"] }

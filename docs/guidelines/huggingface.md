@@ -21,7 +21,9 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
   then `~/.cache/huggingface/hub`. Tests that need another root pass `.cache_dir(..)` explicitly under `$ARDANA_TMP`.
 - `HFClient` wraps an `Arc` and is `Clone + Send + Sync`: build one per process and clone it; never rebuild per file.
 - Only `cargo xtask fetch` reads the real `~/.cache/huggingface/hub`, and only for `[[hf_local]]` entries it copies
-  read-only into `tmp/hf/hub`. Ardana itself never reads or writes the user's real HF cache.
+  read-only into `tmp/hf/hub`: it resolves `snapshots/<revision>/<file>` to its blob, copies the blob into
+  `tmp/hf/hub/.../blobs/`, verifies it against its name (git blob id, or LFS sha256 for 64-hex names), links the
+  snapshot and writes `refs/main`. Ardana itself never reads or writes the user's real HF cache.
 - `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`. `cargo xtask fetch` lists
   the revision through `https://huggingface.co/api/models/<repo>/revision/<rev>?blobs=true`, downloads each file from
   `resolve/<rev>/<file>` with `curl` into `blobs/<LFS sha256 or git blob id>`, verifies that hash (`shasum -a 256`,
@@ -101,13 +103,23 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 - `pycompat` supplies str `strip`, `lstrip`, `rstrip`, `startswith`, `endswith`, `split`, `replace`, `lower`,
   `upper`, `format` and more, dict `get`, `items`, `keys`, `values`, and list `count`; a template calling anything
   else fails at render time, so add a test per shipped template.
-- Register `raise_exception(msg)` as a function that returns a minijinja error carrying `msg`. Do not register
-  `strftime_now`: templates that test `strftime_now is defined` then fall back to a fixed date, keeping the Llama
-  3.2 head identical every day (R3.3).
+- Register `raise_exception(msg)` as a function that returns a minijinja error carrying `msg`.
+- Register `strftime_now(format)` on the fixed date 2024-07-26 (`ardana_core::chat::TEMPLATE_DATE`), never the
+  clock, so every head is identical every day (R3.3): Llama 3.2 renders "26 Jul 2024" (its own fallback date), and
+  SmolLM3, whose template calls `strftime_now` unguarded, renders "26 July 2024". The formatter supports `%d`, `%b`,
+  `%B`, `%Y` and `%%`; any other directive is a render error naming it, so a new template using one needs a test.
 - Keep the default `UndefinedBehavior::Lenient` (undefined prints empty and is falsy), which matches how HF templates
   probe optional variables.
-- Render one user message holding the sentinel with `add_generation_prompt=true`; pass `enable_thinking=false` only
-  when the template text mentions it (decider `ChatTemplate`).
+- Render one user message holding the sentinel with `add_generation_prompt=true`, `tools` and `documents` set to
+  `none` (as `apply_chat_template` passes them), `bos_token`/`eos_token` only when set (a `null` token stays
+  undefined, as in transformers' `special_tokens_map`); pass `enable_thinking=false` only when the template text
+  mentions it (decider `ChatTemplate`).
+- transformers' `{% generation %}` .. `{% endgeneration %}` tag (SmolLM3's template) only marks assistant text and
+  renders its body; minijinja has no custom tags, so `ardana_core::chat` rewrites each into `{% if true %}` ..
+  `{% endif %}` with its whitespace control kept before compiling.
+- decider (through transformers) defines `strftime_now` with the real clock, so its dated heads differ from Ardana's
+  by the date only; checked with transformers 5.17, Ardana's head and tail ids equal decider's for Qwen3.5-0.8B and,
+  given the same date, for SmolLM3-3B.
 - Do not rely on `tojson` for byte-exact output: minijinja's `tojson` needs the `json` feature and escapes HTML
   characters, unlike transformers' `json.dumps(ensure_ascii=False)`.
 

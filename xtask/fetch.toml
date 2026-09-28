@@ -17,6 +17,10 @@
 #   files     files downloaded into tmp/hf/hub/models--<org>--<name> in the Hub cache
 #            layout (blobs/, snapshots/<revision>/, refs/main), each verified against
 #            its LFS sha256 or git blob id
+#
+# [[hf_local]] fields: as [[hf]], but the files are copied read-only from the
+#   snapshot `revision` in the real home's ~/.cache/huggingface/hub (gated repos,
+#   Q18) into the same tmp/hf/hub layout, each blob verified against its name
 
 [[tool]]
 name = "trunk"
@@ -46,3 +50,28 @@ rev = "23579f7a7e8f10e1045be492af3c1c05a005d67c"
 repo = "Mapika/decider-2b-GGUF"
 revision = "ff2e5e687327eda9ac34e9a3ca84d3f400672c87"
 files = ["decider-2b-v11-Q4_K_M.gguf", "tokenizer.json", "tokenizer_config.json", "decider_config.json"]
+
+[[hf]]
+repo = "ggml-org/Qwen3.5-0.8B-GGUF"
+revision = "8fea620810c4afa23dd6443f999a48574c1611a3"
+files = ["Qwen3.5-0.8B-Q4_0.gguf"]
+
+[[hf]]
+repo = "Qwen/Qwen3.5-0.8B"
+revision = "2fc06364715b967f1860aea9cf38778875588b17"
+files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
+
+[[hf]]
+repo = "ggml-org/SmolLM3-3B-GGUF"
+revision = "4965cb60b150737b68a0408c36aeefb65078f894"
+files = ["SmolLM3-Q4_K_M.gguf"]
+
+[[hf]]
+repo = "HuggingFaceTB/SmolLM3-3B"
+revision = "a07cc9a04f16550a088caea529712d1d335b0ac1"
+files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
+
+[[hf_local]]
+repo = "meta-llama/Llama-3.2-3B-Instruct"
+revision = "0cb88a4f764b7a12671c53f0838cd831a0843b95"
+files = ["tokenizer.json", "tokenizer_config.json"]

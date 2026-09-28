@@ -1,4 +1,4 @@
-//! Shared helpers: the decider-2b files `cargo xtask fetch` put into `tmp/hf`, and Python-style digests.
+//! Shared helpers: the Hub files `cargo xtask fetch` put into `tmp/hf`, and Python-style digests.
 #![allow(dead_code, reason = "each test file uses a different subset")]
 
 use std::path::PathBuf;
@@ -7,19 +7,26 @@ use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use tokenizers::Tokenizer;
 
-pub const DECIDER_2B: &str = "models--Mapika--decider-2b-GGUF";
+pub const DECIDER_2B: &str = "Mapika/decider-2b-GGUF";
 
-/// A file of the pinned decider-2b-GGUF snapshot in `$HF_HOME/hub` (cargo's `[env]` points it at `tmp/hf`).
-pub fn decider_2b_file(name: &str) -> Result<PathBuf> {
+/// The pinned snapshot directory of `repo` (`org/name`) in `$HF_HOME/hub` (cargo's `[env]` points it at `tmp/hf`).
+pub fn hf_snapshot(repo: &str) -> Result<PathBuf> {
     let hf_home = std::env::var_os("HF_HOME").context("HF_HOME is not set")?;
-    let repo = PathBuf::from(hf_home).join("hub").join(DECIDER_2B);
-    let rev = std::fs::read_to_string(repo.join("refs/main")).with_context(|| {
+    let dir = PathBuf::from(hf_home)
+        .join("hub")
+        .join(format!("models--{}", repo.replace('/', "--")));
+    let rev = std::fs::read_to_string(dir.join("refs/main")).with_context(|| {
         format!(
             "{} has no refs/main; run `cargo xtask fetch`",
-            repo.display()
+            dir.display()
         )
     })?;
-    let path = repo.join("snapshots").join(rev.trim()).join(name);
+    Ok(dir.join("snapshots").join(rev.trim()))
+}
+
+/// A file of the pinned snapshot of `repo` in `tmp/hf`.
+pub fn hf_file(repo: &str, name: &str) -> Result<PathBuf> {
+    let path = hf_snapshot(repo)?.join(name);
     anyhow::ensure!(
         path.is_file(),
         "{} is missing; run `cargo xtask fetch`",
@@ -28,9 +35,19 @@ pub fn decider_2b_file(name: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-pub fn decider_2b_tokenizer() -> Result<Tokenizer> {
-    let path = decider_2b_file("tokenizer.json")?;
+/// A file of the pinned decider-2b-GGUF snapshot.
+pub fn decider_2b_file(name: &str) -> Result<PathBuf> {
+    hf_file(DECIDER_2B, name)
+}
+
+/// The `tokenizer.json` of the pinned snapshot of `repo`.
+pub fn tokenizer(repo: &str) -> Result<Tokenizer> {
+    let path = hf_file(repo, "tokenizer.json")?;
     Tokenizer::from_file(&path).map_err(|err| anyhow::anyhow!("loading {}: {err}", path.display()))
+}
+
+pub fn decider_2b_tokenizer() -> Result<Tokenizer> {
+    tokenizer(DECIDER_2B)
 }
 
 /// `hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()`.

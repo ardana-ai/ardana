@@ -86,6 +86,11 @@ impl Sandbox {
         &self.tmp
     }
 
+    /// The user's real home, which the guard watches.
+    pub fn real_home(&self) -> &Path {
+        &self.real_home
+    }
+
     /// `tmp/bin`, where fetched tools live; first on every command's `PATH`.
     pub fn bin_dir(&self) -> PathBuf {
         self.tmp.join("bin")
