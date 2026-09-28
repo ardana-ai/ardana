@@ -2,11 +2,10 @@
 //! `crates/ardana-core/tests/prompt.rs` (R2.2) by running decider@23579f7 from
 //! `tmp/src/decider` in a uv venv under `tmp/py/decider-export`.
 
-use std::path::Path;
-
 use anyhow::{Context, Result, bail};
 
 use crate::fetch::{Hf, Manifest};
+use crate::python::{managed_venv, uv};
 use crate::sandbox::Sandbox;
 
 /// The venv's Python and packages; decider 1.6.0 itself runs from the clone.
@@ -46,16 +45,12 @@ pub fn export_decider(sandbox: &Sandbox) -> Result<()> {
 
     let venv = sandbox.tmp().join("py/decider-export");
     let python = venv.join("bin/python");
-    if !managed(sandbox, &venv) {
-        run(sandbox
-            .command("uv")
-            .env("UV_PYTHON_PREFERENCE", "only-managed")
+    if !managed_venv(sandbox, &venv) {
+        run(uv(sandbox)
             .args(["venv", "--quiet", "--clear", "--python", PYTHON])
             .arg(&venv))?;
     }
-    run(sandbox
-        .command("uv")
-        .env("UV_PYTHON_PREFERENCE", "only-managed")
+    run(uv(sandbox)
         .args(["pip", "install", "--quiet", "--python"])
         .arg(&python)
         .args(PACKAGES))?;
@@ -68,16 +63,6 @@ pub fn export_decider(sandbox: &Sandbox) -> Result<()> {
         .arg(&decider)
         .arg(&tokenizer_dir)
         .arg(root.join(OUT_DIR)))
-}
-
-/// Whether `venv` exists and runs a uv-managed interpreter from `tmp/uv/python`, never the system's.
-fn managed(sandbox: &Sandbox, venv: &Path) -> bool {
-    let managed_dir = sandbox.tmp().join("uv/python");
-    std::fs::read_to_string(venv.join("pyvenv.cfg")).is_ok_and(|cfg| {
-        cfg.lines()
-            .filter_map(|line| line.strip_prefix("home = "))
-            .any(|home| Path::new(home.trim()).starts_with(&managed_dir))
-    })
 }
 
 fn run(cmd: &mut std::process::Command) -> Result<()> {

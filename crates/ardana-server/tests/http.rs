@@ -1,0 +1,464 @@
+//! R5.4 to R5.6 and R5.8 through the router: the API surface, model resolution, every error shape, and the
+//! `ardana serve` defaults. Requests are read with decider-2b's real tokenizer and profile; the weights are the fake
+//! runtime's, since these tests check what happens around a decode (the real model runs in `cargo xtask e2e
+//! jevcompat|sdk|jevbench`).
+
+mod common;
+
+use std::time::Duration;
+
+use anyhow::Result;
+use ardana_server::{ModelOptions, ServeArgs, router};
+use clap::{CommandFactory, Parser};
+use common::{Reply, eventually, get, models, post, send};
+use serde_json::{Value, json};
+
+fn noul(instructions: &str) -> Value {
+    json!({"type": "noul", "instructions": instructions})
+}
+
+/// A body of `n` repetitions of a one-token word, as a state.
+fn words(n: usize) -> String {
+    " word".repeat(n)
+}
+
+/// `{"detail": {"error_type": <error_type>, "message": str}}`; returns the message.
+fn error_shape(reply: &Reply, error_type: &str) -> String {
+    let detail = &reply.body["detail"];
+    assert_eq!(detail["error_type"], error_type, "{reply:?}");
+    assert_eq!(detail.as_object().map(|d| d.len()), Some(2), "{reply:?}");
+    detail["message"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no message: {reply:?}"))
+        .to_string()
+}
+
+/// A 422 `{"detail": [{"loc": ["body", ..], "msg": str, "type": str}, ..]}`.
+fn validation_shape(reply: &Reply) {
+    assert_eq!(reply.status, 422, "{reply:?}");
+    let items = reply.body["detail"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{reply:?}"));
+    assert!(!items.is_empty(), "{reply:?}");
+    for item in items {
+        assert_eq!(item["loc"][0], "body", "{reply:?}");
+        assert!(
+            item["msg"].is_string() && item["type"].is_string(),
+            "{reply:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn surface() -> Result<()> {
+    let (fake, models) = models(
+        "http-surface",
+        &["decider-2b", "stock"],
+        ModelOptions::default(),
+    )?;
+    let app = router(models.clone(), None);
+
+    let health = get(&app, "/health").await?;
+    assert_eq!(health.status, 200);
+    assert_eq!(health.body["status"], "ok");
+    assert_eq!(health.body["x_loaded"], json!([]));
+    let temperatures = &health.body["x_temperature_by_type"]["decider-2b"];
+    for t in ["choice", "noul", "score"] {
+        assert!(
+            temperatures[t].as_f64().is_some_and(|v| v > 0.0),
+            "{health:?}"
+        );
+    }
+
+    let listed = get(&app, "/v1/models").await?;
+    assert_eq!(listed.status, 200);
+    assert_eq!(
+        listed.body,
+        json!({"models": [
+            {"name": "decider-2b", "description": "hf.co/test/decider-2b-GGUF", "release_date": "2026-09-24"},
+            {"name": "stock", "description": "hf.co/test/stock-GGUF", "release_date": "2026-09-28"},
+        ]})
+    );
+    assert_eq!(fake.loads(), 0, "listing loads nothing");
+
+    let empty = post(
+        &app,
+        &json!({"model": "jev-latest", "state": "s", "questions": {}}),
+    )
+    .await?;
+    assert_eq!(empty.status, 200, "{empty:?}");
+    assert_eq!(empty.body["model"], "decider-2b");
+    assert_eq!(empty.body["answers"], json!({}));
+    assert_eq!(empty.body["usage"]["output_tokens"], 0);
+    assert_eq!(
+        get(&app, "/health").await?.body["x_loaded"],
+        json!(["decider-2b"])
+    );
+
+    let answered = post(
+        &app,
+        &json!({"state": "s", "questions": {"q": noul("Is it?")}}),
+    )
+    .await?;
+    assert_eq!(answered.status, 200, "{answered:?}");
+    assert_eq!(
+        answered.body["answers"]["q"],
+        json!({"type": "noul", "noul": 0.5})
+    );
+
+    for (method, uri) in [
+        ("GET", "/v1/nope"),
+        ("POST", "/v1/systemone/extra"),
+        ("GET", "/v1"),
+    ] {
+        let reply = send(&app, method, uri, &[], Vec::new()).await?;
+        assert_eq!(
+            (reply.status.as_u16(), &reply.body),
+            (404, &json!({"detail": "Not Found"})),
+            "{method} {uri}"
+        );
+    }
+    let keyed = router(models, Some("secret".into()));
+    let reply = get(&keyed, "/v1/nope").await?;
+    assert_eq!(
+        (reply.status.as_u16(), reply.body),
+        (404, json!({"detail": "Not Found"}))
+    );
+    let reply = get(&app, "/v1/systemone").await?;
+    assert_eq!(
+        (reply.status.as_u16(), reply.body),
+        (405, json!({"detail": "Method Not Allowed"}))
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn model_resolution() -> Result<()> {
+    let (_, models) = models(
+        "http-model-resolution",
+        &["alpha", "beta"],
+        ModelOptions::default(),
+    )?;
+    let app = router(models, None);
+    let ask = |model: Option<&str>| {
+        let mut body = json!({"state": "s", "questions": {}});
+        if let Some(model) = model {
+            body["model"] = json!(model);
+        }
+        body
+    };
+    for (model, answered_by) in [
+        (None, "alpha"),
+        (Some("jev-latest"), "alpha"),
+        (Some("jev-1.13.0"), "alpha"),
+        (Some("alpha"), "alpha"),
+        (Some("beta"), "beta"),
+    ] {
+        let reply = post(&app, &ask(model)).await?;
+        assert_eq!(
+            (reply.status.as_u16(), &reply.body["model"]),
+            (200, &json!(answered_by)),
+            "{model:?}"
+        );
+    }
+    let unknown = post(&app, &ask(Some("gamma"))).await?;
+    assert_eq!(unknown.status, 404);
+    assert_eq!(
+        error_shape(&unknown, "not_found_error"),
+        "no model named \"gamma\"; available: alpha, beta"
+    );
+
+    let opts = ModelOptions {
+        default_model: Some("beta".into()),
+        ..ModelOptions::default()
+    };
+    let (_, models) = common::models("http-model-resolution-default", &["alpha", "beta"], opts)?;
+    let app = router(models, None);
+    for model in [None, Some("jev-latest"), Some("jev-anything")] {
+        assert_eq!(
+            post(&app, &ask(model)).await?.body["model"],
+            "beta",
+            "{model:?}"
+        );
+    }
+
+    let opts = ModelOptions {
+        default_model: Some("gamma".into()),
+        ..ModelOptions::default()
+    };
+    let err = common::models("http-model-resolution-bad-default", &["alpha"], opts).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("no model named \"gamma\"; available: alpha"),
+        "{err}"
+    );
+
+    let (_, models) = common::models("http-model-resolution-empty", &[], ModelOptions::default())?;
+    let reply = post(&router(models, None), &ask(Some("jev-latest"))).await?;
+    assert_eq!(reply.status, 404);
+    assert!(
+        error_shape(&reply, "not_found_error").contains("the registry is empty"),
+        "{reply:?}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn errors() -> Result<()> {
+    let opts = ModelOptions {
+        max_queued_rows: 2,
+        ..ModelOptions::default()
+    };
+    let (fake, models) = models("http-errors", &["decider-2b"], opts)?;
+    let app = router(models.clone(), None);
+    let json_type = [("content-type", "application/json")];
+
+    // 422: every malformed body, in FastAPI's shape.
+    let base = json!({"state": "s", "questions": {"q": noul("Is it?")}});
+    // (case, content type, body)
+    let mut invalid: Vec<(&str, &str, Vec<u8>)> = vec![
+        (
+            "not JSON",
+            "application/json",
+            br#"{"state": "s", "questions": {"#.to_vec(),
+        ),
+        ("empty body", "application/json", Vec::new()),
+        ("not an object", "application/json", b"[]".to_vec()),
+        ("text/plain", "text/plain", serde_json::to_vec(&base)?),
+    ];
+    let edits: [(&str, Value); 9] = [
+        ("missing state", json!({"questions": {"q": noul("Is it?")}})),
+        ("missing questions", json!({"state": "s"})),
+        ("questions a list", json!({"state": "s", "questions": []})),
+        (
+            "model a number",
+            json!({"model": 5, "state": "s", "questions": {}}),
+        ),
+        (
+            "missing type",
+            json!({"state": "s", "questions": {"q": {"instructions": "Is it?"}}}),
+        ),
+        (
+            "unknown type",
+            json!({"state": "s", "questions": {"q": {"type": "boolean", "instructions": "Is it?"}}}),
+        ),
+        (
+            "choice without options",
+            json!({"state": "s", "questions": {"q": {"type": "choice", "instructions": "Which?", "criteria": {}}}}),
+        ),
+        (
+            "score with one level",
+            json!({"state": "s", "questions": {"q": {"type": "score", "instructions": "How?", "criteria": ["low"]}}}),
+        ),
+        (
+            "question not an object",
+            json!({"state": "s", "questions": {"q": "Is it?"}}),
+        ),
+    ];
+    for (label, body) in &edits {
+        invalid.push((label, "application/json", serde_json::to_vec(body)?));
+    }
+    for (label, content_type, body) in invalid {
+        let headers = [("content-type", content_type)];
+        let reply = send(&app, "POST", "/v1/systemone", &headers, body).await?;
+        println!("{label}: {} {}", reply.status, reply.body);
+        validation_shape(&reply);
+    }
+    let reply = post(&app, &json!({"state": "s", "questions": {"q": "Is it?"}})).await?;
+    assert_eq!(
+        reply.body,
+        json!({"detail": [{"loc": ["body", "questions", "q"], "msg": "question must be an object, got 'Is it?'", "type": "value_error"}]})
+    );
+
+    // 413: the context window and decider's limits, all before anything loads.
+    let too_large: [(&str, Value, &str); 4] = [
+        (
+            "state over the context window",
+            json!({"state": words(41_000), "questions": {"q": noul("Is it?")}}),
+            "context window",
+        ),
+        (
+            "1,025 rows",
+            json!({"state": "s", "questions": (0..1025).map(|i| (format!("q{i}"), noul("Is it?"))).collect::<serde_json::Map<_, _>>()}),
+            "too many questions: the request expands to 1025 scoring rows, the limit is 1024",
+        ),
+        (
+            "a row over 36,864 tokens",
+            json!({"state": words(38_000), "questions": {"q": noul("Is it?")}}),
+            "too many tokens: one row has",
+        ),
+        (
+            "over 1,048,576 request tokens",
+            json!({"state": words(35_000), "questions": (0..31).map(|i| (format!("q{i}"), noul("Is it?"))).collect::<serde_json::Map<_, _>>()}),
+            "too many tokens: the request has",
+        ),
+    ];
+    for (label, body, expected) in &too_large {
+        let reply = post(&app, body).await?;
+        assert_eq!(reply.status, 413, "{label}: {reply:?}");
+        let message = error_shape(&reply, "request_too_large");
+        assert!(message.contains(expected), "{label}: {message}");
+    }
+    let huge = vec![b' '; ardana_server::BODY_LIMIT + 1];
+    let reply = send(&app, "POST", "/v1/systemone", &json_type, huge).await?;
+    assert_eq!(reply.status, 413);
+    assert!(
+        error_shape(&reply, "request_too_large").contains("32 MiB"),
+        "{reply:?}"
+    );
+    assert_eq!(
+        (fake.loads(), fake.decoded().len()),
+        (0, 0),
+        "nothing loaded or decoded"
+    );
+
+    // 503: beyond --max-queued-rows while two rows wait on a held decode.
+    fake.close();
+    let two_rows =
+        json!({"state": "s", "questions": {"a": noul("Is it?"), "b": noul("Is it not?")}});
+    let first = tokio::spawn({
+        let app = app.clone();
+        async move { post(&app, &two_rows).await }
+    });
+    eventually("two rows are queued", || models.queued_rows() == 2).await?;
+    let busy = post(&app, &base).await?;
+    assert_eq!(busy.status, 503, "{busy:?}");
+    assert_eq!(
+        busy.headers
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok()),
+        Some("1")
+    );
+    assert!(
+        error_shape(&busy, "overloaded_error").contains("the limit is 2"),
+        "{busy:?}"
+    );
+    fake.open();
+    assert_eq!(first.await??.status, 200);
+    assert_eq!(models.queued_rows(), 0);
+    assert_eq!(post(&app, &base).await?.status, 200);
+
+    // 403 and 401 with a key; /health stays open.
+    let keyed = router(models, Some("secret".into()));
+    let body = serde_json::to_vec(&base)?;
+    for (headers, status) in [
+        (vec![], 403),
+        (vec![("authorization", "Bearer ")], 403),
+        (vec![("authorization", "Bearer wrong")], 401),
+        (vec![("authorization", "Basic c2VjcmV0")], 401),
+    ] {
+        let mut headers = headers;
+        headers.push(("content-type", "application/json"));
+        let reply = send(&keyed, "POST", "/v1/systemone", &headers, body.clone()).await?;
+        assert_eq!(reply.status, status, "{headers:?}: {reply:?}");
+        error_shape(&reply, "authentication_error");
+    }
+    let reply = send(
+        &keyed,
+        "GET",
+        "/v1/models",
+        &[("authorization", "Bearer wrong")],
+        Vec::new(),
+    )
+    .await?;
+    assert_eq!(reply.status, 401);
+    let authorized = [
+        ("authorization", "Bearer secret"),
+        ("content-type", "application/json"),
+    ];
+    assert_eq!(
+        send(&keyed, "POST", "/v1/systemone", &authorized, body)
+            .await?
+            .status,
+        200
+    );
+    assert_eq!(get(&keyed, "/health").await?.status, 200);
+    Ok(())
+}
+
+/// The binary's `serve` flags, parsed as `ardana serve` parses them.
+#[derive(Debug, Parser)]
+struct Serve {
+    #[command(flatten)]
+    args: ServeArgs,
+}
+
+#[test]
+fn defaults() -> Result<()> {
+    let args = Serve::try_parse_from(["serve"])?.args;
+    assert_eq!(args.addr(), "127.0.0.1:8000");
+    assert_eq!(args.keep_alive, Duration::from_secs(300));
+    let opts = args.model_options();
+    assert_eq!(
+        (
+            opts.max_loaded_models,
+            opts.max_queued_rows,
+            opts.default_model
+        ),
+        (1, 4096, None)
+    );
+
+    let args = Serve::try_parse_from([
+        "serve",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "9000",
+        "--api-key",
+        "k",
+        "--default-model",
+        "m",
+        "--keep-alive",
+        "30s",
+        "--max-loaded-models",
+        "2",
+        "--max-queued-rows",
+        "8",
+    ])?
+    .args;
+    assert_eq!(args.addr(), "0.0.0.0:9000");
+    assert_eq!(args.api_key.as_deref(), Some("k"));
+    let opts = args.model_options();
+    assert_eq!(opts.default_model.as_deref(), Some("m"));
+    assert_eq!(
+        (
+            opts.keep_alive,
+            opts.max_loaded_models,
+            opts.max_queued_rows
+        ),
+        (Duration::from_secs(30), 2, 8)
+    );
+    assert_eq!(
+        Serve::try_parse_from(["serve", "--host", "::1"])?
+            .args
+            .addr(),
+        "[::1]:8000"
+    );
+    assert!(Serve::try_parse_from(["serve", "--max-loaded-models", "0"]).is_err());
+
+    let command = Serve::command();
+    let api_key = command
+        .get_arguments()
+        .find(|arg| arg.get_id() == "api_key")
+        .expect("an --api-key argument");
+    assert_eq!(
+        api_key.get_env().and_then(|e| e.to_str()),
+        Some("ARDANA_API_KEY")
+    );
+
+    for (text, duration) in [
+        ("250ms", 250),
+        ("45", 45_000),
+        ("45s", 45_000),
+        ("5m", 300_000),
+        ("1h", 3_600_000),
+    ] {
+        assert_eq!(
+            ardana_server::parse_duration(text),
+            Ok(Duration::from_millis(duration)),
+            "{text}"
+        );
+    }
+    assert!(ardana_server::parse_duration("5 days").is_err());
+    Ok(())
+}

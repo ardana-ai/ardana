@@ -8,41 +8,55 @@ runtime, and serving the Leptos playground's `dist` from memory with `memory-ser
 
 ## Versions
 - `axum` 0.8 — router, extractors and `axum::serve`; 0.8 changed path syntax to `/{param}` (docs.rs shows 0.8.9)
-- `tower-http` 0.7 — trace and compression middleware, all behind opt-in cargo features (docs.rs shows 0.7.1)
+- `tower-http` 0.7 — compression middleware (`compression-br`, `compression-gzip`), all behind opt-in cargo features
+  (docs.rs shows 0.7.1)
 - `memory-serve` 2.4 — embeds `crates/ardana-playground/dist` into the binary; requires axum ^0.8
 - `tokio` 1 (runtime) — multi-thread runtime, `TcpListener`, signals, `spawn_blocking`, `sync::mpsc`
 - `tower` 0.5 (dev) — `ServiceExt::oneshot` in tests; needs the `util` feature
+- `clap` 4 with `env` — `ardana_server::ServeArgs`, the `ardana serve` flags, reads `ARDANA_API_KEY`
 
 ## Rules
 - Write routes in 0.8 syntax: `/{param}` and `/{*rest}`; the old `/:param` and `/*rest` forms panic at startup.
 - Keep the route table explicit: `POST /v1/systemone`, `GET /v1/models`, `GET /health`, plus the playground. Put the
   `/v1` routes in their own `Router` mounted with `nest("/v1", ..)` and give that router its own `fallback` returning
-  404 `{"detail":"Not Found"}`, so unknown `/v1/*` paths never fall through to the playground's `index.html`.
+  404 `{"detail":"Not Found"}`, so unknown `/v1/*` paths never fall through to the playground's `index.html`, plus a
+  `method_not_allowed_fallback` returning 405 `{"detail":"Method Not Allowed"}` (FastAPI's bodies).
 - Never call `.fallback(..)` on the top-level router: the memory-serve router carries the SPA fallback, and
   `Router::merge` panics when both merged routers have a fallback.
 - Handlers are async functions that take extractors and return `Result<T, ApiError>` where both sides implement
   `IntoResponse`. Put the body extractor (`Json<T>`) last in the argument list; the body can be consumed once.
 - Define one `ApiError` enum in `ardana-server` that implements `IntoResponse` and is the only place status codes and
   error bodies are built. Required mappings (W5 R5.4-R5.6):
-  - validation (`DecideError::Invalid { loc, msg }`, JSON rejections) -> 422 `{"detail":[{"loc","msg","type"}]}`
-  - context overflow and decider's row/token limits (`DecideError::Capacity`) -> 413, message contains
-    "context window" for the context case; checked from the `Plan` before any decode
-  - unknown `model` -> 404 whose message lists `Registry::names()`
-  - queue over `--max-queued-rows` -> 503 with a `Retry-After` header
-  - missing key -> 403, wrong key -> 401, both `{"detail":{"error_type","message"}}`
-  - only runtime failures (`DecideError::Runtime`, a panicked worker) may produce 5xx
+  - validation (`DecideError::Invalid { loc, msg }` as type `value_error`, body errors) -> 422
+    `{"detail":[{"loc","msg","type"}]}`
+  - every other error is `{"detail":{"error_type","message"}}`, TypeSafe's live shape
+  - context overflow and decider's row/token limits (`DecideError::Capacity`), and a body over the limit -> 413
+    `request_too_large`, message contains "context window" for the context case; checked from the `Plan` before
+    any load or decode
+  - unknown `model` -> 404 `not_found_error` whose message lists `Registry::names()`
+  - queue over `--max-queued-rows` -> 503 `overloaded_error` with `Retry-After: 1`
+  - missing (or empty) bearer key -> 403, another key or scheme -> 401, both `authentication_error`
+  - only the model files, the runtime and the worker (`DecideError::Runtime`, a panicked worker) may produce 5xx
+    (`api_error`)
 - Do not accept axum's default `Json` rejections: they answer 400 for a syntax error and 415 for a missing
-  content type. Take `Result<Json<SystemOneRequest>, JsonRejection>` (or a small custom `FromRequest` extractor) and
-  convert every rejection into `ApiError`; use `JsonRejection::status()`/`body_text()` only to classify, never as the
-  wire body.
-- Set the body limit on purpose with `DefaultBodyLimit::max(..)` on the `/v1` router; axum's default is 2 MB. A body
-  over the limit becomes a 413 with a JSON `detail`, not axum's plain-text body.
+  content type. `POST /v1/systemone` takes `Result<Bytes, BytesRejection>` and reads the body as decider's FastAPI
+  does (`crates/ardana-server/src/body.rs`): JSON when the `Content-Type` is absent, `application/json` or
+  `application/*+json`, any other type is `model_attributes_type`; an empty body is `missing` at `["body"]`; a syntax
+  error is `json_invalid` at `["body", <char offset>]`; missing `state`/`questions` are `missing`, a non-object
+  `questions` is `dict_type`, a non-string `model` is `string_type`. Use a rejection's `status()`/`body_text()` only
+  to classify, never as the wire body.
+- Set the body limit on purpose with `DefaultBodyLimit::max(BODY_LIMIT)` (32 MiB) on the `/v1` router; axum's default
+  of 2 MB is below what decider's 1,048,576-token request limit needs. A body over the limit becomes a 413 with a
+  JSON `detail`, not axum's plain-text body.
 - Return headers with tuples, e.g. `(StatusCode::SERVICE_UNAVAILABLE, [(header::RETRY_AFTER, "1")], Json(body))`.
 - Share state through `Router::with_state(AppState)` and the `State` extractor. `AppState` is a cheap `Clone`
   holding `Arc`s (registry, model manager, config); state is cloned per request, so never put large owned data in it.
 - Wire auth as `middleware::from_fn_with_state` added with `route_layer` on the `/v1` router only, so unmatched paths
   still 404 instead of 401/403. `/health` and the playground stay open. Key comes from `--api-key` or
-  `ARDANA_API_KEY`; when unset the API is open.
+  `ARDANA_API_KEY` (clap `env`, `hide_env_values`); when unset the API is open and ignores `Authorization` headers.
+  Compare keys without an early exit.
+- The `ardana serve` flags are `ardana_server::ServeArgs` (`#[derive(clap::Args)]`), flattened into the binary's
+  `serve` subcommand, so `crates/ardana-server/tests/http.rs` tests their defaults.
 - Bind `127.0.0.1:8000` by default via `tokio::net::TcpListener::bind`; only `--host`/`--port` change it. Never
   default to `0.0.0.0`.
 - Serve with `axum::serve(listener, app).with_graceful_shutdown(shutdown_signal())`, where `shutdown_signal` awaits
@@ -50,31 +64,36 @@ runtime, and serving the Leptos playground's `dist` from memory with `memory-ser
   work, let queued decisions finish, then drop model workers.
 - Middleware order: `Router::layer` wraps bottom-to-top, `tower::ServiceBuilder` runs top-to-bottom; prefer one
   `ServiceBuilder` per router so the order reads as written. Layers only apply to routes added before `.layer(..)`.
-- tower-http layers in use: `TraceLayer::new_for_http()` on the whole app (feature `trace`, needs the tracing
-  subscriber the binary installs; never log request bodies, states can be private) and `CompressionLayer::new()` on
-  the `/v1` router only (features `compression-br`, `compression-gzip`). Do not stack `CompressionLayer` over the
-  memory-serve router; memory-serve already serves brotli/gzip variants itself.
+- tower-http layers in use: `CompressionLayer::new()` on the `/v1` router only (features `compression-br`,
+  `compression-gzip`). Do not stack `CompressionLayer` over the memory-serve router; memory-serve already serves
+  brotli/gzip variants itself. No `TraceLayer` yet: it only emits `tracing` events, and the binary installs no
+  subscriber (`tracing-subscriber` is not a plan-named dependency); when one is added, never log request bodies,
+  states can be private.
 - No `CorsLayer`: the playground is same-origin (Q15). Add CORS only if a later decision allows other origins, and
   then with explicit origins, never `Any`.
 - No `TimeoutLayer` on `/v1/systemone` shorter than a worst-case queued decision; admission control (503) bounds
   waiting, and a timeout would not stop inference already running.
 
-> Plan note: axum's default request body limit is 2 MB, below decider's 1,048,576-token request cap that W5 R5.6 checks before decoding; W5 must set `DefaultBodyLimit::max` explicitly so large states reach the token checks instead of a generic 413.
-
 ## Inference off the async runtime
 - Never call `LoadedModel::slot_logits`, `Runtime::load` or tokenizer-heavy planning inline in a handler; they block
   for milliseconds to seconds and starve the runtime.
 - Give each loaded model one dedicated `std::thread` that owns the `Box<dyn LoadedModel>` (`Send`, needs `&mut`). Jobs
-  go in over a bounded `tokio::sync::mpsc` channel (FIFO) received with `blocking_recv`; each job carries a
-  `tokio::sync::oneshot` sender for its `Result<SystemOneResponse, DecideError>`. `blocking_recv` panics inside async
-  code, so it runs only on that worker thread.
+  go in over a bounded `tokio::sync::mpsc` channel (FIFO, capacity `--max-queued-rows`) received with
+  `blocking_recv`; each job carries a `tokio::sync::oneshot` sender for its `Result<SystemOneResponse, DecideError>`.
+  `blocking_recv` panics inside async code, so it runs only on that worker thread. The worker runs each job under
+  `catch_unwind`, answers a panic as a runtime error and stops; a stopped worker is dropped from the loaded set.
+- Plan every request (tokenizer, validation, 413 limits) before admission and before any load: each model's
+  `Decider` (tokenizer and profile) is built on its first request and kept apart from its weights.
 - Admission counts queued rows, not requests: keep an atomic queued-row counter per server, reject with 503 before
-  enqueueing when `queued + plan.rows > max_queued_rows`, and decrement when the job finishes. Treat
-  `TrySendError::Full` as the same 503.
+  loading or enqueueing when `queued + plan.rows > max_queued_rows`, and decrement when the request ends (a guard's
+  `Drop`). Treat `TrySendError::Full` as the same 503.
 - Use `tokio::task::spawn_blocking` only for bounded one-off work (model load, `hf`/registry file reads). Its tasks
   cannot be aborted once running, and runtime shutdown waits for them.
 - LRU eviction and the `--keep-alive` idle unload close the worker's channel; the worker drops the model after its
-  queue drains, so eviction never cancels an admitted request.
+  queue drains, so eviction never cancels an admitted request. Loads run one at a time under the loaded-set lock.
+  A request holds a lease (in-flight count, last use) from acquiring the worker to its answer; one tokio task per
+  loaded model sleeps until `last use + keep_alive` and unloads the model only when it holds no lease, keeping only
+  `Weak` references so it never keeps a model alive.
 
 ## Embedded playground (memory-serve)
 - List `memory-serve` in both `[dependencies]` and `[build-dependencies]` of `ardana-server`; the build script and
@@ -93,13 +112,14 @@ runtime, and serving the Leptos playground's `dist` from memory with `memory-ser
 
 ## Testing
 - Test handlers in `crates/ardana-server/tests/*.rs` without binding a port: build the app with a fake `Runtime`
-  and call `app.oneshot(Request::builder()...body(Body::empty())?)` from `tower::ServiceExt`; read bodies with
-  `http_body_util::BodyExt::collect(..).await?.to_bytes()`. For several requests on one app, use
-  `into_service()` plus `ready().await?.call(req)`.
+  and call `app.clone().oneshot(Request::builder()...body(Body::empty())?)` from `tower::ServiceExt`; read bodies
+  with `axum::body::to_bytes(body, usize::MAX)`. The fake runtime (`tests/common/mod.rs`) counts loads and drops and
+  can hold decodes; requests are read with decider-2b's real tokenizer and profile from `tmp/hf`.
 - Assert status, headers (`Retry-After`, `Content-Type`) and the exact JSON shape of every error body, including
   that no bad-input case returns 5xx.
 - Fake runtimes are for lifecycle and error-path tests only; end-to-end checks (`cargo xtask e2e jevcompat|sdk|
-  jevbench`) run the real binary on decider-2b from `tmp/hf`.
+  jevbench`) run the release binary on decider-2b pulled offline from `tmp/hf`, each in its own `ARDANA_HOME` under
+  `tmp/e2e/<suite>`, on a free port of 127.0.0.1, stopped with SIGTERM afterwards.
 
 ## Sources
 - https://docs.rs/axum/0.8 — crate overview, handlers, extractors, state sharing, `axum::serve`, tokio features

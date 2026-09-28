@@ -8,6 +8,7 @@ use std::process::Command;
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 
+use crate::python::{MIN_PYTHON, managed_venv, uv};
 use crate::sandbox::Sandbox;
 
 #[derive(Debug, Deserialize)]
@@ -29,9 +30,10 @@ pub struct Tool {
     /// A literal version, or `cargo-lock:<crate>` for the version `Cargo.lock` resolves.
     pub version: String,
     pub source: Source,
-    /// `github`: the release asset, a `.tar.gz` with a `.sha256` next to it.
+    /// `github`: the release asset, a `.tar.gz` with a `.sha256` next to it. `uv-venv`: a requirements source
+    /// inside `tmp/` (a clone's `pyproject.toml`) installed instead of `<name>==<version>`.
     pub url: Option<String>,
-    /// `github`: the executable inside the archive, linked into `tmp/bin`.
+    /// `github`: the executable inside the archive, linked into `tmp/bin`. `uv-venv`: the venv inside `tmp/`.
     pub path: Option<String>,
     /// `git`: the full commit checked out into `tmp/src/<name>`.
     pub rev: Option<String>,
@@ -46,6 +48,10 @@ pub enum Source {
     Github,
     /// A git repository at `url`, checked out at `rev` into `tmp/src/<name>`.
     Git,
+    /// `uv tool install <name>==<version>` into `UV_TOOL_DIR`, its executables in `tmp/bin`.
+    UvTool,
+    /// A uv venv at `tmp/<path>` holding `<name>==<version>`, or the requirements `url` names.
+    UvVenv,
 }
 
 impl Source {
@@ -54,6 +60,8 @@ impl Source {
             Source::Cargo => "cargo",
             Source::Github => "github",
             Source::Git => "git",
+            Source::UvTool => "uv-tool",
+            Source::UvVenv => "uv-venv",
         }
     }
 }
@@ -161,6 +169,14 @@ impl Tool {
             Source::Cargo => sandbox.cargo_install(&self.name, version),
             Source::Github => self.install_github(sandbox, version),
             Source::Git => self.install_git(sandbox),
+            Source::UvTool => {
+                let pin = format!("{}=={version}", self.name);
+                let args = [
+                    "tool", "install", "--quiet", "--force", "--python", MIN_PYTHON,
+                ];
+                run_stdout(uv(sandbox).args(args).arg(pin)).map(drop)
+            }
+            Source::UvVenv => self.install_venv(sandbox, version),
         }
     }
 
@@ -192,7 +208,119 @@ impl Tool {
                 }
                 Ok(())
             }
+            Source::UvTool => self.check_uv_tool(sandbox, version),
+            Source::UvVenv => self.check_venv(sandbox, version),
         }
+    }
+
+    /// `uv tool list` shows the tool at `version`, its env runs a uv-managed Python and its executable is in
+    /// `tmp/bin`.
+    fn check_uv_tool(&self, sandbox: &Sandbox, version: &str) -> Result<()> {
+        let listed = run_stdout(uv(sandbox).args(["tool", "list"]))?;
+        let wanted = format!("{} v{version}", self.name);
+        if !listed.lines().any(|line| line.trim() == wanted) {
+            bail!("uv tool list does not show {wanted}");
+        }
+        let env = sandbox.tmp().join("uv/tools").join(&self.name);
+        if !managed_venv(sandbox, &env) {
+            bail!("{} does not run a uv-managed Python", env.display());
+        }
+        let exe = sandbox.bin_dir().join(&self.name);
+        if !exe.is_file() {
+            bail!("{} is missing", exe.display());
+        }
+        Ok(())
+    }
+
+    /// `tmp/<path>`, where a `uv-venv` entry's venv lives.
+    fn venv_dir(&self, sandbox: &Sandbox) -> Result<PathBuf> {
+        let path = self
+            .path
+            .as_deref()
+            .ok_or_else(|| anyhow!("tool {} needs `path`", self.name))?;
+        Ok(sandbox.tmp().join(path))
+    }
+
+    /// The requirements source a `uv-venv` entry installs from, when it names one.
+    fn requirements(&self, sandbox: &Sandbox) -> Option<PathBuf> {
+        self.url.as_deref().map(|file| sandbox.tmp().join(file))
+    }
+
+    /// Creates the venv with a uv-managed Python unless it already runs one, then installs into it.
+    fn install_venv(&self, sandbox: &Sandbox, version: &str) -> Result<()> {
+        let venv = self.venv_dir(sandbox)?;
+        if !managed_venv(sandbox, &venv) {
+            run_stdout(
+                uv(sandbox)
+                    .args(["venv", "--quiet", "--clear", "--python", MIN_PYTHON])
+                    .arg(&venv),
+            )?;
+        }
+        let mut install = uv(sandbox);
+        install
+            .args(["pip", "install", "--quiet", "--python"])
+            .arg(venv.join("bin/python"));
+        match self.requirements(sandbox) {
+            Some(file) => install.arg("-r").arg(file),
+            None => install.arg(format!("{}=={version}", self.name)),
+        };
+        run_stdout(&mut install).map(drop)
+    }
+
+    /// The venv runs a uv-managed Python of at least [`MIN_PYTHON`] and holds `<name>` at `version`, or satisfies
+    /// its requirements without installing anything.
+    fn check_venv(&self, sandbox: &Sandbox, version: &str) -> Result<()> {
+        let venv = self.venv_dir(sandbox)?;
+        if !managed_venv(sandbox, &venv) {
+            bail!("{} is not a venv on a uv-managed Python", venv.display());
+        }
+        let python = venv.join("bin/python");
+        let (major, minor) = MIN_PYTHON
+            .split_once('.')
+            .context("MIN_PYTHON is <major>.<minor>")?;
+        let recent = run_stdout(sandbox.command(&python).arg("-c").arg(format!(
+            "import sys; print(sys.version_info >= ({major}, {minor}))"
+        )))?;
+        if recent.trim() != "True" {
+            bail!("{} is older than Python {MIN_PYTHON}", python.display());
+        }
+        match self.requirements(sandbox) {
+            Some(file) => {
+                let output = uv(sandbox)
+                    .args(["pip", "install", "--dry-run", "--offline", "--python"])
+                    .arg(&python)
+                    .arg("-r")
+                    .arg(&file)
+                    .output()
+                    .context("running uv pip install --dry-run")?;
+                let said = String::from_utf8_lossy(&output.stderr)
+                    + String::from_utf8_lossy(&output.stdout);
+                if !output.status.success() || !said.contains("Would make no changes") {
+                    bail!(
+                        "{} does not satisfy {}: {}",
+                        venv.display(),
+                        file.display(),
+                        said.trim()
+                    );
+                }
+            }
+            None => {
+                let installed = run_stdout(sandbox.command(&python).arg("-c").arg(format!(
+                    "import importlib.metadata as m; print(m.version({:?}))",
+                    self.name
+                )))
+                .with_context(|| format!("{} has no {}", venv.display(), self.name))?;
+                if installed.trim() != version {
+                    bail!(
+                        "{} has {} {}, not {version}",
+                        venv.display(),
+                        self.name,
+                        installed.trim()
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 
     fn rev(&self) -> Result<&str> {

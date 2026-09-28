@@ -1,6 +1,7 @@
 //! The `ardana` commands. `main.rs` only parses arguments and reports errors.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use ardana_api::{SystemOneRequest, SystemOneResponse};
@@ -39,6 +40,9 @@ pub enum Command {
     /// Answer one `/v1/systemone` request with a registry model, or with explicit model files, and print the
     /// response as JSON.
     Run(RunArgs),
+    /// Serve the registry's models over the Jev-compatible API: `POST /v1/systemone`, `GET /v1/models`,
+    /// `GET /health`.
+    Serve(ardana_server::ServeArgs),
 }
 
 #[derive(Debug, Args)]
@@ -143,7 +147,47 @@ pub fn run(cli: Cli) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&response)?);
             Ok(())
         }
+        Command::Serve(args) => serve(&args),
     }
+}
+
+/// `ardana serve`: the registry's models behind the API until Ctrl-C or SIGTERM.
+fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
+    let registry = Registry::open_default()?;
+    let names = registry.names();
+    let models = Arc::new(ardana_server::Models::new(
+        registry,
+        runtimes(),
+        args.model_options(),
+    )?);
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("starting the async runtime")?;
+    runtime.block_on(async {
+        let addr = args.addr();
+        let listener = tokio::net::TcpListener::bind(&addr)
+            .await
+            .with_context(|| format!("binding {addr}"))?;
+        let local = listener.local_addr().context("reading the bound address")?;
+        let served = if names.is_empty() {
+            "no models; add one with `ardana pull`".to_string()
+        } else {
+            format!("models {}", names.join(", "))
+        };
+        eprintln!(
+            "ardana serve: listening on http://{local} ({served}{})",
+            if args.api_key.is_some() {
+                "; API key required"
+            } else {
+                ""
+            }
+        );
+        let app = ardana_server::router(models.clone(), args.api_key.clone());
+        ardana_server::serve(listener, app, models)
+            .await
+            .context("serving")
+    })
 }
 
 /// `ardana pull`: resolve the reference and record it in the registry.

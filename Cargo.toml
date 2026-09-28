@@ -23,7 +23,9 @@ ardana-api = { path = "crates/ardana-api" }
 ardana-core = { path = "crates/ardana-core" }
 ardana-llama = { path = "crates/ardana-llama" }
 ardana-registry = { path = "crates/ardana-registry" }
+ardana-server = { path = "crates/ardana-server" }
 anyhow = "1"
+axum = "0.8"
 clap = { version = "4", features = ["derive"] }
 hf-hub = "=1.0.0"
 indexmap = { version = "2", features = ["serde"] }
@@ -38,3 +40,5 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tokio = "1"
 toml = "1"
+tower = "0.5"
+tower-http = "0.7"

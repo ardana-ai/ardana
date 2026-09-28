@@ -31,8 +31,9 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Current third-party pins: `anyhow` 1, `thiserror` 2 (library error enums), `indexmap` 2 with `serde` (ordered wire
   maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts), `clap` 4
   with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
-  `tokio` 1 (the `ardana` binary runs `pull` on a current-thread runtime with `rt`, `net`, `time`; the server adds
-  its own features), plus the library pins in their own guidelines.
+  `tokio` 1 (the `ardana` binary runs `pull` on a current-thread runtime and `serve` on a multi-thread one;
+  `ardana-server` adds `sync`, `signal`, `macros`), `axum` 0.8, `tower-http` 0.7 and `tower` 0.5 (dev) as
+  `axum.md` pins them, plus the library pins in their own guidelines.
 - Commit `Cargo.lock`: Ardana ships a binary, and the lockfile is also the source of the wasm-bindgen version that
   `xtask/fetch.toml` reads via `cargo-lock:wasm-bindgen`. Pass `--locked` in xtask steps that must not re-resolve.
 
@@ -100,8 +101,11 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 
 ## xtask
 - `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check]`, `build`, `check-deps`,
-  `check-docs`, `export-decider`, `e2e <suite>` (`smoke`, `rust`); keep its dependency set small so `cargo xtask`
-  compiles quickly: downloads go through `curl` and `git` run by `Sandbox::command`, not HTTP crates.
+  `check-docs`, `export-decider`, `e2e <suite>` (`smoke`, `rust`, `jevcompat`, `sdk`, `jevbench`); keep its
+  dependency set small so `cargo xtask` compiles quickly: downloads and HTTP probes go through `curl` and `git` run by
+  `Sandbox::command`, not HTTP crates.
+- The API suites (`jevcompat`, `sdk`, `jevbench`) build `ardana` with `--release --locked` (llama.cpp in a debug build
+  is too slow for 231 JevBench items) and run it through `xtask/src/serve.rs#Server`, which kills the server on drop.
 - Run every external tool through `Sandbox::command` (sandbox env, `PATH` prefixed with `tmp/bin`), and wrap `fetch`,
   `build` and every `e2e` suite in `Sandbox::guarded`.
 - Install cargo tools only through `Sandbox::cargo_install` (`CARGO_HOME=tmp/cargo`, root `tmp`); never

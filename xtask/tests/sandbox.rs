@@ -55,6 +55,7 @@ fn env_points_into_tmp() {
         "UV_PYTHON_INSTALL_DIR",
         "UV_TOOL_DIR",
         "UV_TOOL_BIN_DIR",
+        "UV_PYTHON_BIN_DIR",
         "PIP_CACHE_DIR",
         "npm_config_cache",
         "PLAYWRIGHT_BROWSERS_PATH",

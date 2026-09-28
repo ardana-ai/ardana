@@ -24,16 +24,19 @@ Contracts are binding, its Requirements are the definition of done.
 
 - `cargo xtask env` prints the sandbox environment as shell exports; `cargo xtask env --claude` writes it (all but
   `HOME`) into `.claude/settings.local.json` `env`.
-- `cargo xtask fetch` installs every `xtask/fetch.toml` entry into `tmp/` (tools, research clones in `tmp/src`, Hub
-  models in `tmp/hf/hub`, `[[hf_local]]` copies of gated repos from the real `~/.cache/huggingface/hub`);
+- `cargo xtask fetch` installs every `xtask/fetch.toml` entry into `tmp/` (tools, research clones in `tmp/src`
+  (decider, jevcompat, JevBench), the jevcompat uv tool, the `tmp/py/sdk` and `tmp/py/jevbench` venvs, Hub models in
+  `tmp/hf/hub`, `[[hf_local]]` copies of gated repos from the real `~/.cache/huggingface/hub`);
   `cargo xtask fetch --check` verifies them. Run it before `cargo test`: tests read the decider-2b, Qwen3.5,
   SmolLM3 and Llama 3.2 tokenizers and chat templates from `tmp/hf`.
 - `cargo xtask build` builds the playground `dist/` with the fetched trunk, offline.
 - `cargo xtask check-deps`, `cargo xtask check-docs` check the workspace shape and these documents.
 - `cargo xtask export-decider` regenerates the vendored decider prompt goldens in
   `crates/ardana-core/tests/data/decider/` by running decider@23579f7 from `tmp/src/decider`.
-- `cargo xtask e2e <suite>` runs an end-to-end suite: `smoke`, or `rust` (`cargo test --workspace --
-  --include-ignored`, the real-model tests included).
+- `cargo xtask e2e <suite>` runs an end-to-end suite: `smoke`, `rust` (`cargo test --workspace --
+  --include-ignored`, the real-model tests included), or one of the API suites against a release `ardana serve` on
+  decider-2b: `jevcompat` (jevcompat 0.1.0, open and with a key, every MUST must pass), `sdk` (typesafe-sdk 0.7.2
+  parses `ticket.json`) and `jevbench` (231 public items, zero failed requests; output in `tmp/evals/jevbench/`).
 - `ardana pull <ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model in
   `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo); refs are `hf.co/<org>/<repo>[:<quant>]`
   (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]` (read in place from
@@ -43,6 +46,10 @@ Contracts are binding, its Requirements are the definition of done.
   <tokenizer.json> [--config <decider_config.json>] [--layout plain|chat] --request <file>` with explicit files; both
   take `[--gpu-layers -1|0] [--n-ctx N]` and print one `/v1/systemone` response as JSON. `--layout chat` reads the
   chat template next to the tokenizer, and without `--config` the model gets the stock profile.
+- `ardana serve [--host 127.0.0.1] [--port 8000] [--api-key K | ARDANA_API_KEY=K] [--default-model NAME]
+  [--keep-alive 5m] [--max-loaded-models 1] [--max-queued-rows 4096]` serves the registry's models:
+  `POST /v1/systemone`, `GET /v1/models`, `GET /health`. `jev-latest` and every `jev-*` name mean the default model;
+  models load on their first request and unload after `--keep-alive` idle.
 - Before reporting work: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo build --workspace`, `cargo test --workspace`, plus the item's Verify command.
 

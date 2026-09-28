@@ -10,6 +10,12 @@
 #            to tmp/tools/<name>/<version>, with `path` inside it linked into tmp/bin
 #            `git`: the repository at `url`, checked out at the full commit `rev` into
 #            tmp/src/<name> (research clones)
+#            `uv-tool`: `uv tool install <name>==<version>` on a uv-managed Python 3.10+
+#            into UV_TOOL_DIR, its executables in tmp/bin
+#            `uv-venv`: a venv at tmp/<path> on a uv-managed Python 3.10+ holding
+#            <name>==<version>, or, when `url` names a requirements source inside tmp/
+#            (a research clone's pyproject.toml), that source's declared dependencies;
+#            `version` then names the source's pinned revision
 #
 # [[hf]] fields:
 #   repo      `org/name` on huggingface.co
@@ -45,6 +51,38 @@ version = "1.6.0"
 source = "git"
 url = "https://github.com/Mapika/decider"
 rev = "23579f7a7e8f10e1045be492af3c1c05a005d67c"
+
+[[tool]]
+name = "jevcompat"
+version = "0.1.0"
+source = "git"
+url = "https://github.com/mandu5/jevcompat"
+rev = "0a9752b45ffa0607c205ca51cf8c3852fd8663c1"
+
+[[tool]]
+name = "jevbench"
+version = "fd54ea7"
+source = "git"
+url = "https://github.com/fstandhartinger/jevbench"
+rev = "fd54ea7dc02bbe29c6ac8f6e015a54cdcff26805"
+
+[[tool]]
+name = "jevcompat"
+version = "0.1.0"
+source = "uv-tool"
+
+[[tool]]
+name = "typesafe-sdk"
+version = "0.7.2"
+source = "uv-venv"
+path = "py/sdk"
+
+[[tool]]
+name = "jevbench"
+version = "fd54ea7"
+source = "uv-venv"
+path = "py/jevbench"
+url = "src/jevbench/pyproject.toml"
 
 [[hf]]
 repo = "Mapika/decider-2b-GGUF"

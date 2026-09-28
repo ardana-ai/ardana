@@ -23,6 +23,7 @@ const TMP_VARS: &[(&str, &str)] = &[
     ("UV_PYTHON_INSTALL_DIR", "uv/python"),
     ("UV_TOOL_DIR", "uv/tools"),
     ("UV_TOOL_BIN_DIR", "bin"),
+    ("UV_PYTHON_BIN_DIR", "bin"),
     ("PIP_CACHE_DIR", "cache/pip"),
     ("npm_config_cache", "cache/npm"),
     ("PLAYWRIGHT_BROWSERS_PATH", "ms-playwright"),

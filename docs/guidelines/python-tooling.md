@@ -10,6 +10,8 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
 - `jevcompat` 0.1.0 — Jev API conformance runner (`mandu5/jevcompat@0a9752b`), installed as a uv tool; R5.1.
 - `typesafe-sdk` 0.7.2 — official TypeSafe Python SDK, a library without a command, so it lives in the `tmp/py/sdk` venv; R5.2.
 - `python` 3.10 — minimum interpreter for jevcompat and `typesafe-sdk`; a uv-managed CPython under `UV_PYTHON_INSTALL_DIR`.
+- JevBench `fd54ea7` — a source clone in `tmp/src/jevbench` (`fstandhartinger/jevbench@fd54ea7`, MIT); it declares no
+  dependencies and runs on the standard library, so `tmp/py/jevbench` holds only the interpreter; R5.3.
 
 ## Rules
 
@@ -18,7 +20,9 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
   the same variables through `Sandbox::command`. Never run them with the plain shell environment.
 - The sandbox sets, and uv reads: `UV_CACHE_DIR=tmp/cache/uv` (cache, same filesystem as the venvs so uv can
   hardlink), `UV_PYTHON_INSTALL_DIR=tmp/uv/python` (managed interpreters), `UV_TOOL_DIR=tmp/uv/tools` (tool envs),
-  `UV_TOOL_BIN_DIR=tmp/bin` (tool executables, already first on `PATH`). pip reads `PIP_CACHE_DIR=tmp/cache/pip`.
+  `UV_TOOL_BIN_DIR=tmp/bin` (tool executables, already first on `PATH`), `UV_PYTHON_BIN_DIR=tmp/bin` (where uv links
+  managed `python3.x` executables: by default from uv 0.8, in preview mode in 0.7.3). pip reads
+  `PIP_CACHE_DIR=tmp/cache/pip`.
 - Never let uv or pip fall back to their defaults (`~/.cache/uv`, `~/.local/share/uv`, `~/.local/bin`,
   `~/Library/Caches/pip`); the home guard watches those paths and fails the step on any change.
 - Do not pass `--cache-dir`, `--no-cache` or ad-hoc location overrides (`UV_*_DIR`) on the command line; change
@@ -36,19 +40,25 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
 
 ### Tools (`source = "uv-tool"`)
 - Install command-line harnesses with `uv tool install`, pinned exactly: a version (`jevcompat==0.1.0`) or, when the
-  pin is a commit, `git+<repo-url>@<rev>` with the full or short rev from `fetch.toml`.
+  pin is a commit, `git+<repo-url>@<rev>` with the full or short rev from `fetch.toml`. A `source = "uv-tool"` entry
+  runs `uv tool install --force --python 3.10 <name>==<version>`; its check wants `uv tool list` to show
+  `<name> v<version>`, the tool env on a uv-managed Python and the executable in `tmp/bin`.
 - Each tool gets its own isolated env under `UV_TOOL_DIR`; never `pip install` into it or edit it. Change the pin in
   `fetch.toml` and reinstall with `uv tool install --force` instead.
 - Do not use `uvx`/`uv tool run` in xtask or tests: its envs are temporary cache entries and the version is not
   checked by `cargo xtask fetch --check`. Call the installed executable from `tmp/bin`.
-- `cargo xtask e2e jevcompat` runs `jevcompat test <url>` against a server it started on 127.0.0.1 and fails unless
-  every MUST requirement passes.
+- `cargo xtask e2e jevcompat` runs `jevcompat test <url> --json tmp/evals/jevcompat/<run>.json` twice, against an
+  open server and against one started with `ARDANA_API_KEY` (the key reaches jevcompat through `--key-env`, never
+  argv), so both conditional auth MUSTs are tested; each run must be conformant (every applicable MUST passes).
 
 ### Venvs (`source = "uv-venv"`)
 - One venv per harness under `tmp/py/<name>`: `tmp/py/sdk` for `typesafe-sdk`, `tmp/py/jevbench` for JevBench's
   dependencies. Create with `uv venv tmp/py/<name> --python 3.10` (managed-only preference as above).
 - Install with `uv pip install --python tmp/py/<name>/bin/python <pkg>==<version>` (or `-r <file>` from the
-  clone); never rely on `VIRTUAL_ENV` or a discovered `.venv`, and never use `--system`.
+  clone); never rely on `VIRTUAL_ENV` or a discovered `.venv`, and never use `--system`. A `source = "uv-venv"` entry
+  names the venv in `path` (inside `tmp/`) and installs `<name>==<version>`, or, when `url` names a requirements
+  source inside `tmp/` (`src/jevbench/pyproject.toml`), that source's declared dependencies; the check for such a
+  venv is `uv pip install --dry-run --offline -r <source>` reporting "Would make no changes".
 - Use pip only through `uv pip`. uv venvs have no pip unless created with `--seed`; do not seed them, and never run
   `python -m pip` or a bare `pip`.
 - Run code with the venv's interpreter directly (`tmp/py/sdk/bin/python ...`); do not `source .../activate` in xtask.
@@ -56,8 +66,13 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
 - JevBench stays a source clone at `tmp/src/jevbench` (`fd54ea7`); install only its declared dependencies into
   `tmp/py/jevbench` and run `tmp/py/jevbench/bin/python -m jevbench.cli run --adapter typesafe ...` from the clone,
   passing `--results`, `--ledger` and `--raw-dir` paths under `tmp/evals/jevbench/`.
-- The SDK check sets `TYPESAFE_BASE_URL` to the local server and uses model `jev-latest`; never point it at the
-  hosted TypeSafe API and never put a real API key in env, files or logs.
+- The SDK check (`xtask/scripts/sdk_ticket.py`, run with `tmp/py/sdk/bin/python`) sets `TYPESAFE_BASE_URL` to the
+  local server and uses model `jev-latest`; the SDK refuses to start without some `TYPESAFE_API_KEY`, so it gets a
+  placeholder the open server ignores. Never point it at the hosted TypeSafe API and never put a real API key in env,
+  files or logs.
+- `cargo xtask e2e jevbench` empties `tmp/evals/jevbench/` first (JevBench opens results, ledger and raw files
+  exclusively), runs `run --adapter typesafe --key-env ""` over `datasets/public/{easy,original,hard}.jsonl`, writes
+  `summarize`'s output to `summary.json` and fails on any failed or missing request; accuracy is reported only.
 
 ### Research clones
 - Clone Python sources for reading or golden export (decider, jevcompat, JevBench) only into `tmp/src/<name>` at the
@@ -75,10 +90,6 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
 - `cargo xtask fetch --check` must fail, naming the entry, when a tool is missing from `tmp/bin`, a venv lacks its
   pinned package version, or the interpreter is older than 3.10; check with the venv's own interpreter
   (`tmp/py/<name>/bin/python -c` reading `importlib.metadata.version("<pkg>")`), not with a global `pip`.
-
-> Plan note: `Sandbox::env` has no `UV_PYTHON_BIN_DIR`. uv 0.7.3 links managed Python executables into `~/.local/bin`
-> only in preview mode, but from uv 0.8.0 `uv python install` does so by default; if uv is ever upgraded, add
-> `UV_PYTHON_BIN_DIR=tmp/bin` (a variable uv has read since 0.4.29) or `UV_PYTHON_INSTALL_BIN=0` to the sandbox.
 
 ## Sources
 - https://docs.astral.sh/uv/reference/environment/ — `UV_CACHE_DIR`, `UV_PYTHON_INSTALL_DIR`, `UV_TOOL_DIR`, `UV_TOOL_BIN_DIR`, `UV_PYTHON_BIN_DIR`, `UV_PYTHON_PREFERENCE` and the uv version each was added in
