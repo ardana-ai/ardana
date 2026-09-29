@@ -353,9 +353,23 @@ fn context(sandbox: &Sandbox) -> Vec<String> {
         cmd.current_dir(root);
         cmd
     };
+    // Doctor's "mention" findings are its advisory tier (a sidecar whose mtime trails DESIGN.md's after a checkout,
+    // for one); they are printed, and only the graver findings fail the context.
     match impeccable().args(["doctor", "--json"]).output() {
         Ok(out) => match serde_json::from_slice::<Value>(&out.stdout) {
-            Ok(report) if out.status.success() && report["findings"] == json!([]) => {}
+            Ok(report) if out.status.success() => {
+                let (mentions, failures): (Vec<&Value>, Vec<&Value>) = report["findings"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .partition(|finding| finding["severity"] == json!("mention"));
+                for mention in mentions {
+                    println!("e2e design: doctor mentions {}", mention["summary"]);
+                }
+                if !failures.is_empty() {
+                    problems.push(format!("impeccable doctor reports {}", json!(failures)));
+                }
+            }
             Ok(report) => {
                 problems.push(format!("impeccable doctor reports {}", report["findings"]))
             }

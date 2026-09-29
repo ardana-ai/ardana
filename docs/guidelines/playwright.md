@@ -150,7 +150,8 @@ share-link decoding.
   `department` choice for the 422 state), warms decider-2b with one request, writes each JSON report to
   `tmp/evals/design/<state>-<desktop|mobile>.json`, and first checks R6.1's context (doctor, PRODUCT.md, DESIGN.md,
   the surface brief's Operate mode and six contract blocks, `.impeccable/config.json`, the hook in
-  `.claude/settings.local.json`).
+  `.claude/settings.local.json`). Doctor's `mention`-severity findings are printed, not failed: the sidecar-stale
+  one compares file mtimes, which a checkout reorders.
 - `cargo xtask e2e design` runs `$IMPECCABLE_BIN detect --json --viewport 1280x800 <url>` and `--viewport 390x844` on
   `/`, `/#share/<ticket>`, `/?autorun=1#share/<ticket>` and `/?autorun=1#share/<invalid>` of a running server; exit 0
   is clean, 1 means a target was not scanned, 2 means primary findings. Treat any non-zero exit as a failure.
