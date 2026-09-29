@@ -16,7 +16,10 @@ design workflow that gates every UI change (Q23, Q27).
   the playground names them for `fetch`, `performance.now()`, `URLSearchParams` and the clipboard, with only the
   `web-sys` features it calls (`Clipboard`, `Document`, `Element`, `Headers`, `HtmlElement`, `HtmlInputElement`,
   `KeyboardEvent`, `Location`, `MediaQueryList`, `Navigator`, `Performance`, `Request`, `RequestInit`, `Response`,
-  `ScrollBehavior`, `ScrollIntoViewOptions`, `ScrollLogicalPosition`, `UrlSearchParams`, `Window`)
+  `ScrollBehavior`, `ScrollIntoViewOptions`, `ScrollLogicalPosition`, `UrlSearchParams`, `Window`, plus `DomRect`
+  for the sidebar's section tracking, `Node` for the popover's outside-click check, `DomTokenList` for the
+  root's `tips-off` class, `FocusOptions` for focus without scrolling and `Storage` for the remembered sidebar
+  state)
 - `serde_json` with `float_roundtrip` (the workspace feature, `rust.md`) — numbers read from a response keep their
   exact `f64`, so a re-serialised `data-value` equals the API's JSON text
 
@@ -45,11 +48,14 @@ design workflow that gates every UI change (Q23, Q27).
   `Deck::load_preset` / `Deck::remove_question`, which keep both editors in `Deck::previous` for the console's
   Restore previous key until the next edit.
 - Stale results: `Deck::sent` parses the exact body the last run sent; `inputs_changed` (state or model) and `stale`
-  (anything) compare it with what RUN would send now; a channel is stale when its answer came from a different
-  state, model or spec. Figures stay exact; only the labels, the Changed lamp and the winner underline change.
-- Focus is never dropped: RUN is held with `aria-disabled` (a guard in `Deck::run`), never `disabled`; after a
-  rename, a removal or Restore previous, `ui::focus_later(id)` focuses the next control on the next animation
-  frame, once the re-keyed view exists. Element ids of a question come from `ui::dom_id`.
+  (anything) compare it with what Run would send now; a question is stale when its answer came from a different
+  state, model or spec. Figures stay exact; only the tags change and the blue of the winning row goes grey.
+- Focus is never dropped: Run (held while the questions JSON is invalid or names no question, with the reason in
+  the `#run-note` banner from `Deck::held_reason`), Add option, Add level and every Remove button are held with
+  `aria-disabled` and a guard (`Deck::run`, `ui::builder::remove_button`, `add_button`), never `disabled`; after a rename
+  (the id field, or Instructions when the rename was committed by Tab), a removal, Add question, Restore previous
+  or a drawer pick, `ui::focus_later(id)` focuses the next control on the next animation frame, once the re-keyed
+  view exists. Element ids of a question come from `ui::dom_id`.
 - Announcements: two polite `role="status"` regions rendered empty from load (`run-status`: the run's outcome;
   `notice`: an input turning invalid or valid again). Field errors are text tied with `aria-describedby`, never
   `role="alert"`, so they do not repeat on every keystroke.
@@ -64,7 +70,10 @@ design workflow that gates every UI change (Q23, Q27).
   using `ardana_api` request/response types. Construct it with the page origin; never hard-code a host, never call
   any non-`/v1/*` URL (Q15, R6.6).
 - Load `/v1/models` with a `LocalResource` (browser fetch futures are `!Send`); run decisions with
-  `Action::new_local`, `dispatch` on the Run button, and drive the UI from `pending()` and `value()`.
+  `Action::new_local`, `dispatch` on the Run button, and drive the UI from `pending()` and `value()`. Ctrl/Cmd+Enter
+  presses Run from anywhere on the page and Ctrl/Cmd+\ toggles the sidebar, both through one `window_event_listener`
+  on `keydown` in `ui::App`; a collapsed sidebar is remembered in `localStorage` (`ardana.sidebar`, web-sys
+  `Storage`).
 - Keep the exact request JSON sent and the exact response body text received (status included) for the raw panel;
   show 422/413 `detail` as returned. Render an answer whose `type` is unknown as raw JSON instead of failing the
   whole response (R6.6).
@@ -80,11 +89,13 @@ design workflow that gates every UI change (Q23, Q27).
   typed answers or raw JSON and error `detail`s), `builder.rs` (question edits on raw specs), `presets.rs` (the three
   presets, request files in `presets/` plus `tests/fixtures/requests/ticket.json`), `snippets.rs` (curl, Python and
   TypeScript), `format.rs`, `deck.rs` (`Deck`: every signal of the page, `Copy`, passed whole to components, plus the
-  `Action` that runs and the `Memo` of the last run) and `ui/` with one module per region: `rail` (model switch,
-  counters, RUN), `console` (preset keys, share link), `cassette` (state), `channels` (one channel per question with
-  its type toggle and Edit key, the questions JSON editor, faults), `builder` (a channel's builder fields),
-  `exchange` (raw request/response), `snippets`, `controls` (the chrome toggle and the copy key) and `figure` (the
-  `data-value` figures).
+  `Action` that runs and the `Memo` of the last run) and `ui/` with one module per region: `sidebar` (the model
+  select, the presets, the page's sections), `topbar` (the sidebar opener, Share and its popover, Run, the banner
+  under it), `state` (the state block), `questions` (the last run's line, the fault callout, one block per question
+  with its type control, Edit and a bar per option, the Add question row, the questions JSON editor), `builder` (a
+  question's builder fields), `exchange` and `snippets` (toggle blocks), `controls` (the segmented control and the
+  copy button), `icons` and `figure` (the `data-value` figures). `ui::Shell` holds the sidebar's collapsed and drawer
+  state.
 - Figures: every API value on screen is a `ui::figure` element with `data-field` (a JSON pointer into the response),
   `data-value` (the raw value: a number as the shortest JSON text, a string as is) and `data-format` (`percent`,
   `fixed2`, `verbatim`). Formatting rounds the number's decimal text half up (`format::round_decimal`), never the
@@ -96,9 +107,12 @@ design workflow that gates every UI change (Q23, Q27).
   `x_default` entry (else the first pulled one) once the list arrives; while nothing is picked a request names no
   model. The list is fetched again after every run, since a run may have pulled its model. `?autorun=1` runs once
   after `/v1/models` answers.
-- While a run whose model the list marks unpulled is in flight, the RUN legend reads "Pulling" and `#run-note` says
-  "Downloading <name> (<size>) on first run": the API reports no pull progress, so the page never draws one.
-- Per-run visuals (the ladder climb) restart because `For` keys each channel by id, spec, run number and answer.
+- While a run whose model the list marks unpulled is in flight, the Run label reads "Pulling" and the banner
+  `#run-note` under the top bar says "Downloading <name> (<size>) on first run": the API reports no pull progress,
+  so the page never draws one. The same banner, in the fault colours, says "Questions JSON has an error" while Run
+  is held.
+- Per-run visuals (the bars growing to their values) restart because each question's answer view is redrawn from
+  the run number.
 - Set dynamic CSS custom properties with a style tuple, `style=("--level", value.to_string())`; the rules that read
   them live in `.css`.
 
@@ -136,26 +150,27 @@ design workflow that gates every UI change (Q23, Q27).
   Size work for the wasm goes through `data-wasm-opt`, dependency choices, and brotli from memory-serve.
 
 ## CSS and design
-- Styles live only in plain `.css` files under `crates/ardana-playground/styles/` (`fonts.css`, `base.css` for
-  tokens and materials, `rail.css`, `controls.css` for plate keys, the chrome toggle and paper fields, `deck.css`),
-  linked with `<link data-trunk rel="css">`. No inline style strings,
-  no CSS-in-Rust crates, no Tailwind: the /impeccable design hook scans `.css`, `.html`, `.ts`, `.js`, not `.rs`.
-- Fonts are self-hosted: the Google Fonts latin woff2 subsets of Barlow Condensed, Barlow Semi Condensed, IBM Plex
-  Mono and Doto (SIL OFL, `assets/fonts/OFL.txt`) live in `crates/ardana-playground/assets/fonts/`, copied to
-  `dist/fonts/` by `<link data-trunk rel="copy-dir" href="assets/fonts">` and named by absolute `/fonts/...` URLs.
-  The page loads nothing from another origin.
-- Dot-matrix figures: Doto's own full stop is a cross of dots, so `ui::figure::matrix` sets each `.` in a
-  `.matrix-point` span (the text stays the same) and CSS seats one square Doto-sized dot on the baseline. The unlit
-  matrix behind figures and the ladder segments are SVG data-URI tiles, never `repeating-*-gradient` (the detector
-  reads those as decorative stripes).
+- Styles live only in plain `.css` files under `crates/ardana-playground/styles/` (`base.css` for the light and
+  dark tokens, reset and type; `controls.css` for buttons, the segmented control, fields, tags, tooltips and the
+  toast; `shell.css` for the sidebar, the top bar, the banner, the share popover and the drawer; `page.css` for the
+  page title, the columns, the state and question blocks, bars, property lists, callouts, toggle blocks and code
+  blocks), linked with `<link data-trunk rel="css">`. No inline style strings, no CSS-in-Rust crates, no Tailwind:
+  the /impeccable design hook scans `.css`, `.html`, `.ts`, `.js`, not `.rs`.
+- Type is the system stack (`ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", ...` and `ui-monospace,
+  SFMono-Regular, Menlo, ...`), as Notion's app sets it: no web fonts, nothing loaded from another origin, no
+  `assets/` directory. Icons are inline SVG from `ui::icons::Icon` (one 16-unit grid, one stroke, `currentColor`),
+  never Unicode glyphs or emoji.
+- Light and dark follow the system through `prefers-color-scheme` (`color-scheme: light dark`, the tokens redefined
+  in one `@media` block in `base.css`); there is no theme control. `forced-colors` blocks keep the checked segment,
+  the bars, the primary button and the hairlines visible.
 - Dynamic visuals (bar widths) set a CSS custom property or a class from the view; the rules that use them stay in
   `.css`. Class names come from DESIGN.md's tokens and components.
 - Every UI change, from the first component on, goes through the /impeccable skill: PRODUCT.md, DESIGN.md and the
   `crates/ardana-playground` surface brief (Operate mode, six-block direction contract) exist before the first
   component; read the skill's `reference/craft-floor.md` before each UI edit; `buildPath` stays `"code"` with no image
   generation; the hook stays enabled (Q23, Q27).
-- The Jev layout is a brand commitment: state on the left, questions and results on the right; it collapses to one
-  column at 390 px width.
+- The Jev layout is a brand commitment: state on the left, questions and results on the right; the columns stack
+  below 960px, where the sidebar becomes a drawer behind the top bar's opener.
 - Because markup is rendered from `view!` in `.rs`, file scans see nothing; verify rendered UI with
   `impeccable detect --viewport 1280x800` and `--viewport 390x844` against the running server URLs (R6.2), plus
   Playwright screenshots under `tmp/screens/<case>/`.

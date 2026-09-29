@@ -305,9 +305,22 @@ impl Deck {
         })
     }
 
-    /// Whether RUN can send: the questions parse and no run is in flight.
+    /// Whether Run can send: the questions parse, there is at least one, and no run is in flight.
     pub fn can_run(&self) -> bool {
-        self.questions_error.with(Option::is_none) && !self.runner.pending().get()
+        self.questions_error.with(Option::is_none)
+            && self.questions.with(|q| !q.is_empty())
+            && !self.runner.pending().get()
+    }
+
+    /// Why Run is held, when it is held for a reason the page can name.
+    pub fn held_reason(&self) -> Option<&'static str> {
+        if self.questions_error.with(Option::is_some) {
+            Some("Questions JSON has an error")
+        } else if self.questions.with(|q| q.is_empty()) {
+            Some("Add a question to run")
+        } else {
+            None
+        }
     }
 
     /// Sends the editors as they are now; does nothing while RUN is held.

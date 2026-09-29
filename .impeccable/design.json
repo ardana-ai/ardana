@@ -1,345 +1,88 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-29T01:32:59+00:00",
+  "generatedAt": "2026-09-29T04:28:20Z",
   "title": "Design System: Ardana",
   "extensions": {
     "colorMeta": {
-      "amber": {
-        "role": "primary",
-        "displayName": "LED Amber",
-        "canonical": "#ffb000",
-        "tonalRamp": [
-          "oklch(15% 0.170 76.4)",
-          "oklch(26% 0.170 76.4)",
-          "oklch(38% 0.170 76.4)",
-          "oklch(50% 0.170 76.4)",
-          "oklch(62% 0.170 76.4)",
-          "oklch(73% 0.170 76.4)",
-          "oklch(84% 0.170 76.4)",
-          "oklch(95% 0.170 76.4)"
-        ]
-      },
-      "amber-dim": {
-        "role": "primary",
-        "displayName": "Amber Filament",
-        "canonical": "#cc7a00",
-        "tonalRamp": [
-          "oklch(15% 0.147 65.0)",
-          "oklch(26% 0.147 65.0)",
-          "oklch(38% 0.147 65.0)",
-          "oklch(50% 0.147 65.0)",
-          "oklch(62% 0.147 65.0)",
-          "oklch(73% 0.147 65.0)",
-          "oklch(84% 0.147 65.0)",
-          "oklch(95% 0.147 65.0)"
-        ]
-      },
-      "amber-off": {
-        "role": "primary",
-        "displayName": "Unlit Amber",
-        "canonical": "#3d2e0d",
-        "tonalRamp": [
-          "oklch(15% 0.052 84.0)",
-          "oklch(26% 0.052 84.0)",
-          "oklch(38% 0.052 84.0)",
-          "oklch(50% 0.052 84.0)",
-          "oklch(62% 0.052 84.0)",
-          "oklch(73% 0.052 84.0)",
-          "oklch(84% 0.052 84.0)",
-          "oklch(95% 0.052 84.0)"
-        ]
-      },
-      "amber-ghost": {
-        "role": "primary",
-        "displayName": "Ghost Matrix",
-        "canonical": "#282010",
-        "tonalRamp": [
-          "oklch(15% 0.030 83.8)",
-          "oklch(26% 0.030 83.8)",
-          "oklch(38% 0.030 83.8)",
-          "oklch(50% 0.030 83.8)",
-          "oklch(62% 0.030 83.8)",
-          "oklch(73% 0.030 83.8)",
-          "oklch(84% 0.030 83.8)",
-          "oklch(95% 0.030 83.8)"
-        ],
-        "note": "Inlined as %23282010 in the matrix ghost-grid SVG data URI; change both together."
-      },
-      "fault-ink": {
-        "role": "secondary",
-        "displayName": "Fault Ink",
-        "canonical": "#8f1d17",
-        "tonalRamp": [
-          "oklch(15% 0.150 28.5)",
-          "oklch(26% 0.150 28.5)",
-          "oklch(38% 0.150 28.5)",
-          "oklch(50% 0.150 28.5)",
-          "oklch(62% 0.150 28.5)",
-          "oklch(73% 0.150 28.5)",
-          "oklch(84% 0.150 28.5)",
-          "oklch(95% 0.150 28.5)"
-        ]
-      },
-      "fault-lamp": {
-        "role": "secondary",
-        "displayName": "Fault Lamp",
-        "canonical": "#e0301e",
-        "tonalRamp": [
-          "oklch(15% 0.213 30.2)",
-          "oklch(26% 0.213 30.2)",
-          "oklch(38% 0.213 30.2)",
-          "oklch(50% 0.213 30.2)",
-          "oklch(62% 0.213 30.2)",
-          "oklch(73% 0.213 30.2)",
-          "oklch(84% 0.213 30.2)",
-          "oklch(95% 0.213 30.2)"
-        ]
-      },
-      "fault-paper": {
-        "role": "secondary",
-        "displayName": "Fault Paper",
-        "canonical": "#f7e4df",
-        "tonalRamp": [
-          "oklch(15% 0.022 35.1)",
-          "oklch(26% 0.022 35.1)",
-          "oklch(38% 0.022 35.1)",
-          "oklch(50% 0.022 35.1)",
-          "oklch(62% 0.022 35.1)",
-          "oklch(73% 0.022 35.1)",
-          "oklch(84% 0.022 35.1)",
-          "oklch(95% 0.022 35.1)"
-        ]
-      },
-      "surround": {
+      "page": {
         "role": "neutral",
-        "displayName": "Beige Surround",
-        "canonical": "#e6dfc9",
+        "displayName": "Page",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "dark": "#191919",
+        "purpose": "The page and the top bar.",
         "tonalRamp": [
-          "oklch(15% 0.030 92.3)",
-          "oklch(26% 0.030 92.3)",
-          "oklch(38% 0.030 92.3)",
-          "oklch(50% 0.030 92.3)",
-          "oklch(62% 0.030 92.3)",
-          "oklch(73% 0.030 92.3)",
-          "oklch(84% 0.030 92.3)",
-          "oklch(95% 0.030 92.3)"
+          "oklch(15% 0.000 89.9)",
+          "oklch(26% 0.000 89.9)",
+          "oklch(38% 0.000 89.9)",
+          "oklch(50% 0.000 89.9)",
+          "oklch(62% 0.000 89.9)",
+          "oklch(73% 0.000 89.9)",
+          "oklch(84% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
         ]
       },
-      "surround-shade": {
+      "panel": {
         "role": "neutral",
-        "displayName": "Surround Shadow",
-        "canonical": "#cfc6aa",
+        "displayName": "Panel",
+        "canonical": "#fbfbfa",
+        "oklch": "oklch(98.8% 0.001 106.4)",
+        "dark": "#202020",
+        "purpose": "The sidebar, the drawer and the quiet banner.",
         "tonalRamp": [
-          "oklch(15% 0.039 92.3)",
-          "oklch(26% 0.039 92.3)",
-          "oklch(38% 0.039 92.3)",
-          "oklch(50% 0.039 92.3)",
-          "oklch(62% 0.039 92.3)",
-          "oklch(73% 0.039 92.3)",
-          "oklch(84% 0.039 92.3)",
-          "oklch(95% 0.039 92.3)"
+          "oklch(15% 0.001 106.4)",
+          "oklch(26% 0.001 106.4)",
+          "oklch(38% 0.001 106.4)",
+          "oklch(50% 0.001 106.4)",
+          "oklch(62% 0.001 106.4)",
+          "oklch(73% 0.001 106.4)",
+          "oklch(84% 0.001 106.4)",
+          "oklch(95% 0.001 106.4)"
         ]
       },
-      "alu-hi": {
+      "raised": {
         "role": "neutral",
-        "displayName": "Aluminium Highlight",
-        "canonical": "#e4e7ea",
+        "displayName": "Raised",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "dark": "#252525",
+        "purpose": "Question blocks, the popover, the checked segment, the skip link.",
         "tonalRamp": [
-          "oklch(15% 0.005 247.9)",
-          "oklch(26% 0.005 247.9)",
-          "oklch(38% 0.005 247.9)",
-          "oklch(50% 0.005 247.9)",
-          "oklch(62% 0.005 247.9)",
-          "oklch(73% 0.005 247.9)",
-          "oklch(84% 0.005 247.9)",
-          "oklch(95% 0.005 247.9)"
+          "oklch(15% 0.000 89.9)",
+          "oklch(26% 0.000 89.9)",
+          "oklch(38% 0.000 89.9)",
+          "oklch(50% 0.000 89.9)",
+          "oklch(62% 0.000 89.9)",
+          "oklch(73% 0.000 89.9)",
+          "oklch(84% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
         ]
       },
-      "alu": {
+      "code": {
         "role": "neutral",
-        "displayName": "Aluminium",
-        "canonical": "#c7ccd1",
+        "displayName": "Code",
+        "canonical": "#f7f6f3",
+        "oklch": "oklch(97.3% 0.004 91.4)",
+        "dark": "#252525",
+        "purpose": "Code blocks, empty wire panes, the plain callout.",
         "tonalRamp": [
-          "oklch(15% 0.009 247.9)",
-          "oklch(26% 0.009 247.9)",
-          "oklch(38% 0.009 247.9)",
-          "oklch(50% 0.009 247.9)",
-          "oklch(62% 0.009 247.9)",
-          "oklch(73% 0.009 247.9)",
-          "oklch(84% 0.009 247.9)",
-          "oklch(95% 0.009 247.9)"
-        ]
-      },
-      "alu-lo": {
-        "role": "neutral",
-        "displayName": "Aluminium Shade",
-        "canonical": "#a9afb5",
-        "tonalRamp": [
-          "oklch(15% 0.011 248.0)",
-          "oklch(26% 0.011 248.0)",
-          "oklch(38% 0.011 248.0)",
-          "oklch(50% 0.011 248.0)",
-          "oklch(62% 0.011 248.0)",
-          "oklch(73% 0.011 248.0)",
-          "oklch(84% 0.011 248.0)",
-          "oklch(95% 0.011 248.0)"
-        ]
-      },
-      "chrome-hi": {
-        "role": "neutral",
-        "displayName": "Chrome Highlight",
-        "canonical": "#f7f8f9",
-        "tonalRamp": [
-          "oklch(15% 0.002 247.8)",
-          "oklch(26% 0.002 247.8)",
-          "oklch(38% 0.002 247.8)",
-          "oklch(50% 0.002 247.8)",
-          "oklch(62% 0.002 247.8)",
-          "oklch(73% 0.002 247.8)",
-          "oklch(84% 0.002 247.8)",
-          "oklch(95% 0.002 247.8)"
-        ]
-      },
-      "chrome-lo": {
-        "role": "neutral",
-        "displayName": "Chrome Shade",
-        "canonical": "#b0b6bc",
-        "tonalRamp": [
-          "oklch(15% 0.011 248.0)",
-          "oklch(26% 0.011 248.0)",
-          "oklch(38% 0.011 248.0)",
-          "oklch(50% 0.011 248.0)",
-          "oklch(62% 0.011 248.0)",
-          "oklch(73% 0.011 248.0)",
-          "oklch(84% 0.011 248.0)",
-          "oklch(95% 0.011 248.0)"
+          "oklch(15% 0.004 91.4)",
+          "oklch(26% 0.004 91.4)",
+          "oklch(38% 0.004 91.4)",
+          "oklch(50% 0.004 91.4)",
+          "oklch(62% 0.004 91.4)",
+          "oklch(73% 0.004 91.4)",
+          "oklch(84% 0.004 91.4)",
+          "oklch(95% 0.004 91.4)"
         ]
       },
       "ink": {
         "role": "neutral",
-        "displayName": "Engraving Ink",
-        "canonical": "#1b1b1b",
-        "tonalRamp": [
-          "oklch(15% 0.000 89.9)",
-          "oklch(26% 0.000 89.9)",
-          "oklch(38% 0.000 89.9)",
-          "oklch(50% 0.000 89.9)",
-          "oklch(62% 0.000 89.9)",
-          "oklch(73% 0.000 89.9)",
-          "oklch(84% 0.000 89.9)",
-          "oklch(95% 0.000 89.9)"
-        ]
-      },
-      "ink-soft": {
-        "role": "neutral",
-        "displayName": "Soft Engraving",
-        "canonical": "#35383b",
-        "tonalRamp": [
-          "oklch(15% 0.007 248.0)",
-          "oklch(26% 0.007 248.0)",
-          "oklch(38% 0.007 248.0)",
-          "oklch(50% 0.007 248.0)",
-          "oklch(62% 0.007 248.0)",
-          "oklch(73% 0.007 248.0)",
-          "oklch(84% 0.007 248.0)",
-          "oklch(95% 0.007 248.0)"
-        ]
-      },
-      "engrave": {
-        "role": "neutral",
-        "displayName": "Engrave Light",
-        "canonical": "rgb(255 255 255 / 0.6)",
-        "tonalRamp": [
-          "oklch(15% 0.000 89.9)",
-          "oklch(26% 0.000 89.9)",
-          "oklch(38% 0.000 89.9)",
-          "oklch(50% 0.000 89.9)",
-          "oklch(62% 0.000 89.9)",
-          "oklch(73% 0.000 89.9)",
-          "oklch(84% 0.000 89.9)",
-          "oklch(95% 0.000 89.9)"
-        ],
-        "note": "White at 60% alpha; the ramp is the neutral white axis."
-      },
-      "glass": {
-        "role": "neutral",
-        "displayName": "Smoked Glass",
-        "canonical": "#15140f",
-        "tonalRamp": [
-          "oklch(15% 0.010 97.9)",
-          "oklch(26% 0.010 97.9)",
-          "oklch(38% 0.010 97.9)",
-          "oklch(50% 0.010 97.9)",
-          "oklch(62% 0.010 97.9)",
-          "oklch(73% 0.010 97.9)",
-          "oklch(84% 0.010 97.9)",
-          "oklch(95% 0.010 97.9)"
-        ]
-      },
-      "glass-text": {
-        "role": "neutral",
-        "displayName": "Glass Text",
-        "canonical": "#e9e4d4",
-        "tonalRamp": [
-          "oklch(15% 0.022 92.5)",
-          "oklch(26% 0.022 92.5)",
-          "oklch(38% 0.022 92.5)",
-          "oklch(50% 0.022 92.5)",
-          "oklch(62% 0.022 92.5)",
-          "oklch(73% 0.022 92.5)",
-          "oklch(84% 0.022 92.5)",
-          "oklch(95% 0.022 92.5)"
-        ]
-      },
-      "paper": {
-        "role": "neutral",
-        "displayName": "Label Paper",
-        "canonical": "#f4efe0",
-        "tonalRamp": [
-          "oklch(15% 0.021 91.6)",
-          "oklch(26% 0.021 91.6)",
-          "oklch(38% 0.021 91.6)",
-          "oklch(50% 0.021 91.6)",
-          "oklch(62% 0.021 91.6)",
-          "oklch(73% 0.021 91.6)",
-          "oklch(84% 0.021 91.6)",
-          "oklch(95% 0.021 91.6)"
-        ]
-      },
-      "paper-shade": {
-        "role": "neutral",
-        "displayName": "Paper Shade",
-        "canonical": "#e3dcc7",
-        "tonalRamp": [
-          "oklch(15% 0.029 91.7)",
-          "oklch(26% 0.029 91.7)",
-          "oklch(38% 0.029 91.7)",
-          "oklch(50% 0.029 91.7)",
-          "oklch(62% 0.029 91.7)",
-          "oklch(73% 0.029 91.7)",
-          "oklch(84% 0.029 91.7)",
-          "oklch(95% 0.029 91.7)"
-        ]
-      },
-      "paper-hint": {
-        "role": "neutral",
-        "displayName": "Paper Hint",
-        "canonical": "#5e584a",
-        "tonalRamp": [
-          "oklch(15% 0.023 87.6)",
-          "oklch(26% 0.023 87.6)",
-          "oklch(38% 0.023 87.6)",
-          "oklch(50% 0.023 87.6)",
-          "oklch(62% 0.023 87.6)",
-          "oklch(73% 0.023 87.6)",
-          "oklch(84% 0.023 87.6)",
-          "oklch(95% 0.023 87.6)"
-        ]
-      },
-      "shell": {
-        "role": "neutral",
-        "displayName": "Cassette Shell",
-        "canonical": "#282620",
+        "displayName": "Ink",
+        "canonical": "#37352f",
+        "oklch": "oklch(32.9% 0.011 91.7)",
+        "dark": "rgb(255 255 255 / 0.81)",
+        "purpose": "Body text, headings, values.",
         "tonalRamp": [
           "oklch(15% 0.011 91.7)",
           "oklch(26% 0.011 91.7)",
@@ -351,364 +94,783 @@
           "oklch(95% 0.011 91.7)"
         ]
       },
-      "shell-hi": {
+      "ink-2": {
         "role": "neutral",
-        "displayName": "Shell Highlight",
-        "canonical": "#3a372f",
+        "displayName": "Ink 2",
+        "canonical": "rgb(25 23 17 / 0.65)",
+        "oklch": "oklch(20.5% 0.012 91.8)",
+        "dark": "#9b9b9b",
+        "purpose": "Captions, property names, placeholders, instructions, inactive icons.",
         "tonalRamp": [
-          "oklch(15% 0.014 89.9)",
-          "oklch(26% 0.014 89.9)",
-          "oklch(38% 0.014 89.9)",
-          "oklch(50% 0.014 89.9)",
-          "oklch(62% 0.014 89.9)",
-          "oklch(73% 0.014 89.9)",
-          "oklch(84% 0.014 89.9)",
-          "oklch(95% 0.014 89.9)"
+          "oklch(15% 0.012 91.8)",
+          "oklch(26% 0.012 91.8)",
+          "oklch(38% 0.012 91.8)",
+          "oklch(50% 0.012 91.8)",
+          "oklch(62% 0.012 91.8)",
+          "oklch(73% 0.012 91.8)",
+          "oklch(84% 0.012 91.8)",
+          "oklch(95% 0.012 91.8)"
         ]
       },
-      "bevel-deep": {
+      "ink-3": {
         "role": "neutral",
-        "displayName": "Bevel Deep",
-        "canonical": "#050403",
+        "displayName": "Ink 3",
+        "canonical": "rgb(55 53 47 / 0.45)",
+        "oklch": "oklch(32.9% 0.011 91.7)",
+        "dark": "#7f7f7f",
+        "purpose": "Disabled button labels and property glyphs only; not for live text.",
         "tonalRamp": [
-          "oklch(15% 0.005 71.3)",
-          "oklch(26% 0.005 71.3)",
-          "oklch(38% 0.005 71.3)",
-          "oklch(50% 0.005 71.3)",
-          "oklch(62% 0.005 71.3)",
-          "oklch(73% 0.005 71.3)",
-          "oklch(84% 0.005 71.3)",
-          "oklch(95% 0.005 71.3)"
+          "oklch(15% 0.011 91.7)",
+          "oklch(26% 0.011 91.7)",
+          "oklch(38% 0.011 91.7)",
+          "oklch(50% 0.011 91.7)",
+          "oklch(62% 0.011 91.7)",
+          "oklch(73% 0.011 91.7)",
+          "oklch(84% 0.011 91.7)",
+          "oklch(95% 0.011 91.7)"
         ]
       },
-      "bevel-side": {
+      "hairline": {
         "role": "neutral",
-        "displayName": "Bevel Side",
-        "canonical": "#1d1c17",
+        "displayName": "Hairline",
+        "canonical": "#e9e9e7",
+        "oklch": "oklch(93.3% 0.003 106.5)",
+        "dark": "#2f2f2f",
+        "purpose": "Inset 1px dividers: sidebar edge, top bar, property list, builder panel.",
         "tonalRamp": [
-          "oklch(15% 0.010 97.8)",
-          "oklch(26% 0.010 97.8)",
-          "oklch(38% 0.010 97.8)",
-          "oklch(50% 0.010 97.8)",
-          "oklch(62% 0.010 97.8)",
-          "oklch(73% 0.010 97.8)",
-          "oklch(84% 0.010 97.8)",
-          "oklch(95% 0.010 97.8)"
+          "oklch(15% 0.003 106.5)",
+          "oklch(26% 0.003 106.5)",
+          "oklch(38% 0.003 106.5)",
+          "oklch(50% 0.003 106.5)",
+          "oklch(62% 0.003 106.5)",
+          "oklch(73% 0.003 106.5)",
+          "oklch(84% 0.003 106.5)",
+          "oklch(95% 0.003 106.5)"
         ]
       },
-      "amber-rim": {
+      "hairline-strong": {
+        "role": "neutral",
+        "displayName": "Hairline Strong",
+        "canonical": "rgb(55 53 47 / 0.16)",
+        "oklch": "oklch(32.9% 0.011 91.7)",
+        "dark": "rgb(255 255 255 / 0.13)",
+        "purpose": "Inset outline of fields, the select, an unchecked check box.",
+        "tonalRamp": [
+          "oklch(15% 0.011 91.7)",
+          "oklch(26% 0.011 91.7)",
+          "oklch(38% 0.011 91.7)",
+          "oklch(50% 0.011 91.7)",
+          "oklch(62% 0.011 91.7)",
+          "oklch(73% 0.011 91.7)",
+          "oklch(84% 0.011 91.7)",
+          "oklch(95% 0.011 91.7)"
+        ]
+      },
+      "edge-strong": {
+        "role": "neutral",
+        "displayName": "Edge Strong",
+        "canonical": "rgb(55 53 47 / 0.55)",
+        "oklch": "oklch(32.9% 0.011 91.7)",
+        "dark": "rgb(255 255 255 / 0.45)",
+        "purpose": "The ring of the checked segment: 3:1 on the track in both schemes, so the picked state is not colour alone.",
+        "tonalRamp": [
+          "oklch(15% 0.011 91.7)",
+          "oklch(26% 0.011 91.7)",
+          "oklch(38% 0.011 91.7)",
+          "oklch(50% 0.011 91.7)",
+          "oklch(62% 0.011 91.7)",
+          "oklch(73% 0.011 91.7)",
+          "oklch(84% 0.011 91.7)",
+          "oklch(95% 0.011 91.7)"
+        ]
+      },
+      "hover": {
+        "role": "neutral",
+        "displayName": "Hover",
+        "canonical": "rgb(55 53 47 / 0.08)",
+        "oklch": "oklch(32.9% 0.011 91.7)",
+        "dark": "rgb(255 255 255 / 0.055)",
+        "purpose": "Hover fill of buttons, rows and summaries; the segmented track; inline code.",
+        "tonalRamp": [
+          "oklch(15% 0.011 91.7)",
+          "oklch(26% 0.011 91.7)",
+          "oklch(38% 0.011 91.7)",
+          "oklch(50% 0.011 91.7)",
+          "oklch(62% 0.011 91.7)",
+          "oklch(73% 0.011 91.7)",
+          "oklch(84% 0.011 91.7)",
+          "oklch(95% 0.011 91.7)"
+        ]
+      },
+      "pressed": {
+        "role": "neutral",
+        "displayName": "Pressed",
+        "canonical": "rgb(55 53 47 / 0.16)",
+        "oklch": "oklch(32.9% 0.011 91.7)",
+        "dark": "rgb(255 255 255 / 0.11)",
+        "purpose": "Active fill; an expanded button.",
+        "tonalRamp": [
+          "oklch(15% 0.011 91.7)",
+          "oklch(26% 0.011 91.7)",
+          "oklch(38% 0.011 91.7)",
+          "oklch(50% 0.011 91.7)",
+          "oklch(62% 0.011 91.7)",
+          "oklch(73% 0.011 91.7)",
+          "oklch(84% 0.011 91.7)",
+          "oklch(95% 0.011 91.7)"
+        ]
+      },
+      "field": {
+        "role": "neutral",
+        "displayName": "Field",
+        "canonical": "rgb(242 241 238 / 0.6)",
+        "oklch": "oklch(95.8% 0.004 91.4)",
+        "dark": "rgb(255 255 255 / 0.04)",
+        "purpose": "The fill of an input.",
+        "tonalRamp": [
+          "oklch(15% 0.004 91.4)",
+          "oklch(26% 0.004 91.4)",
+          "oklch(38% 0.004 91.4)",
+          "oklch(50% 0.004 91.4)",
+          "oklch(62% 0.004 91.4)",
+          "oklch(73% 0.004 91.4)",
+          "oklch(84% 0.004 91.4)",
+          "oklch(95% 0.004 91.4)"
+        ]
+      },
+      "tag": {
+        "role": "neutral",
+        "displayName": "Tag",
+        "canonical": "rgb(227 226 224 / 0.5)",
+        "oklch": "oklch(91.3% 0.003 84.6)",
+        "dark": "rgb(255 255 255 / 0.094)",
+        "purpose": "The grey chip fill.",
+        "tonalRamp": [
+          "oklch(15% 0.003 84.6)",
+          "oklch(26% 0.003 84.6)",
+          "oklch(38% 0.003 84.6)",
+          "oklch(50% 0.003 84.6)",
+          "oklch(62% 0.003 84.6)",
+          "oklch(73% 0.003 84.6)",
+          "oklch(84% 0.003 84.6)",
+          "oklch(95% 0.003 84.6)"
+        ]
+      },
+      "tag-ink": {
+        "role": "neutral",
+        "displayName": "Tag Ink",
+        "canonical": "#32302c",
+        "oklch": "oklch(31.0% 0.008 84.6)",
+        "dark": "rgb(255 255 255 / 0.81)",
+        "purpose": "Text on a tag.",
+        "tonalRamp": [
+          "oklch(15% 0.008 84.6)",
+          "oklch(26% 0.008 84.6)",
+          "oklch(38% 0.008 84.6)",
+          "oklch(50% 0.008 84.6)",
+          "oklch(62% 0.008 84.6)",
+          "oklch(73% 0.008 84.6)",
+          "oklch(84% 0.008 84.6)",
+          "oklch(95% 0.008 84.6)"
+        ]
+      },
+      "track": {
+        "role": "neutral",
+        "displayName": "Track",
+        "canonical": "rgb(55 53 47 / 0.14)",
+        "oklch": "oklch(32.9% 0.011 91.7)",
+        "dark": "rgb(255 255 255 / 0.13)",
+        "purpose": "The empty progress bar.",
+        "tonalRamp": [
+          "oklch(15% 0.011 91.7)",
+          "oklch(26% 0.011 91.7)",
+          "oklch(38% 0.011 91.7)",
+          "oklch(50% 0.011 91.7)",
+          "oklch(62% 0.011 91.7)",
+          "oklch(73% 0.011 91.7)",
+          "oklch(84% 0.011 91.7)",
+          "oklch(95% 0.011 91.7)"
+        ]
+      },
+      "bar-muted": {
+        "role": "neutral",
+        "displayName": "Bar Muted",
+        "canonical": "#787774",
+        "oklch": "oklch(56.9% 0.005 91.5)",
+        "dark": "#9b9b9b",
+        "purpose": "Fill of rows that did not win, and of a stale winner.",
+        "tonalRamp": [
+          "oklch(15% 0.005 91.5)",
+          "oklch(26% 0.005 91.5)",
+          "oklch(38% 0.005 91.5)",
+          "oklch(50% 0.005 91.5)",
+          "oklch(62% 0.005 91.5)",
+          "oklch(73% 0.005 91.5)",
+          "oklch(84% 0.005 91.5)",
+          "oklch(95% 0.005 91.5)"
+        ]
+      },
+      "accent": {
         "role": "primary",
-        "displayName": "Amber Rim",
-        "purpose": "The rim of a lit lamp, 3:1 and more against aluminium."
+        "displayName": "Notion Blue",
+        "canonical": "#2383e2",
+        "oklch": "oklch(60.6% 0.167 252.7)",
+        "dark": "#2383e2",
+        "purpose": "The winning row, focus outlines, the focused field ring.",
+        "tonalRamp": [
+          "oklch(15% 0.167 252.7)",
+          "oklch(26% 0.167 252.7)",
+          "oklch(38% 0.167 252.7)",
+          "oklch(50% 0.167 252.7)",
+          "oklch(62% 0.167 252.7)",
+          "oklch(73% 0.167 252.7)",
+          "oklch(84% 0.167 252.7)",
+          "oklch(95% 0.167 252.7)"
+        ],
+        "note": "Unchanged in the dark scheme."
       },
-      "field-edge": {
-        "role": "neutral",
-        "displayName": "Field Edge",
-        "purpose": "Sides and bottom of a paper field's sunk well."
+      "accent-fill": {
+        "role": "primary",
+        "displayName": "Run Blue",
+        "canonical": "#0075d3",
+        "oklch": "oklch(56.0% 0.169 252.2)",
+        "dark": "#0075d3",
+        "purpose": "The primary button fill; white on it reads at 4.68:1.",
+        "tonalRamp": [
+          "oklch(15% 0.169 252.2)",
+          "oklch(26% 0.169 252.2)",
+          "oklch(38% 0.169 252.2)",
+          "oklch(50% 0.169 252.2)",
+          "oklch(62% 0.169 252.2)",
+          "oklch(73% 0.169 252.2)",
+          "oklch(84% 0.169 252.2)",
+          "oklch(95% 0.169 252.2)"
+        ],
+        "note": "Unchanged in the dark scheme."
       },
-      "field-edge-top": {
+      "accent-fill-hover": {
+        "role": "primary",
+        "displayName": "Run Blue Hover",
+        "canonical": "#0066bd",
+        "oklch": "oklch(51.1% 0.158 253.1)",
+        "dark": "#0066bd",
+        "purpose": "The primary button on hover and active; 5.78:1 with white.",
+        "tonalRamp": [
+          "oklch(15% 0.158 253.1)",
+          "oklch(26% 0.158 253.1)",
+          "oklch(38% 0.158 253.1)",
+          "oklch(50% 0.158 253.1)",
+          "oklch(62% 0.158 253.1)",
+          "oklch(73% 0.158 253.1)",
+          "oklch(84% 0.158 253.1)",
+          "oklch(95% 0.158 253.1)"
+        ],
+        "note": "Unchanged in the dark scheme."
+      },
+      "accent-tint": {
+        "role": "primary",
+        "displayName": "Blue Tint",
+        "canonical": "rgb(35 131 226 / 0.14)",
+        "oklch": "oklch(60.6% 0.167 252.7)",
+        "dark": "rgb(35 131 226 / 0.22)",
+        "purpose": "The 2px halo outside a focused field.",
+        "tonalRamp": [
+          "oklch(15% 0.167 252.7)",
+          "oklch(26% 0.167 252.7)",
+          "oklch(38% 0.167 252.7)",
+          "oklch(50% 0.167 252.7)",
+          "oklch(62% 0.167 252.7)",
+          "oklch(73% 0.167 252.7)",
+          "oklch(84% 0.167 252.7)",
+          "oklch(95% 0.167 252.7)"
+        ]
+      },
+      "on-accent": {
+        "role": "primary",
+        "displayName": "On Accent",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "dark": "#ffffff",
+        "purpose": "Text and the check glyph on blue.",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(26% 0.000 89.9)",
+          "oklch(38% 0.000 89.9)",
+          "oklch(50% 0.000 89.9)",
+          "oklch(62% 0.000 89.9)",
+          "oklch(73% 0.000 89.9)",
+          "oklch(84% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ],
+        "note": "Unchanged in the dark scheme."
+      },
+      "selection": {
+        "role": "primary",
+        "displayName": "Selection",
+        "canonical": "rgb(35 131 226 / 0.3)",
+        "oklch": "oklch(60.6% 0.167 252.7)",
+        "dark": "rgb(35 131 226 / 0.3)",
+        "purpose": "::selection across the page.",
+        "tonalRamp": [
+          "oklch(15% 0.167 252.7)",
+          "oklch(26% 0.167 252.7)",
+          "oklch(38% 0.167 252.7)",
+          "oklch(50% 0.167 252.7)",
+          "oklch(62% 0.167 252.7)",
+          "oklch(73% 0.167 252.7)",
+          "oklch(84% 0.167 252.7)",
+          "oklch(95% 0.167 252.7)"
+        ],
+        "note": "Unchanged in the dark scheme."
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "Danger",
+        "canonical": "#b3372f",
+        "oklch": "oklch(51.9% 0.162 27.8)",
+        "dark": "#f28b88",
+        "purpose": "Fault titles, icons, lines, the invalid ring, the location code, Remove question.",
+        "tonalRamp": [
+          "oklch(15% 0.162 27.8)",
+          "oklch(26% 0.162 27.8)",
+          "oklch(38% 0.162 27.8)",
+          "oklch(50% 0.162 27.8)",
+          "oklch(62% 0.162 27.8)",
+          "oklch(73% 0.162 27.8)",
+          "oklch(84% 0.162 27.8)",
+          "oklch(95% 0.162 27.8)"
+        ]
+      },
+      "danger-tint": {
+        "role": "secondary",
+        "displayName": "Danger Tint",
+        "canonical": "#fdebec",
+        "oklch": "oklch(95.5% 0.020 13.6)",
+        "dark": "#362422",
+        "purpose": "Fill of the fault callout, the fault banner, a question fault line.",
+        "tonalRamp": [
+          "oklch(15% 0.020 13.6)",
+          "oklch(26% 0.020 13.6)",
+          "oklch(38% 0.020 13.6)",
+          "oklch(50% 0.020 13.6)",
+          "oklch(62% 0.020 13.6)",
+          "oklch(73% 0.020 13.6)",
+          "oklch(84% 0.020 13.6)",
+          "oklch(95% 0.020 13.6)"
+        ]
+      },
+      "danger-tint-2": {
+        "role": "secondary",
+        "displayName": "Danger Tint 2",
+        "canonical": "rgb(212 76 71 / 0.16)",
+        "oklch": "oklch(60.2% 0.172 25.8)",
+        "dark": "rgb(0 0 0 / 0.3)",
+        "purpose": "Fill behind the location code inside a fault.",
+        "tonalRamp": [
+          "oklch(15% 0.172 25.8)",
+          "oklch(26% 0.172 25.8)",
+          "oklch(38% 0.172 25.8)",
+          "oklch(50% 0.172 25.8)",
+          "oklch(62% 0.172 25.8)",
+          "oklch(73% 0.172 25.8)",
+          "oklch(84% 0.172 25.8)",
+          "oklch(95% 0.172 25.8)"
+        ]
+      },
+      "tooltip": {
         "role": "neutral",
-        "displayName": "Field Edge Top",
-        "purpose": "Top wall of a paper field's sunk well."
+        "displayName": "Tooltip",
+        "canonical": "#0f0f0f",
+        "oklch": "oklch(16.8% 0.000 89.9)",
+        "dark": "#ffffff",
+        "purpose": "The tooltip card and the toast; white in the dark scheme.",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(26% 0.000 89.9)",
+          "oklch(38% 0.000 89.9)",
+          "oklch(50% 0.000 89.9)",
+          "oklch(62% 0.000 89.9)",
+          "oklch(73% 0.000 89.9)",
+          "oklch(84% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
+      },
+      "tooltip-ink": {
+        "role": "neutral",
+        "displayName": "Tooltip Ink",
+        "canonical": "rgb(255 255 255 / 0.9)",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "dark": "#191919",
+        "purpose": "Text on the tooltip and toast.",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(26% 0.000 89.9)",
+          "oklch(38% 0.000 89.9)",
+          "oklch(50% 0.000 89.9)",
+          "oklch(62% 0.000 89.9)",
+          "oklch(73% 0.000 89.9)",
+          "oklch(84% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
+      },
+      "overlay": {
+        "role": "neutral",
+        "displayName": "Overlay",
+        "canonical": "rgb(15 15 15 / 0.6)",
+        "oklch": "oklch(16.8% 0.000 89.9)",
+        "dark": "rgb(15 15 15 / 0.8)",
+        "purpose": "The scrim behind the drawer.",
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(26% 0.000 89.9)",
+          "oklch(38% 0.000 89.9)",
+          "oklch(50% 0.000 89.9)",
+          "oklch(62% 0.000 89.9)",
+          "oklch(73% 0.000 89.9)",
+          "oklch(84% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
+      },
+      "scroll-thumb": {
+        "role": "neutral",
+        "displayName": "Scroll Thumb",
+        "canonical": "#d3d1cb",
+        "oklch": "oklch(86.1% 0.008 91.5)",
+        "dark": "#454545",
+        "purpose": "Thin scrollbars.",
+        "tonalRamp": [
+          "oklch(15% 0.008 91.5)",
+          "oklch(26% 0.008 91.5)",
+          "oklch(38% 0.008 91.5)",
+          "oklch(50% 0.008 91.5)",
+          "oklch(62% 0.008 91.5)",
+          "oklch(73% 0.008 91.5)",
+          "oklch(84% 0.008 91.5)",
+          "oklch(95% 0.008 91.5)"
+        ]
       }
     },
     "typographyMeta": {
-      "display": {
-        "displayName": "Display",
-        "purpose": "The maker's plate in the rail; one per page. Uppercase."
+      "page-title": {
+        "displayName": "Page title",
+        "purpose": "The one Playground heading beside its 32px page glyph. The only letter-spacing on the page."
       },
-      "headline": {
-        "displayName": "Headline",
-        "purpose": "Engraved panel headings (State, Questions, Raw exchange). Uppercase."
+      "page-title-compact": {
+        "displayName": "Page title, compact",
+        "purpose": "The same heading below 720px, beside a 24px glyph."
       },
-      "title": {
-        "displayName": "Title",
-        "purpose": "A channel's question id, shown exactly as in the request."
+      "block-heading": {
+        "displayName": "Block heading",
+        "purpose": "State, Questions, question ids, toggle headings."
+      },
+      "ui": {
+        "displayName": "UI",
+        "purpose": "Buttons, rows, the crumb; the workspace name and the winning option name at 600."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Running text and option names (500 for option names); tabular numerals throughout."
+        "purpose": "Lede, instructions (65ch), option names, readouts, properties, field text, callouts (56ch); tabular numerals."
       },
-      "body-small": {
-        "displayName": "Body Small",
-        "purpose": "Channel instructions (max 65ch); 0.875rem variant for notes and level-fit lines."
+      "small": {
+        "displayName": "Small",
+        "purpose": "Segments (line-height 1), small buttons, banner, toast, question fault lines; 400 for toggle captions and field fault lines."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Engraved legends under and beside every control and window. Uppercase, 1px engrave under-shadow."
+        "purpose": "Field labels, sidebar headings, tags, tooltip, criteria legends, wire pane headings."
       },
-      "key-legend": {
-        "displayName": "Key Legend",
-        "purpose": "The RUN transport key's legend. Uppercase."
-      },
-      "switch": {
-        "displayName": "Switch",
-        "purpose": "The model name on the chrome model switch."
-      },
-      "figure": {
-        "displayName": "Figure",
-        "purpose": "Returned text values (the chosen answer), amber on glass."
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Token count, last-run line, field notes, sidebar foot, option notes, score fit."
       },
       "code": {
         "displayName": "Code",
-        "purpose": "The state tape and questions editor."
-      },
-      "code-small": {
-        "displayName": "Code Small",
-        "purpose": "The wire and raw answers."
-      },
-      "matrix": {
-        "displayName": "Matrix",
-        "purpose": "Dot-matrix counters (latency, tokens); 1.375rem at phone width."
-      },
-      "matrix-readout": {
-        "displayName": "Matrix Readout",
-        "purpose": "Per-option percent readouts and figure readouts; 1.125rem at phone width."
+        "purpose": "State, questions JSON, wire panes, snippet; 1.5 in a code field; inline code at 0.85em on the hover fill."
       }
     },
     "shadows": [
       {
-        "name": "engraving",
-        "value": "0 1px 0 rgb(255 255 255 / 0.6)",
-        "purpose": "text-shadow: legends and headings cut into aluminium; dropped on paper and the dark shell."
+        "name": "hairline-ring",
+        "value": "rgb(15 15 15 / 0.1) 0 0 0 1px",
+        "dark": "rgb(255 255 255 / 0.094) 0 0 0 1px",
+        "purpose": "Question blocks: the ring that stands in for a border."
       },
       {
-        "name": "groove",
-        "value": "0 1px 0 #a9afb5, 0 2px 0 #e4e7ea",
-        "purpose": "The two-line rule under the rail and panel heads (inset variant above the figures row); replaces every divider."
+        "name": "field-inset",
+        "value": "inset 0 0 0 1px var(--hairline-strong)",
+        "purpose": "Inputs, the select, an unchecked check box."
       },
       {
-        "name": "chrome-plate",
-        "value": "inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(0 0 0 / 0.18), 0 1px 2px rgb(0 0 0 / 0.3)",
-        "purpose": "The model switch plate."
+        "name": "focus-ring",
+        "value": "inset 0 0 0 1px var(--accent), 0 0 0 2px var(--accent-tint)",
+        "purpose": "A focused field, select or code block; other controls use outline: 2px solid var(--accent) at 1px offset."
       },
       {
-        "name": "channel-module",
-        "value": "inset 0 1px 0 rgb(255 255 255 / 0.8), 0 2px 4px rgb(0 0 0 / 0.18), 0 6px 12px -8px rgb(0 0 0 / 0.35)",
-        "purpose": "Bolted question modules raised off the fascia."
+        "name": "fault-inset",
+        "value": "inset 0 0 0 1px var(--danger)",
+        "purpose": "A field or code block with aria-invalid=\"true\"."
       },
       {
-        "name": "cassette",
-        "value": "inset 0 1px 0 rgb(255 255 255 / 0.12), 0 8px 16px -8px rgb(0 0 0 / 0.55), 0 1px 2px rgb(0 0 0 / 0.35)",
-        "purpose": "The heavier cassette shell."
+        "name": "divider",
+        "value": "inset -1px 0 0 var(--hairline) | inset 0 -1px 0 var(--hairline) | inset 0 1px 0 var(--hairline)",
+        "purpose": "Sidebar right edge; top bar and banner bottom; top of a property list or builder panel."
       },
       {
-        "name": "fault-panel",
-        "value": "inset 0 1px 0 rgb(255 255 255 / 0.6), 0 2px 4px rgb(0 0 0 / 0.18)",
-        "purpose": "Fault panels."
+        "name": "segment-lift",
+        "value": "0 0 0 1px var(--edge-strong), rgb(15 15 15 / 0.1) 0 1px 2px",
+        "purpose": "The checked segment on its raised plate."
       },
       {
-        "name": "key-rest",
-        "value": "inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -2px 0 rgb(0 0 0 / 0.2), 0 3px 0 #7d838a, 0 5px 10px rgb(0 0 0 / 0.3)",
-        "purpose": "RUN key only: the 3px skirt is the key's travel."
+        "name": "popover",
+        "value": "rgb(15 15 15 / 0.1) 0 0 0 1px, rgb(15 15 15 / 0.1) 0 3px 6px, rgb(15 15 15 / 0.2) 0 9px 24px",
+        "dark": "rgb(255 255 255 / 0.094) 0 0 0 1px, rgb(15 15 15 / 0.5) 0 3px 6px, rgb(15 15 15 / 0.6) 0 9px 24px",
+        "purpose": "The share popover and the skip link."
       },
       {
-        "name": "key-pressed",
-        "value": "inset 0 1px 0 rgb(255 255 255 / 0.8), inset 0 -1px 0 rgb(0 0 0 / 0.2), 0 0 0 #7d838a, 0 2px 4px rgb(0 0 0 / 0.3)",
-        "purpose": "RUN key pressed or busy, with translateY(3px)."
+        "name": "drawer",
+        "value": "rgb(15 15 15 / 0.2) 0 0 0 1px, rgb(15 15 15 / 0.3) 0 12px 32px",
+        "dark": "rgb(255 255 255 / 0.094) 0 0 0 1px, rgb(15 15 15 / 0.7) 0 12px 32px",
+        "purpose": "The sidebar as a drawer below 960px."
       },
       {
-        "name": "sunk-window-bevel",
-        "value": "border-width: 2px 1px 1px; border-color: #050403 #1d1c17 #e4e7ea #1d1c17",
-        "purpose": "Not a shadow: the border bevel that sinks every glass window (3px top for the larger wells)."
+        "name": "toast",
+        "value": "rgb(15 15 15 / 0.3) 0 4px 16px",
+        "purpose": "The copy toast."
       }
     ],
     "motion": [
       {
-        "name": "ease-out",
-        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "The only easing: key press and ladder climb."
+        "name": "ease",
+        "value": "cubic-bezier(0.3, 0, 0.5, 1)",
+        "purpose": "The shell collapse, the drawer, the scrim, and the bar growth."
       },
       {
-        "name": "key-press",
-        "value": "80ms",
-        "purpose": "RUN key transform and shadow transition; none under reduced motion."
+        "name": "fast",
+        "value": "100ms ease-in",
+        "purpose": "Hover fills, colours, box-shadows, the toggle marker turn, the collapse control fade; none under reduced motion."
       },
       {
-        "name": "ladder-climb",
-        "value": "900ms",
-        "purpose": "Lit ladder segments climb from zero to the returned level via clip-path; static under reduced motion."
+        "name": "normal",
+        "value": "200ms",
+        "purpose": "Sidebar collapse (grid columns), drawer slide (transform) and scrim (opacity); none under reduced motion."
+      },
+      {
+        "name": "bar-grow",
+        "value": "400ms cubic-bezier(0.3, 0, 0.5, 1) both",
+        "purpose": "A bar fill grows from 0 to the returned probability after each run; none under reduced motion."
+      },
+      {
+        "name": "spin",
+        "value": "900ms linear infinite",
+        "purpose": "The Run button spinner arc while busy; still under reduced motion."
+      },
+      {
+        "name": "scroll",
+        "value": "smooth | instant",
+        "purpose": "scrollIntoView is smooth, instant under reduced motion."
+      },
+      {
+        "name": "toast-hold",
+        "value": "4s",
+        "purpose": "The copy toast clears after four seconds."
       }
     ],
     "breakpoints": [
       {
-        "name": "rail-restack",
-        "value": "1080px"
+        "name": "page-padding",
+        "value": "1200px",
+        "purpose": "Page side padding drops from 48px to 32px."
       },
       {
-        "name": "single-column",
-        "value": "960px"
+        "name": "drawer",
+        "value": "960px",
+        "purpose": "Columns stack; the sidebar becomes a fixed drawer over a scrim; the page is inert while it is open."
       },
       {
         "name": "phone",
-        "value": "720px"
+        "value": "720px",
+        "purpose": "Page padding 16px, title 1.5rem, bar rows restack, exchange panes stack, popover fixed under the top bar."
       }
-    ]
+    ],
+    "darkScheme": {
+      "trigger": "prefers-color-scheme: dark",
+      "note": "The same tokens are redefined under the media query; the page offers no switch. accent, accent-fill, accent-fill-hover, on-accent and selection do not change. Per-token dark values sit in colorMeta.<token>.dark."
+    }
   },
   "components": [
     {
-      "name": "RUN Transport Key",
+      "name": "Run (primary button)",
       "kind": "button",
-      "refersTo": "run-key",
-      "description": "The only transport key: a chrome transport key with an LED strip; pressing or running drops it 3px and burns the strip amber. Held with aria-disabled, never disabled; a Changed lamp beneath lights while the inputs differ from the last run. While a run waits on its model's first download the legend reads Pulling, and a Soft Engraving note under the rail says what is downloading and its size; no progress bar is drawn.",
-      "html": "<button type=\"button\" class=\"ds-run-key\"><span class=\"ds-run-led\" aria-hidden=\"true\"></span><svg class=\"ds-run-glyph\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 2.5v11l9-5.5z\"/></svg><span class=\"ds-run-legend\">Run</span></button>",
-      "css": ".ds-run-key { position: relative; display: grid; justify-items: center; align-content: center; gap: 6px; width: 104px; height: 80px; padding: 14px 10px 10px; border: 0; border-radius: var(--radius-control); background: linear-gradient(180deg, var(--chrome-hi), #d9dde1 45%, var(--chrome-lo)); color: var(--ink); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -2px 0 rgb(0 0 0 / 0.2), 0 3px 0 #7d838a, 0 5px 10px rgb(0 0 0 / 0.3); cursor: pointer; transition: transform 80ms var(--ease-out), box-shadow 80ms var(--ease-out); } .ds-run-led { position: absolute; top: 6px; left: 14px; right: 14px; height: 4px; border-radius: 2px; background: var(--amber-off); border: 1px solid #1a1407; } .ds-run-glyph { width: 22px; height: 22px; fill: var(--ink); } .ds-run-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.875rem; line-height: 1; letter-spacing: 0.16em; text-transform: uppercase; } .ds-run-key:hover { background: linear-gradient(180deg, #ffffff, #e2e6e9 45%, #bcc2c7); } .ds-run-key:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), inset 0 -1px 0 rgb(0 0 0 / 0.2), 0 0 0 #7d838a, 0 2px 4px rgb(0 0 0 / 0.3); } .ds-run-key:active .ds-run-led { background: linear-gradient(180deg, #ffe08a, var(--amber) 60%); border-color: var(--amber-dim); } .ds-run-key:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; } @media (prefers-reduced-motion: reduce) { .ds-run-key { transition: none; } }"
+      "refersTo": "button-primary",
+      "description": "The one blue button, in the sticky top bar. Held with aria-disabled (never disabled) at 50% opacity with its reason in the banner; busy at 85% with a turning arc and the label Running or Pulling; Ctrl/Cmd+Enter presses it from anywhere.",
+      "html": "<button type=\"button\" class=\"ds-button ds-button-primary\" aria-keyshortcuts=\"Control+Enter Meta+Enter\">Run</button> <button type=\"button\" class=\"ds-button ds-button-primary\" aria-busy=\"true\"><svg class=\"ds-icon ds-icon-sm ds-spinner\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 1.5a6.5 6.5 0 0 1 6.5 6.5\"/></svg>Running</button> <button type=\"button\" class=\"ds-button ds-button-primary\" aria-disabled=\"true\">Run</button>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-primary{background:var(--accent-fill, #0075d3);color:var(--on-accent, #ffffff);padding:0 12px}.ds-button-primary:hover:not([aria-disabled=\"true\"]),.ds-button-primary:active:not([aria-disabled=\"true\"]){background:var(--accent-fill-hover, #0066bd)}.ds-button-primary[aria-disabled=\"true\"]{background:var(--accent-fill, #0075d3);color:var(--on-accent, #ffffff);opacity:.5}.ds-button-primary[aria-busy=\"true\"]{opacity:.85}.ds-button-primary .ds-icon{color:inherit}.ds-icon-sm{width:14px;height:14px}.ds-spinner{animation:ds-spin 900ms linear infinite}@keyframes ds-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.ds-button{transition:none}.ds-spinner{animation:none}}"
     },
     {
-      "name": "Model Switch",
-      "kind": "input",
-      "refersTo": "model-switch",
-      "description": "A real select on a chrome plate with an engraved chevron and the Model legend beneath; it names real local models only, the pulled ones first, then the library models a first run pulls with their download size, and starts on the server's default model.",
-      "html": "<div class=\"ds-switch\"><div class=\"ds-switch-plate\"><select id=\"ds-model\" class=\"ds-switch-select\"><optgroup label=\"Pulled\"><option>decider-2b</option></optgroup><optgroup label=\"Library · pulls on first run\"><option>decider-4b · 2.7 GB</option><option>qwen3.5-0.8b · 563.0 MB</option></optgroup></select></div><label class=\"ds-legend\" for=\"ds-model\">Model</label></div>",
-      "css": ".ds-switch { display: grid; gap: var(--space-1); max-width: 22rem; } .ds-switch-plate { position: relative; border-radius: var(--radius-control); background: linear-gradient(180deg, var(--chrome-hi), #d3d8dc 48%, var(--chrome-lo)); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(0 0 0 / 0.18), 0 1px 2px rgb(0 0 0 / 0.3); } .ds-switch-plate::after { content: \"\"; position: absolute; top: 50%; right: 14px; width: 8px; height: 8px; margin-top: -6px; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg); pointer-events: none; } .ds-switch-select { appearance: none; width: 100%; padding: 10px 40px 10px 14px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--ink); font: 600 1rem/1.2 var(--font-legend); letter-spacing: 0.04em; cursor: pointer; } .ds-switch-select:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; } .ds-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); }"
-    },
-    {
-      "name": "Plate Key",
+      "name": "Ghost button",
       "kind": "button",
-      "refersTo": "plate-key",
-      "description": "Every button but RUN: a chrome plate that sits into the panel when pressed or open; no skirt.",
-      "html": "<button type=\"button\" class=\"ds-plate-key\">Add question</button> <button type=\"button\" class=\"ds-plate-key\" aria-expanded=\"true\">Edit</button> <button type=\"button\" class=\"ds-plate-key\" disabled>Remove</button>",
-      "css": ".ds-plate-key { display: inline-flex; align-items: center; min-height: 36px; padding: 6px 14px; border: 0; border-radius: var(--radius-control); background: linear-gradient(180deg, var(--chrome-hi), #d3d8dc 48%, var(--chrome-lo)); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(0 0 0 / 0.18), 0 1px 2px rgb(0 0 0 / 0.3); color: var(--ink); font: 600 0.8125rem/1.1 var(--font-legend); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; transition: background 80ms var(--ease-out), box-shadow 80ms var(--ease-out); } .ds-plate-key:hover:not(:disabled) { background: linear-gradient(180deg, #ffffff, #dfe3e6 48%, #bcc2c7); } .ds-plate-key:active:not(:disabled), .ds-plate-key[aria-expanded=\"true\"] { background: linear-gradient(180deg, #b9bec3, #cfd3d7 60%, #dde0e3); box-shadow: inset 0 2px 3px rgb(0 0 0 / 0.3), inset 0 -1px 0 rgb(255 255 255 / 0.6); } .ds-plate-key:disabled { background: linear-gradient(180deg, #e3e6e9, #c9ced2); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7); color: var(--ink-soft); cursor: not-allowed; } .ds-plate-key:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; } @media (prefers-reduced-motion: reduce) { .ds-plate-key { transition: none; } }"
+      "refersTo": "button",
+      "description": "Every other button: transparent at rest, 8% ink on hover, 16% when pressed or expanded; the icon square (28px, 24px small) is named by its aria-label; the small size is 24px at 13px for row actions.",
+      "html": "<button type=\"button\" class=\"ds-button\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M6 6h7v7H6zM3 10V3h7\"/></svg>Share</button> <button type=\"button\" class=\"ds-button\" aria-expanded=\"true\">Edit</button> <button type=\"button\" class=\"ds-button ds-button-icon\" aria-label=\"Open sidebar\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M7 3l5 5-5 5M3 3l5 5-5 5\"/></svg></button> <button type=\"button\" class=\"ds-button ds-button-sm\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M6 6h7v7H6zM3 10V3h7\"/></svg>Copy</button> <button type=\"button\" class=\"ds-button ds-button-sm\" aria-disabled=\"true\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 3v10M3 8h10\"/></svg>Add option</button>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-icon{width:28px;min-width:28px;padding:0}.ds-button-sm{min-height:24px;font-size:0.8125rem}.ds-button-icon.ds-button-sm{width:24px;min-width:24px}@media (prefers-reduced-motion:reduce){.ds-button{transition:none}}"
     },
     {
-      "name": "Chrome Toggle",
+      "name": "Segmented control",
       "kind": "input",
-      "refersTo": "toggle-key",
-      "description": "A native radio group as chrome keys in a milled track; the pressed key sits in and its lamp lights amber (question type, snippet language).",
-      "html": "<div class=\"ds-toggle\" role=\"radiogroup\" aria-labelledby=\"ds-type\"><span class=\"ds-legend\" id=\"ds-type\">Type</span><span class=\"ds-toggle-keys\"><label class=\"ds-toggle-key\"><input type=\"radio\" name=\"ds-t\" class=\"ds-toggle-input\"><span class=\"ds-lamp\"></span>noul</label><label class=\"ds-toggle-key ds-on\"><input type=\"radio\" name=\"ds-t\" class=\"ds-toggle-input\" checked><span class=\"ds-lamp\"></span>choice</label><label class=\"ds-toggle-key\"><input type=\"radio\" name=\"ds-t\" class=\"ds-toggle-input\"><span class=\"ds-lamp\"></span>score</label></span></div>",
-      "css": ".ds-toggle { display: inline-flex; align-items: center; gap: var(--space-2); } .ds-legend { font: 600 0.75rem/1.2 var(--font-legend); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); } .ds-toggle-keys { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: var(--radius-control); background: #aeb4ba; border-style: solid; border-width: 2px 1px 1px; border-color: #8d9399 var(--alu-lo) var(--alu-hi); } .ds-toggle-key { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; border-radius: 4px; background: linear-gradient(180deg, var(--chrome-hi), #d3d8dc 48%, var(--chrome-lo)); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(0 0 0 / 0.18); font: 600 0.8125rem/1 var(--font-legend); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); cursor: pointer; } .ds-toggle-key.ds-on { background: linear-gradient(180deg, #b9bec3, #cfd3d7 60%, #dde0e3); box-shadow: inset 0 2px 3px rgb(0 0 0 / 0.3), inset 0 -1px 0 rgb(255 255 255 / 0.6); } .ds-toggle-key:has(.ds-toggle-input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 2px; } .ds-toggle-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; } .ds-lamp { width: 8px; height: 8px; border-radius: 50%; background: var(--amber-off); border: 1px solid #1a1407; } .ds-on > .ds-lamp { background: radial-gradient(circle at 40% 35%, #fff1c9, var(--amber) 55%, var(--amber-dim)); border-color: #6e4300; }"
+      "refersTo": "segmented-control",
+      "description": "A native radio group in a low track; the checked option lifts onto a raised plate. Arrow keys move the choice; the invisible radio covers its segment. Used for a question type and the snippet language.",
+      "html": "<div class=\"ds-segmented\" role=\"radiogroup\" aria-labelledby=\"ds-type\"><span class=\"ds-segmented-legend\" id=\"ds-type\">Type</span><span class=\"ds-segmented-options\"><label class=\"ds-segment\"><input type=\"radio\" name=\"ds-t\" class=\"ds-segment-input\">noul</label><label class=\"ds-segment ds-on\"><input type=\"radio\" name=\"ds-t\" class=\"ds-segment-input\" checked>choice</label><label class=\"ds-segment\"><input type=\"radio\" name=\"ds-t\" class=\"ds-segment-input\">score</label></span></div>",
+      "css": ".ds-segmented{display:inline-flex;align-items:center;gap:8px;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-segmented-legend{color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem}.ds-segmented-options{display:inline-flex;padding:2px;border-radius:6px;background:var(--hover, rgb(55 53 47 / 0.08))}.ds-segment{position:relative;display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:4px;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem;font-weight:500;line-height:1;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in,box-shadow 100ms ease-in}.ds-segment:hover:not(.ds-on){color:var(--ink, #37352f)}.ds-segment.ds-on{background:var(--raised, #ffffff);color:var(--ink, #37352f);box-shadow:0 0 0 1px var(--edge-strong, rgb(55 53 47 / 0.55)),rgb(15 15 15 / 0.1) 0 1px 2px;cursor:default}.ds-segment-input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:inherit}.ds-segment:has(.ds-segment-input:focus-visible){outline:2px solid var(--accent, #2383e2);outline-offset:1px}@media (prefers-reduced-motion:reduce){.ds-segment{transition:none}}"
     },
     {
-      "name": "Paper Field",
+      "name": "Field",
       "kind": "input",
       "refersTo": "field",
-      "description": "A builder field: label paper in a sunk well (3:1 edges), the ink focus outline, Fault Ink when invalid.",
-      "html": "<div class=\"ds-field\"><label class=\"ds-legend\" for=\"ds-f\">Instructions</label><input id=\"ds-f\" class=\"ds-field-input\" value=\"Does the customer ask for a refund?\"></div>",
-      "css": ".ds-field { display: grid; gap: var(--space-1); max-width: 28rem; } .ds-legend { font: 600 0.75rem/1.2 var(--font-legend); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); } .ds-field-input { min-height: 36px; padding: 6px 10px; border-radius: 4px; background: var(--paper); border-style: solid; border-width: 2px 1px 1px; border-color: #4f5459 #676d73 #676d73; box-shadow: 0 1px 0 var(--alu-hi); color: var(--ink); font: 400 0.9375rem/1.4 var(--font-text); } .ds-field-input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; } .ds-field-input[aria-invalid=\"true\"] { border-color: var(--fault-ink); }"
+      "description": "A low input on a faint fill with an inset hairline; blue ring and tint halo on focus; danger ring and a fault line beneath when aria-invalid; code fields in 13px mono.",
+      "html": "<div class=\"ds-field\"><label class=\"ds-field-label\" for=\"ds-f1\">Question id</label><input id=\"ds-f1\" class=\"ds-field-input ds-field-code\" type=\"text\" value=\"department\"></div> <div class=\"ds-field\"><label class=\"ds-field-label\" for=\"ds-f2\">Instructions</label><input id=\"ds-f2\" class=\"ds-field-input\" type=\"text\" placeholder=\"Which department should handle this?\"></div> <div class=\"ds-field\"><label class=\"ds-field-label\" for=\"ds-f3\">Option 1 name</label><input id=\"ds-f3\" class=\"ds-field-input ds-field-code\" type=\"text\" value=\"\" aria-invalid=\"true\" aria-describedby=\"ds-f3-error\"><p id=\"ds-f3-error\" class=\"ds-fault-line\">Option names must not be empty</p></div>",
+      "css": ".ds-field{display:inline-grid;gap:4px;min-width:16rem;margin:0 8px 8px 0;vertical-align:top;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-field-label{color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.75rem;font-weight:500;line-height:1.4}.ds-field-input{display:block;width:100%;min-height:28px;padding:3px 8px;border:0;border-radius:4px;background:var(--field, rgb(242 241 238 / 0.6));box-shadow:inset 0 0 0 1px var(--hairline-strong, rgb(55 53 47 / 0.16));color:var(--ink, #37352f);font:400 0.875rem/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;transition:box-shadow 100ms ease-in}.ds-field-input::placeholder{color:var(--ink-2, rgb(25 23 17 / 0.65));opacity:1}.ds-field-input:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent, #2383e2),0 0 0 2px var(--accent-tint, rgb(35 131 226 / 0.14))}.ds-field-input[aria-invalid=\"true\"]{box-shadow:inset 0 0 0 1px var(--danger, #b3372f)}.ds-field-code{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", Courier, monospace;font-size:0.8125rem}.ds-fault-line{margin:0;color:var(--danger, #b3372f);font-size:0.8125rem;line-height:1.4}@media (prefers-reduced-motion:reduce){.ds-field-input{transition:none}}"
     },
     {
-      "name": "Dot-Matrix Counter",
-      "kind": "custom",
-      "refersTo": "counter-window",
-      "description": "A sunk smoked-glass window: amber Doto digits over an unlit 5x7 ghost grid, engraved legend beneath.",
-      "html": "<div class=\"ds-counter\"><div class=\"ds-matrix\"><span class=\"ds-matrix-digits\">106</span></div><span class=\"ds-legend\">Latency ms</span></div>",
-      "css": ".ds-counter { display: inline-grid; justify-items: center; gap: var(--space-1); } .ds-matrix { min-width: 6.5rem; padding: 6px 12px 4px; border-radius: 5px; background-color: var(--glass); border-style: solid; border-width: 2px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); text-align: right; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 70'%3E%3Cpath fill='%23282010' d='M1 1h8.25v8.25h-8.25zM1 11h8.25v8.25h-8.25zM1 21h8.25v8.25h-8.25zM1 31h8.25v8.25h-8.25zM1 41h8.25v8.25h-8.25zM1 51h8.25v8.25h-8.25zM1 61h8.25v8.25h-8.25zM11 1h8.25v8.25h-8.25zM11 11h8.25v8.25h-8.25zM11 21h8.25v8.25h-8.25zM11 31h8.25v8.25h-8.25zM11 41h8.25v8.25h-8.25zM11 51h8.25v8.25h-8.25zM11 61h8.25v8.25h-8.25zM21 1h8.25v8.25h-8.25zM21 11h8.25v8.25h-8.25zM21 21h8.25v8.25h-8.25zM21 31h8.25v8.25h-8.25zM21 41h8.25v8.25h-8.25zM21 51h8.25v8.25h-8.25zM21 61h8.25v8.25h-8.25zM31 1h8.25v8.25h-8.25zM31 11h8.25v8.25h-8.25zM31 21h8.25v8.25h-8.25zM31 31h8.25v8.25h-8.25zM31 41h8.25v8.25h-8.25zM31 51h8.25v8.25h-8.25zM31 61h8.25v8.25h-8.25zM41 1h8.25v8.25h-8.25zM41 11h8.25v8.25h-8.25zM41 21h8.25v8.25h-8.25zM41 31h8.25v8.25h-8.25zM41 41h8.25v8.25h-8.25zM41 51h8.25v8.25h-8.25zM41 61h8.25v8.25h-8.25z'/%3E%3C/svg%3E\"); background-repeat: repeat-x; background-origin: content-box; background-size: 0.6em 0.7em; background-position: right top 0.15em; font-family: var(--font-matrix); font-weight: 800; font-size: 1.75rem; line-height: 1; letter-spacing: 0.04em; } .ds-matrix-digits { color: var(--amber); } .ds-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); color: var(--ink); }"
-    },
-    {
-      "name": "Ladder Row",
-      "kind": "custom",
-      "refersTo": "ladder",
-      "description": "One option: lamp, name, amber LED ladder clipped to the returned level with a quarter-tick scale, and a dot-matrix readout. The lit row is the answer.",
-      "html": "<ol class=\"ds-ladders\"><li class=\"ds-ladder-row ds-lit\"><span class=\"ds-lamp\" aria-hidden=\"true\"></span><span class=\"ds-ladder-name\">billing</span><span class=\"ds-ladder\" style=\"--level:0.9346\" aria-hidden=\"true\"><span class=\"ds-ladder-fill\"></span></span><span class=\"ds-readout\">93<span class=\"ds-point\">.</span>5%</span></li><li class=\"ds-ladder-row\"><span class=\"ds-lamp\" aria-hidden=\"true\"></span><span class=\"ds-ladder-name\">sales</span><span class=\"ds-ladder\" style=\"--level:0.0605\" aria-hidden=\"true\"><span class=\"ds-ladder-fill\"></span></span><span class=\"ds-readout\">6<span class=\"ds-point\">.</span>1%</span></li></ol>",
-      "css": ".ds-ladders { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; } .ds-ladder-row { display: grid; grid-template-columns: 8px minmax(6rem, 13rem) minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); } .ds-lamp { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--amber-off); border: 1px solid #1a1407; } .ds-lit > .ds-lamp { background: radial-gradient(circle at 40% 35%, #fff1c9, var(--amber) 55%, var(--amber-dim)); border-color: #6e4300; } .ds-ladder-name { font-family: var(--font-text); font-weight: 500; font-size: 1rem; line-height: 1.25; color: var(--ink); } .ds-lit .ds-ladder-name { text-decoration: underline; text-decoration-color: var(--amber-dim); text-decoration-thickness: 2px; text-underline-offset: 4px; } .ds-ladder { position: relative; height: 16px; padding: 2px; border-radius: 3px; background: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='10'%3E%3Crect width='6' height='10' fill='%233d2e0d'/%3E%3C/svg%3E\") 0 0 / 8px 10px repeat-x, var(--glass); background-origin: content-box, padding-box; background-clip: content-box, padding-box; border-style: solid; border-width: 2px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); } .ds-ladder::after { content: \"\"; position: absolute; left: -1px; right: -1px; top: calc(100% + 3px); height: 4px; background: linear-gradient(var(--alu-lo), var(--alu-lo)) 0 0 / 1px 100% no-repeat, linear-gradient(var(--alu-lo), var(--alu-lo)) 25% 100% / 1px 50% no-repeat, linear-gradient(var(--alu-lo), var(--alu-lo)) 50% 0 / 1px 100% no-repeat, linear-gradient(var(--alu-lo), var(--alu-lo)) 75% 100% / 1px 50% no-repeat, linear-gradient(var(--alu-lo), var(--alu-lo)) 100% 0 / 1px 100% no-repeat; } .ds-ladder-fill { position: absolute; inset: 2px; background: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='10'%3E%3Crect width='6' height='10' fill='%23ffb000'/%3E%3C/svg%3E\") 0 0 / 8px 10px repeat-x; clip-path: inset(0 calc((1 - var(--level, 0)) * 100%) 0 0); animation: ds-ladder-climb 900ms var(--ease-out) both; } @keyframes ds-ladder-climb { from { clip-path: inset(0 100% 0 0); } } .ds-readout { min-width: 5.25rem; padding: 3px 8px 1px; border-radius: 4px; background-color: var(--glass); border-style: solid; border-width: 2px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); color: var(--amber); font-family: var(--font-matrix); font-weight: 800; font-size: 1.25rem; line-height: 1.1; text-align: right; } .ds-point { color: transparent; } .ds-point::before { content: \"\"; display: inline-block; width: 0.085em; height: 0.085em; margin: 0 -0.2925em 0.009em 0.2075em; border-radius: 0.012em; background: var(--amber); } @media (prefers-reduced-motion: reduce) { .ds-ladder-fill { animation: none; } }"
-    },
-    {
-      "name": "Channel Module",
-      "kind": "card",
-      "refersTo": "channel",
-      "description": "A bolted aluminium module per question: id title, instructions, read-only engraved type legend, ladders, then figures under a groove.",
-      "html": "<div class=\"ds-channel\"><div class=\"ds-channel-head\"><div><h3 class=\"ds-channel-id\">department</h3><p class=\"ds-channel-instructions\">Which department should handle this?</p></div><p class=\"ds-type\"><span class=\"ds-type-key\">Type</span> <span class=\"ds-type-name\">choice</span></p></div><dl class=\"ds-figures\"><div><dt class=\"ds-legend\">Answer</dt><dd class=\"ds-figure-text\">billing</dd></div></dl></div>",
-      "css": ".ds-channel { display: grid; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-module); background: linear-gradient(180deg, #e0e3e6, #cdd1d5 40%, #c3c8cd); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), 0 2px 4px rgb(0 0 0 / 0.18), 0 6px 12px -8px rgb(0 0 0 / 0.35); color: var(--ink); } .ds-channel-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); } .ds-channel-id { margin: 0; font-family: var(--font-legend); font-weight: 600; font-size: 1.25rem; line-height: 1.15; letter-spacing: 0.02em; text-shadow: 0 1px 0 var(--engrave); } .ds-channel-instructions { margin: 2px 0 0; font-family: var(--font-text); font-size: 0.9375rem; line-height: 1.4; color: var(--ink-soft); max-width: 65ch; } .ds-type { margin: 0; padding-top: 4px; font-family: var(--font-legend); font-weight: 600; text-transform: uppercase; text-shadow: 0 1px 0 var(--engrave); } .ds-type-key { font-size: 0.75rem; letter-spacing: 0.12em; color: var(--ink-soft); } .ds-type-name { font-size: 0.9375rem; letter-spacing: 0.1em; } .ds-figures { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-4); margin: 0; padding-top: var(--space-3); box-shadow: inset 0 1px 0 var(--alu-lo), inset 0 2px 0 var(--alu-hi); } .ds-figures dd { margin: 4px 0 0; } .ds-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); } .ds-figure-text { display: inline-block; min-width: 5.25rem; padding: 3px 10px; border-radius: 4px; background: var(--glass); border-style: solid; border-width: 2px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); color: var(--amber); font-family: var(--font-legend); font-weight: 600; font-size: 1.125rem; letter-spacing: 0.04em; }"
-    },
-    {
-      "name": "State Cassette",
+      "name": "Model select",
       "kind": "input",
-      "refersTo": "cassette",
-      "description": "A dark cassette shell with screw heads, a paper label carrying the engraved heading and Text/JSON mode lamps, and a sunk window holding a real text area.",
-      "html": "<section class=\"ds-cassette\"><div class=\"ds-cassette-label\"><label class=\"ds-engraved\" for=\"ds-state\">State</label><span class=\"ds-mode ds-on\"><span class=\"ds-lamp\"></span>Text</span></div><div class=\"ds-cassette-window\"><textarea id=\"ds-state\" class=\"ds-tape\" placeholder=\"Paste the state: a ticket, a transcript, a resume or a JSON record.\"></textarea></div></section>",
-      "css": ".ds-cassette { display: grid; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-module); background: radial-gradient(circle at 12px 12px, #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px), radial-gradient(circle at calc(100% - 12px) 12px, #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px), radial-gradient(circle at 12px calc(100% - 12px), #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px), radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #8e9296 0 3px, #55585b 3.5px 4.5px, transparent 5px), linear-gradient(180deg, var(--shell-hi), var(--shell) 30%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 8px 16px -8px rgb(0 0 0 / 0.55), 0 1px 2px rgb(0 0 0 / 0.35); } .ds-cassette-label { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-inline: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: 4px; background: linear-gradient(180deg, var(--paper), var(--paper-shade)); border: 1px solid #a9a18a; } .ds-engraved { font-family: var(--font-legend); font-weight: 600; font-size: 1.125rem; line-height: 1.1; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); } .ds-mode { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-hint); } .ds-mode.ds-on { color: var(--ink); } .ds-lamp { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--amber-off); border: 1px solid #1a1407; } .ds-on > .ds-lamp { background: radial-gradient(circle at 40% 35%, #fff1c9, var(--amber) 55%, var(--amber-dim)); border-color: #6e4300; } .ds-cassette-window { padding: 6px; border-radius: 6px; background: #0d0c09; border-style: solid; border-width: 3px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--shell-hi) var(--bevel-side); } .ds-tape { display: block; width: 100%; min-height: 220px; padding: var(--space-3) var(--space-4); border: 0; border-radius: 4px; background: var(--paper); color: var(--ink); font: 400 0.875rem/1.55 var(--font-code); resize: vertical; } .ds-tape::placeholder { color: var(--paper-hint); opacity: 1; } .ds-tape:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }"
+      "refersTo": "select",
+      "description": "A real select dressed as a field in the sidebar: transparent with the inset hairline, a 14px chevron, hover fill, the blue focus ring; pulled models first, then library models with their download size.",
+      "html": "<div class=\"ds-select\"><select class=\"ds-select-input\" aria-label=\"Model\"><optgroup label=\"Pulled\"><option>decider-2b</option></optgroup><optgroup label=\"Library · pulls on first run\"><option>decider-4b · 2.7 GB</option><option>qwen3.5-0.8b · 563.0 MB</option></optgroup></select><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 6.5l4 4 4-4\"/></svg></div>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-select{position:relative;display:block;max-width:16rem;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-select-input{appearance:none;width:100%;min-height:28px;padding:3px 28px 3px 8px;border:0;border-radius:4px;background:transparent;box-shadow:inset 0 0 0 1px var(--hairline-strong, rgb(55 53 47 / 0.16));color:var(--ink, #37352f);font:400 0.875rem/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;text-overflow:ellipsis;cursor:pointer;transition:background 100ms ease-in}.ds-select-input:hover{background:var(--hover, rgb(55 53 47 / 0.08))}.ds-select-input:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent, #2383e2),0 0 0 2px var(--accent-tint, rgb(35 131 226 / 0.14))}.ds-select .ds-icon{position:absolute;top:50%;right:8px;margin-top:-7px;width:14px;height:14px;color:var(--ink-2, rgb(25 23 17 / 0.65));pointer-events:none}"
     },
     {
-      "name": "Wire",
+      "name": "Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "A small grey chip for a state word: how the state will be sent, and that the inputs changed since the last run.",
+      "html": "<span class=\"ds-tag\">Sent as text</span> <span class=\"ds-tag\">Inputs changed</span> <span class=\"ds-tag\">From last run · inputs changed</span>",
+      "css": ".ds-tag{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 6px;border-radius:3px;background:var(--tag, rgb(227 226 224 / 0.5));color:var(--tag-ink, #32302c);font:500 0.75rem/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap}"
+    },
+    {
+      "name": "Tooltip",
       "kind": "custom",
-      "refersTo": "wire",
-      "description": "The raw exchange: a sunk smoked-glass pane of the exact bytes sent or received, focusable and scrollable.",
-      "html": "<div class=\"ds-exchange-side\"><h3 class=\"ds-legend\">Received · HTTP 200</h3><pre class=\"ds-wire\" tabindex=\"0\">{\"model\":\"decider-2b-v11\",\"answers\":{\"refund\":{\"type\":\"noul\",\"noul\":0.9261}}}</pre></div>",
-      "css": ".ds-exchange-side { display: grid; gap: var(--space-2); } .ds-legend { margin: 0; font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); color: var(--ink); } .ds-wire { margin: 0; max-height: 22rem; overflow: auto; padding: var(--space-3) var(--space-4); border-radius: 6px; background: var(--glass); border-style: solid; border-width: 3px 1px 1px; border-color: var(--bevel-deep) var(--bevel-side) var(--alu-hi) var(--bevel-side); color: var(--glass-text); font: 400 0.8125rem/1.55 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; } .ds-wire::selection { background: var(--amber); color: var(--glass); } .ds-wire:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }"
+      "refersTo": "tooltip",
+      "description": "The dark card from data-tip, shown on hover or focus above, below, at the start or the end of its control, with the shortcut on a second line; a transparent 6px border bridges the gap so the pointer can cross onto it; Escape hides every tooltip until the pointer or focus moves. Shown open here.",
+      "html": "<span class=\"ds-tip ds-tip-open\" data-tip=\"Send the state and questions&#10;Ctrl+Enter or ⌘↵\"><button type=\"button\" class=\"ds-button ds-button-primary\">Run</button></span>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-primary{background:var(--accent-fill, #0075d3);color:var(--on-accent, #ffffff);padding:0 12px}.ds-tip{position:relative;display:inline-block;margin-top:56px}.ds-tip::after{content:attr(data-tip);display:none;position:absolute;left:50%;bottom:100%;transform:translateX(-50%);z-index:30;width:max-content;max-width:min(272px,60vw);padding:4px 8px;border:6px solid transparent;border-radius:10px;background:var(--tooltip, #0f0f0f);background-clip:padding-box;color:var(--tooltip-ink, rgb(255 255 255 / 0.9));font:500 0.75rem/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:pre-line;text-align:center}.ds-tip:hover::after,.ds-tip:has(:focus-visible)::after,.ds-tip-open::after{display:block}"
     },
     {
-      "name": "Fault Panel",
+      "name": "Sidebar rows",
+      "kind": "nav",
+      "refersTo": "sidebar-row",
+      "description": "A section heading over page rows on the paper-grey panel: a 16px glyph and a label, hover fill, aria-current keeping the fill on the section in view; the Add question row uses the same shape on the page.",
+      "html": "<nav class=\"ds-sidebar\" aria-label=\"Workspace\"><p class=\"ds-sidebar-heading\">Presets</p><button type=\"button\" class=\"ds-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 1.5h5.5L13 5v9.5H4zM9.5 1.5V5H13M6.5 8.5h3M6.5 11h3\"/></svg><span class=\"ds-row-label\">Ticket routing</span></button><button type=\"button\" class=\"ds-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 1.5h5.5L13 5v9.5H4zM9.5 1.5V5H13M6.5 8.5h3M6.5 11h3\"/></svg><span class=\"ds-row-label\">Resume screening</span></button><p class=\"ds-sidebar-heading\">On this page</p><button type=\"button\" class=\"ds-row\" aria-current=\"true\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2.5 4.5h11M2.5 8h11M2.5 11.5h7\"/></svg><span class=\"ds-row-label\">State and questions</span></button><button type=\"button\" class=\"ds-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M5.5 2.5c-1.5 0-2 .5-2 2v2c0 1-.5 1.5-1.5 1.5 1 0 1.5.5 1.5 1.5v2c0 1.5.5 2 2 2M10.5 2.5c1.5 0 2 .5 2 2v2c0 1 .5 1.5 1.5 1.5-1 0-1.5.5-1.5 1.5v2c0 1.5-.5 2-2 2\"/></svg><span class=\"ds-row-label\">Raw exchange</span></button><button type=\"button\" class=\"ds-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M5 4 1.5 8 5 12M11 4l3.5 4L11 12\"/></svg><span class=\"ds-row-label\">Snippets</span></button></nav>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-sidebar{display:grid;gap:2px;width:240px;padding:8px 8px 16px;background:var(--panel, #fbfbfa);color:var(--ink, #37352f);box-shadow:inset -1px 0 0 var(--hairline, #e9e9e7);font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-sidebar-heading{display:flex;align-items:center;min-height:24px;margin:0;padding:0 8px;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.75rem;font-weight:500;line-height:1}.ds-sidebar-heading+.ds-sidebar-heading,.ds-row+.ds-sidebar-heading{margin-top:14px}.ds-row{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;text-align:left;cursor:pointer;transition:background 100ms ease-in}.ds-row:hover,.ds-row[aria-current=\"true\"]{background:var(--hover, rgb(55 53 47 / 0.08))}.ds-row:active{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-row .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-row-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-row:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}@media (prefers-reduced-motion:reduce){.ds-row{transition:none}}"
+    },
+    {
+      "name": "Question block",
       "kind": "card",
-      "refersTo": "fault",
-      "description": "A refused request, shown as the API reported it: red lamp, fault ink, pale red paper; each issue as location then message.",
-      "html": "<div class=\"ds-fault\" role=\"alert\"><p class=\"ds-fault-title\"><span class=\"ds-fault-lamp\" aria-hidden=\"true\"></span>422 · The request was refused</p><ul class=\"ds-fault-issues\"><li><code class=\"ds-fault-loc\">body › questions › department</code><span class=\"ds-fault-msg\">choice needs at least 2 criteria</span></li></ul></div>",
-      "css": ".ds-fault { display: grid; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-module); background: var(--fault-paper); color: var(--fault-ink); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 2px 4px rgb(0 0 0 / 0.18); } .ds-fault-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-family: var(--font-legend); font-weight: 600; font-size: 1rem; letter-spacing: 0.03em; } .ds-fault-lamp { width: 10px; height: 10px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #ffb4a8, var(--fault-lamp) 60%); border: 1px solid var(--fault-ink); } .ds-fault-issues { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; } .ds-fault-issues li { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); align-items: baseline; } .ds-fault-loc { font-family: var(--font-code); font-size: 0.875em; color: var(--fault-ink); } .ds-fault-msg { font-family: var(--font-text); font-weight: 500; color: var(--ink); }"
+      "refersTo": "question-block",
+      "description": "The signature block: a raised block with the hairline ring; id and Type control in the head, instructions, one bar row per option (check, name, 6px bar grown to the probability, exact figure; the winner in blue), then the property list under a hairline.",
+      "html": "<div class=\"ds-question\"><div class=\"ds-question-head\"><h4 class=\"ds-question-id\">department</h4><span class=\"ds-question-controls\"><span class=\"ds-segmented\"><span class=\"ds-segmented-legend\">Type</span><span class=\"ds-segmented-options\"><span class=\"ds-segment\">noul</span><span class=\"ds-segment ds-on\">choice</span><span class=\"ds-segment\">score</span></span></span><button type=\"button\" class=\"ds-button ds-button-sm\">Edit</button></span></div><p class=\"ds-question-instructions\">Which department should handle this?</p><ol class=\"ds-bars\"><li class=\"ds-bar-row ds-lit\"><span class=\"ds-bar-mark\" aria-hidden=\"true\"><svg class=\"ds-icon ds-check\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8.5l3 3 7-7\"/></svg></span><span class=\"ds-bar-name\">billing</span><span class=\"ds-bar\" style=\"--level:0.9346\" aria-hidden=\"true\"><span class=\"ds-bar-fill\"></span></span><span class=\"ds-readout\">93.5%</span></li><li class=\"ds-bar-row\"><span class=\"ds-bar-mark\" aria-hidden=\"true\"><svg class=\"ds-icon ds-check\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8.5l3 3 7-7\"/></svg></span><span class=\"ds-bar-name\">technical</span><span class=\"ds-bar\" style=\"--level:0.0049\" aria-hidden=\"true\"><span class=\"ds-bar-fill\"></span></span><span class=\"ds-readout\">0.5%</span></li><li class=\"ds-bar-row\"><span class=\"ds-bar-mark\" aria-hidden=\"true\"><svg class=\"ds-icon ds-check\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8.5l3 3 7-7\"/></svg></span><span class=\"ds-bar-name\">sales</span><span class=\"ds-bar\" style=\"--level:0.0605\" aria-hidden=\"true\"><span class=\"ds-bar-fill\"></span></span><span class=\"ds-readout\">6.1%</span></li></ol><dl class=\"ds-properties\"><div class=\"ds-property\"><dt><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8.5l3 3 7-7\"/></svg><dfn class=\"ds-dfn\">Answer</dfn></dt><dd class=\"ds-answer\">billing</dd></div><div class=\"ds-property\"><dt><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 14.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z\"/></svg><dfn class=\"ds-dfn\">Confidence</dfn></dt><dd>0.90</dd></div><div class=\"ds-property\"><dt><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M6 2.5 4.5 13.5M11.5 2.5 10 13.5M2.5 6h11M2.5 10h11\"/></svg><dfn class=\"ds-dfn\">P max</dfn></dt><dd>93.5%</dd></div><div class=\"ds-property\"><dt><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2.5 11.5a5.5 5.5 0 0 1 11 0M8 11.5l2.5-4\"/></svg><dfn class=\"ds-dfn\">Certainty</dfn></dt><dd>0.76</dd></div></dl></div>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-sm{min-height:24px;font-size:0.8125rem}.ds-question{display:grid;gap:12px;max-width:40rem;padding:16px;border-radius:6px;background:var(--raised, #ffffff);color:var(--ink, #37352f);box-shadow:rgb(15 15 15 / 0.1) 0 0 0 1px;font:400 0.875rem/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;font-variant-numeric:tabular-nums}.ds-question-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px}.ds-question-id{flex:1 1 12rem;margin:0;font-size:1rem;font-weight:600;line-height:1.3}.ds-question-controls{display:flex;align-items:center;gap:8px}.ds-question-instructions{margin:0;color:var(--ink-2, rgb(25 23 17 / 0.65));max-width:65ch}.ds-segmented{display:inline-flex;align-items:center;gap:8px}.ds-segmented-legend{color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem}.ds-segmented-options{display:inline-flex;padding:2px;border-radius:6px;background:var(--hover, rgb(55 53 47 / 0.08))}.ds-segment{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:4px;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem;font-weight:500;line-height:1}.ds-segment.ds-on{background:var(--raised, #ffffff);color:var(--ink, #37352f);box-shadow:0 0 0 1px var(--edge-strong, rgb(55 53 47 / 0.55)),rgb(15 15 15 / 0.1) 0 1px 2px}.ds-bars{display:grid;gap:6px;margin:0;padding:0;list-style:none}.ds-bar-row{display:grid;grid-template-columns:16px minmax(6rem,12rem) minmax(0,1fr) auto;align-items:center;gap:12px;min-height:24px}.ds-bar-mark{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:3px;color:var(--on-accent, #ffffff);box-shadow:inset 0 0 0 1px var(--hairline-strong, rgb(55 53 47 / 0.16))}.ds-lit .ds-bar-mark{background:var(--accent, #2383e2);box-shadow:none}.ds-check{width:12px;height:12px;stroke-width:2;opacity:0}.ds-lit .ds-check{opacity:1}.ds-bar-name{min-width:0;line-height:1.3}.ds-lit .ds-bar-name{font-weight:600}.ds-bar{height:6px;border-radius:3px;background:var(--track, rgb(55 53 47 / 0.14));overflow:hidden}.ds-bar-fill{display:block;height:100%;width:calc(var(--level,0) * 100%);border-radius:3px;background:var(--bar-muted, #787774);animation:ds-bar-grow 400ms cubic-bezier(0.3,0,0.5,1) both}.ds-lit .ds-bar-fill{background:var(--accent, #2383e2)}@keyframes ds-bar-grow{from{width:0}}.ds-readout{min-width:4.5rem;text-align:right}.ds-properties{display:grid;gap:2px;margin:0;padding-top:12px;box-shadow:inset 0 1px 0 var(--hairline, #e9e9e7)}.ds-property{display:grid;grid-template-columns:9rem minmax(0,1fr);align-items:center;gap:8px;min-height:28px}.ds-property dt{display:flex;align-items:center;gap:6px;color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-property dt .ds-icon{color:var(--ink-3, rgb(55 53 47 / 0.45))}.ds-property dd{margin:0}.ds-answer{font-weight:600}.ds-dfn{font-style:normal;cursor:help}@media (prefers-reduced-motion:reduce){.ds-bar-fill{animation:none}}"
+    },
+    {
+      "name": "Fault callout",
+      "kind": "card",
+      "refersTo": "callout-danger",
+      "description": "A refused request as the API reported it: the alert glyph and title in danger on the danger tint, each 422 issue as its location code then its message in ink. The plain callout is the same block on the code fill with an ink-2 glyph.",
+      "html": "<div class=\"ds-callout ds-callout-danger\"><div class=\"ds-callout-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 14.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM8 5v3.5M8 11v.5\"/></svg><p class=\"ds-fault-title\">HTTP 422 · the request was not answered.</p></div><ul class=\"ds-fault-issues\"><li><code class=\"ds-fault-loc\">body › questions › department</code><span class=\"ds-fault-msg\">choice criteria: a map of 2..255 options</span></li></ul></div>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-callout{display:grid;gap:8px;max-width:40rem;padding:16px 16px 16px 12px;border-radius:6px;background:var(--code, #f7f6f3);color:var(--ink, #37352f);font:400 0.875rem/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-callout-row{display:flex;align-items:flex-start;gap:8px}.ds-callout-row .ds-icon{margin-top:2px;color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-callout p{margin:0;max-width:56ch}.ds-callout-danger{background:var(--danger-tint, #fdebec)}.ds-callout-danger .ds-callout-row>.ds-icon,.ds-fault-title{color:var(--danger, #b3372f)}.ds-fault-title{font-weight:600}.ds-fault-issues{display:grid;gap:6px;margin:0;padding:0;list-style:none}.ds-fault-issues li{display:flex;flex-wrap:wrap;gap:2px 12px;align-items:baseline}.ds-fault-loc{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", Courier, monospace;font-size:0.85em;padding:0.1em 0.3em;border-radius:3px;color:var(--danger, #b3372f);background:var(--danger-tint-2, rgb(212 76 71 / 0.16))}.ds-fault-msg{color:var(--ink, #37352f)}"
+    },
+    {
+      "name": "Toggle block",
+      "kind": "custom",
+      "refersTo": "toggle-block",
+      "description": "A native details block open by default: a 24px marker with the filled triangle that turns 90° when open, the heading, a caption; the summary takes the hover fill.",
+      "html": "<details class=\"ds-toggle\" open><summary><span class=\"ds-toggle-marker\"><svg class=\"ds-icon ds-icon-filled\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M5.5 3.5v9l6-4.5z\"/></svg></span><h3 class=\"ds-toggle-heading\">Raw exchange</h3><span class=\"ds-toggle-caption\">Last run, byte for byte</span></summary><p class=\"ds-wire-empty\">Nothing sent yet. Press Run to send the state and questions above.</p></details>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-icon-filled{fill:currentColor;stroke:none}.ds-toggle{display:grid;gap:12px;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;color:var(--ink, #37352f)}.ds-toggle>summary{display:flex;align-items:center;gap:4px;list-style:none;cursor:pointer;border-radius:4px;width:fit-content;padding-right:6px}.ds-toggle>summary::-webkit-details-marker{display:none}.ds-toggle>summary:hover{background:var(--hover, rgb(55 53 47 / 0.08))}.ds-toggle>summary:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-toggle-marker{display:inline-grid;place-items:center;width:24px;height:24px;color:var(--ink-2, rgb(25 23 17 / 0.65));transition:transform 100ms ease-in}.ds-toggle[open]>summary .ds-toggle-marker{transform:rotate(90deg)}.ds-toggle-heading{margin:0;font-size:1rem;font-weight:600;line-height:1.3}.ds-toggle-caption{margin-left:8px;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem}.ds-wire-empty{margin:0;max-width:40rem;padding:16px;border-radius:8px;background:var(--code, #f7f6f3);color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem;line-height:1.5}@media (prefers-reduced-motion:reduce){.ds-toggle-marker{transition:none}}"
+    },
+    {
+      "name": "Code block",
+      "kind": "input",
+      "refersTo": "code-block",
+      "description": "The state, the questions JSON, the wire panes and the snippet, all on the same paper: 8px radius, 13px mono at 1.6, 16px padding; as a textarea it takes the blue focus ring and the danger ring when invalid.",
+      "html": "<textarea class=\"ds-code-block\" rows=\"4\" spellcheck=\"false\" aria-label=\"State\">My card was charged twice for order A-104. Please refund the duplicate.</textarea><pre class=\"ds-code-block ds-wire\" tabindex=\"0\" aria-label=\"Response received\">{\"model\":\"decider-2b-v11\",\"answers\":{\"refund\":{\"type\":\"noul\",\"noul\":0.9261}},\"usage\":{\"input_tokens\":72,\"output_tokens\":0}}</pre>",
+      "css": ".ds-code-block{display:block;width:100%;max-width:40rem;margin:0 0 12px;padding:16px;border:0;border-radius:8px;background:var(--code, #f7f6f3);color:var(--ink, #37352f);font:400 0.8125rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", Courier, monospace;tab-size:2;box-sizing:border-box}textarea.ds-code-block{resize:vertical;box-shadow:inset 0 0 0 1px transparent;transition:box-shadow 100ms ease-in}textarea.ds-code-block:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent, #2383e2),0 0 0 2px var(--accent-tint, rgb(35 131 226 / 0.14))}textarea.ds-code-block[aria-invalid=\"true\"]{box-shadow:inset 0 0 0 1px var(--danger, #b3372f)}.ds-wire{white-space:pre-wrap;overflow-wrap:anywhere}.ds-wire:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}@media (prefers-reduced-motion:reduce){textarea.ds-code-block{transition:none}}"
+    },
+    {
+      "name": "Share popover",
+      "kind": "custom",
+      "refersTo": "popover",
+      "description": "Anchored under the Share button: a raised card with the popover shadow holding a label, a read-only mono field that selects itself on focus, Copy, and a note. Focus moves into the field on open; Escape returns it to the button; a click outside closes it.",
+      "html": "<div class=\"ds-popover\"><label class=\"ds-field-label\" for=\"ds-share-link\">Link to these inputs</label><div class=\"ds-popover-row\"><input id=\"ds-share-link\" class=\"ds-field-input ds-field-code\" type=\"text\" readonly value=\"http://127.0.0.1:8123/#share/N4IgdghgtgpiBcIDiA\"><button type=\"button\" class=\"ds-button ds-button-sm\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M6 6h7v7H6zM3 10V3h7\"/></svg>Copy</button></div><p class=\"ds-field-note\">Anyone with this link opens these inputs and this model on their own Ardana.</p></div>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-sm{min-height:24px;font-size:0.8125rem}.ds-popover{display:grid;gap:8px;width:min(420px,calc(100vw - 24px));padding:12px;border-radius:6px;background:var(--raised, #ffffff);color:var(--ink, #37352f);box-shadow:rgb(15 15 15 / 0.1) 0 0 0 1px,rgb(15 15 15 / 0.1) 0 3px 6px,rgb(15 15 15 / 0.2) 0 9px 24px;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-popover-row{display:flex;align-items:center;gap:8px}.ds-field-label{color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.75rem;font-weight:500;line-height:1.4}.ds-field-input{flex:1;min-width:0;min-height:28px;padding:3px 8px;border:0;border-radius:4px;background:var(--field, rgb(242 241 238 / 0.6));box-shadow:inset 0 0 0 1px var(--hairline-strong, rgb(55 53 47 / 0.16));color:var(--ink, #37352f);font:400 0.8125rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", Courier, monospace}.ds-field-input:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent, #2383e2),0 0 0 2px var(--accent-tint, rgb(35 131 226 / 0.14))}.ds-field-note{margin:0;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.75rem;line-height:1.4}"
+    },
+    {
+      "name": "Banner",
+      "kind": "custom",
+      "refersTo": "banner",
+      "description": "The line under the top bar and the Run button's description: quiet on the panel fill for a wait or a hint (why Run is held, what a first run downloads), fault colours when the questions JSON does not parse; hidden when empty.",
+      "html": "<p class=\"ds-banner ds-banner-quiet\">Add a question to run</p><p class=\"ds-banner ds-banner-quiet\">Downloading decider-4b (2.7 GB) on first run</p><p class=\"ds-banner\">Questions JSON: expected value at line 3 column 5</p>",
+      "css": ".ds-banner{display:flex;align-items:center;gap:8px;min-height:36px;margin:0;padding:6px 16px;background:var(--danger-tint, #fdebec);color:var(--danger, #b3372f);font:500 0.8125rem/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;box-shadow:inset 0 -1px 0 var(--hairline, #e9e9e7)}.ds-banner:empty{display:none}.ds-banner-quiet{background:var(--panel, #fbfbfa);color:var(--ink, #37352f)}"
     }
   ],
   "narrative": {
-    "northStar": "The Tape-Deck Fascia",
-    "overview": "The playground is one piece of consumer hardware: a brushed-aluminium fascia set into a beige plastic surround, lit from above. The state loads into a dark cassette shell behind a paper label; each question is a bolted channel module; every option's probability climbs an amber LED ladder behind smoked glass and lands on a dot-matrix readout. Nothing on the fascia is decoration without a hardware reason: legends are engraved, windows are sunk, keys travel, and lamps are dark until something is live.\n\nDensity is instrument-panel density: small engraved caps under every control, generous module padding, and figures set large enough to read at a glance. The world is light-only (`color-scheme: light`); the beige surround and aluminium are the page, and the only dark surfaces are windows into the machine (glass, the cassette shell, the wire). The confirmed rejection is the two-pane API console of grey borders and a blue Run button: no flat grey rules, no blue, no generic primary button.\n\nAmber is signal, not paint. It appears where the machine has something to say (a returned figure, the winning answer, the busy RUN strip) and nowhere else. Red is spent on faults only.",
+    "northStar": "The Workspace Page",
+    "overview": "The playground is a page in a workspace the developer already knows: a paper-grey sidebar of settings and pages on the left, one white page of blocks on the right, a thin sticky bar above it holding the page's name and its one blue button. Notion's app grammar is played straight, with Linear and GitHub as the craft bar: the system sans at 14px, warm ink on white, hairlines where other products draw borders, small radii, chrome that shows itself on hover, toggle blocks, callouts and property rows. The work is the blocks. The state is a code block, each question is a white block with a hairline, and every returned probability is a property with a low progress bar and its exact figure at the end of the row.\n\nDensity is product-UI density: 28px controls, 24px rows inside blocks, 12px between blocks, 32px between the sections of the page. Nothing is decorated. There is no hardware or instrument metaphor, no engraved legend, no glowing readout, no web font, no gradient. Elevation is a 1px hairline shadow or a divider; only surfaces that float (the share popover, the drawer, the toast) cast a real shadow. The page follows the system scheme and offers no switch of its own: the same tokens turn a white page into a `#191919` one.\n\nColour is spent on meaning. One blue marks the decision: the Run button, focus, text selection, and the winning row of an answer. Red marks a fault: the callout for a refused request, the fault banner and fault lines, an invalid field's hairline, and the one action that destroys a question. Everything else is ink at three strengths on white, paper-grey and code-grey.",
     "keyCharacteristics": [
-      "Aluminium fascia on beige surround, lit from above; every surface has a light-from-above reason.",
-      "Engraved narrow-grotesk caps (Barlow Condensed) as the legend under or beside every control and window.",
-      "Smoked-glass windows with a sunk bevel for every live figure; amber dot-matrix numerals (Doto) inside.",
-      "Amber LED ladders on an 8px segment pitch with a quarter-tick scale beneath.",
-      "One pressable chrome transport key (RUN) with real key travel; every other key is a flat chrome plate that sits in when pressed.",
-      "Red reserved for faults; amber reserved for live signal."
+      "A 240px workspace sidebar beside one page of blocks, under a sticky 45px top bar with the blue Run.",
+      "The system sans and system mono only; 14px UI, 13px code, 16px block headings, one 32px page title.",
+      "Warm ink `#37352f` on white, `#fbfbfa` sidebar, `#e9e9e7` hairlines, hover fills at 8% ink.",
+      "Radii of 3, 4, 6 and 8px; a 10px tooltip is the roundest thing on the page.",
+      "Answers as property rows: a 16px check, the option name, a 6px progress bar, the exact figure.",
+      "Blue for the decision, red for the fault, grey for everything else; light and dark from one token set."
     ],
     "rules": [
       {
-        "name": "The Amber Is Live Rule",
-        "body": "Amber marks live signal only: returned figures, the winning answer's lamp and underline, the busy RUN strip, the lit lamp of the state mode, of a pressed toggle key (what will be sent) and of the Changed lamp (the inputs differ from the last run), selection and the tape's focus ring. It is never a border, a background panel, a heading colour or an ornament.",
+        "name": "The Blue Is a Decision Rule",
+        "body": "Blue appears where something was decided or is about to be: the Run fill, the focus outline, text selection, and the bar and check of the winning row. It is never a heading, a link colour, a border or a background.",
         "section": "colors"
       },
       {
         "name": "The Red Is a Fault Rule",
-        "body": "The three fault colours appear only when a request or input was refused. No red for emphasis, warnings or destructive-looking controls.",
+        "body": "Red marks a refusal or a destruction, nothing else: the fault callout, the fault banner, fault lines, an invalid field's hairline, the location code of a 422 issue, and the Remove question button. Emphasis, warnings and decoration never take it.",
         "section": "colors"
       },
       {
-        "name": "The Unlit Is Not Text Rule",
-        "body": "Unlit Amber and Ghost Matrix sit at about 1.4:1 on glass by design; they draw dark dots and segments only. An idle window shows an empty cell with a visually hidden \"not run yet\" / \"none yet\", never dim digits.",
+        "name": "The Hairlines, Not Borders Rule",
+        "body": "Nothing draws a CSS border in the normal schemes. An edge is a 1px shadow (`rgb(15 15 15 / 0.1) 0 0 0 1px` on blocks, an inset 16% ink line on fields) or a 1px inset divider in `hairline`; forced-colors mode is the one place borders are drawn.",
         "section": "colors"
       },
       {
-        "name": "The Four Faces Rule",
-        "body": "Each face has one job: Barlow Condensed engraves, Barlow Semi Condensed reads, IBM Plex Mono is copied, Doto reports. Doto never sets words; Plex never sets legends.",
-        "section": "typography"
-      },
-      {
-        "name": "The Engraved Legend Rule",
-        "body": "Every control and every window carries a legend in the Label role, cut into the panel with a 1px Engrave Light under-shadow. On paper or on the dark shell the under-shadow is dropped, since there is no aluminium to cut into.",
-        "section": "typography"
-      },
-      {
-        "name": "The Doto Point Rule",
-        "body": "Doto's own full stop is a cross of dots that reads as \"+\". Every decimal point in a dot-matrix figure is set in its own span that keeps the glyph cell transparent and seats one square dot (0.085em on the 0.1em pitch) on the baseline, so the text stays exact and the point reads as a point.",
+        "name": "The System Face Rule",
+        "body": "No web font is loaded and none may be added; the page renders in whatever sans and mono the platform ships. Letter-spacing is off everywhere except the -0.01em of the 32px title. Nothing is set in uppercase.",
         "section": "typography"
       },
       {
         "name": "The Figures As Returned Rule",
-        "body": "Probabilities show as percent with one decimal; confidence, noul, score and extras with two decimals; counts and names verbatim. Each figure carries its raw value and JSON pointer, and no figure is restyled into something the API did not say.",
+        "body": "Probabilities print as percent with one decimal, confidence, noul, score and extras with two decimals, counts and names verbatim; every figure carries its raw value and JSON pointer in `data-value` and `data-field`. Figures are tabular and right-aligned in a 4.5rem readout column.",
         "section": "typography"
       },
       {
-        "name": "The Sunk Window Rule",
-        "body": "Every glass window (counters, readouts, figures, ladders, the wire, the cassette window) is sunk with a bevel border: top 2px (3px for the larger wells) Bevel Deep, sides 1px Bevel Side, bottom 1px Aluminium Highlight. Windows never cast shadows.",
-        "section": "elevation"
-      },
-      {
-        "name": "The Key Travel Rule",
-        "body": "The 3px solid skirt under the RUN key is the key's travel, consumed when it is pressed or busy. It belongs to pressable transport keys only; nothing else gets a hard offset shadow.",
+        "name": "The Floating Only Rule",
+        "body": "A block on the page never casts an offset shadow; it gets the 1px hairline ring or a divider. Offset shadows belong to surfaces that float over the page: the popover, the drawer, the toast, the skip link, and the checked segment's 1px lift.",
         "section": "elevation"
       }
     ],
     "dos": [
-      "**Do** set every live figure in amber Doto inside a sunk Smoked Glass window over the ghost grid, and set decimal points with the Doto Point treatment.",
-      "**Do** engrave a Label legend (Barlow Condensed 600, 0.75rem, 0.12em, uppercase, 1px Engrave Light under-shadow) under or beside every control and window.",
-      "**Do** separate regions with the two-line Groove (Aluminium Shade over Aluminium Highlight), never a flat border.",
-      "**Do** light surfaces from above: white top highlights on raised parts, dark top walls on sunk windows.",
-      "**Do** keep motion to the RUN key press and the snap of plate and toggle keys (80ms) and the ladder climb (900ms), all on `cubic-bezier(0.16, 1, 0.3, 1)` and all off under reduced motion.",
-      "**Do** keep the state on the left and the questions on the right; restack as console, cassette, channels, exchange, snippets in one column."
+      "**Do** set every control at 28px (24px inside a row), 14px at 500, transparent at rest, 8% ink on hover, 16% when pressed or expanded.",
+      "**Do** use `aria-disabled=\"true\"` on a held button, never `disabled`, so it keeps focus and its tooltip; put the reason in the banner or beside the control.",
+      "**Do** separate surfaces with hairlines: the 1px ring on blocks, the inset 16% ink line on fields, the 1px inset divider between regions.",
+      "**Do** show a returned probability as a bar row: check, name, 6px bar grown over 400ms, the exact figure tabular at the right; the winner alone in blue.",
+      "**Do** keep every figure at its stated precision with `data-field` and `data-value` attached, and grey it (not remove it) when the inputs move on.",
+      "**Do** keep hover, colour and shadow transitions at 100ms `ease-in`, the shell and drawer at 200ms, and turn every transition and animation off under `prefers-reduced-motion`.",
+      "**Do** define a token once in `:root` and redefine it under `prefers-color-scheme: dark`; the page offers no theme switch."
     ],
     "donts": [
-      "**Don't** build the two-pane API console of grey borders and a blue Run button; no blue anywhere on the fascia.",
-      "**Don't** use amber for borders, panel fills, headings or decoration; it marks live signal only.",
-      "**Don't** use the fault reds for anything but a refused request or invalid input.",
-      "**Don't** put a readable figure in Unlit Amber or Ghost Matrix; idle windows are empty cells with hidden text.",
-      "**Don't** set words in Doto, legends in Plex, or prose in Barlow Condensed.",
-      "**Don't** give any surface other than a pressable transport key a hard offset shadow; plate keys and toggle keys sit in, they do not travel.",
-      "**Don't** round, restyle or re-derive a returned value; show it at the stated precision with its raw value attached."
+      "**Don't** load a web font, add letter-spacing to UI text, or set anything in uppercase; the system sans and mono are the type.",
+      "**Don't** use blue for anything but the Run fill, focus, selection and the winning row; never as a heading, link, border or background.",
+      "**Don't** use red outside a fault or the Remove question action; no red emphasis, warning or decoration.",
+      "**Don't** draw a CSS border in the light or dark scheme; edges are hairline shadows, and borders belong to forced-colors mode only.",
+      "**Don't** give a block on the page an offset shadow, a gradient, an engraved legend, a glowing readout or any hardware metaphor.",
+      "**Don't** put a tooltip where a visible name belongs, and never name a control only by its tooltip.",
+      "**Don't** round, restyle or re-derive a returned value; show it as the API said it."
     ]
   }
 }

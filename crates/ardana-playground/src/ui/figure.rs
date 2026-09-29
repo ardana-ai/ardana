@@ -47,23 +47,8 @@ pub fn Number(
 ) -> impl IntoView {
     view! {
         <span class=class data-field=field data-value=format::raw(value) data-format=format.name()>
-            {matrix(&format.apply(value))}
+            {format.apply(value)}
         </span>
-    }
-}
-
-/// Figure text for the dot-matrix face, whose own full stop is a cross of dots that reads as `+`: each `.` is set
-/// in its own span (`.matrix-point`), so the text stays the same and the decimal point reads as one.
-pub fn matrix(text: &str) -> impl IntoView + use<> {
-    let mut parts = text.split('.');
-    let first = parts.next().unwrap_or_default().to_string();
-    let rest: Vec<String> = parts.map(str::to_string).collect();
-    view! {
-        {first}
-        {rest
-            .into_iter()
-            .map(|part| view! { <span class="matrix-point">"."</span> {part} })
-            .collect_view()}
     }
 }
 

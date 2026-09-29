@@ -1,6 +1,6 @@
-//! The channels: one module per question, with its engraved id, its type toggle, its builder (opened by its Edit
-//! key) and an amber ladder per option that climbs to the probability the API returned. Below them, the
-//! `questions` JSON the channels are read from.
+//! The questions column: the last run's line, the fault callout, one block per question with its type control, its
+//! builder (opened by Edit) and a bar per option grown to the probability the API returned, the "Add question" row,
+//! and the `questions` JSON the blocks are read from.
 
 use ardana_api::{Answer, ChoiceAnswer, NoulAnswer, ScoreAnswer};
 use leptos::prelude::*;
@@ -8,14 +8,14 @@ use serde_json::Value;
 
 use super::builder::Program;
 use super::controls::Toggle;
+use super::dom_id;
 use super::figure::{Format, Number, Verbatim, pointer};
-use super::{dom_id, run_shortcut};
+use super::icons::Icon;
 use crate::builder::{self, KINDS, kind_name};
 use crate::deck::Deck;
 use crate::request::{Detail, Reply, Shown};
 
-const EXAMPLE: &str = r#"Example:
-{
+const EXAMPLE: &str = r#"{
   "refund": {
     "type": "noul",
     "instructions": "Does the customer ask for a refund?"
@@ -23,7 +23,7 @@ const EXAMPLE: &str = r#"Example:
 }"#;
 
 #[component]
-pub fn Channels(deck: Deck) -> impl IntoView {
+pub fn Questions(deck: Deck) -> impl IntoView {
     let ids = move || {
         deck.questions
             .with(|q| q.keys().cloned().collect::<Vec<_>>())
@@ -34,51 +34,55 @@ pub fn Channels(deck: Deck) -> impl IntoView {
             added = Some(builder::add_question(questions));
             Ok(())
         });
+        if let Some(id) = &added {
+            super::focus_later(format!("{}-id", dom_id(id)));
+        }
         deck.editing.set(added);
     };
     view! {
-        <section class="channels" aria-labelledby="channels-title">
-            <div class="panel-head">
-                <h2 id="channels-title" class="engraved">"Questions"</h2>
-                <p class="legend">"One channel per question"</p>
+        <section class="questions" aria-labelledby="questions-title">
+            <div class="block-head">
+                <h2 id="questions-title" class="block-heading">"Questions"</h2>
+                <LastRun deck=deck />
             </div>
             <Fault deck=deck />
             <Show
                 when=move || deck.questions.with(|q| !q.is_empty())
                 fallback=|| {
                     view! {
-                        <div class="channels-empty">
-                            <p>
-                                "No channels yet. Add a question and set its type: " <code>"noul"</code>
-                                " for a yes/no probability, " <code>"choice"</code> " for named options, "
-                                <code>"score"</code>
-                                " for ordered levels. Or load a preset, write the questions JSON below, or open a share link."
-                            </p>
+                        <div class="callout">
+                            <div class="callout-row">
+                                <Icon name="info" />
+                                <p>
+                                    "No questions yet. Add one below and set its type: " <code>"noul"</code>
+                                    " for a yes/no probability, " <code>"choice"</code> " for named options, "
+                                    <code>"score"</code>
+                                    " for ordered levels. Or load a preset from the sidebar, paste questions JSON below, or open a share link."
+                                </p>
+                            </div>
                         </div>
                     }
                 }
             >
-                <ol class="channel-list">
-                    <For each=ids key=|id| id.clone() children=move |id| view! { <Channel deck=deck id=id /> } />
+                <ol class="question-list">
+                    <For each=ids key=|id| id.clone() children=move |id| view! { <Question deck=deck id=id /> } />
                 </ol>
             </Show>
-            <div class="channels-foot">
-                <button type="button" id="add-question" class="plate-key" on:click=add>
-                    "Add question"
-                </button>
-            </div>
+            <button type="button" id="add-question" class="row add-row" on:click=add>
+                <Icon name="plus" />
+                "Add question"
+            </button>
             <div class="program">
-                <label class="legend program-legend" for="questions">"Questions JSON"</label>
+                <label class="field-label" for="questions">"Questions JSON"</label>
                 <textarea
                     id="questions"
-                    class="program-text"
+                    class="code-block program-text"
                     spellcheck="false"
                     placeholder=EXAMPLE
                     aria-invalid=move || deck.questions_error.with(Option::is_some).to_string()
                     aria-describedby="questions-error"
                     prop:value=move || deck.questions_text.get()
                     on:input=move |event| deck.set_questions_text(event_target_value(&event))
-                    on:keydown=run_shortcut(deck)
                 ></textarea>
                 <p id="questions-error" class="fault-line">
                     {move || deck.questions_error.get()}
@@ -86,6 +90,77 @@ pub fn Channels(deck: Deck) -> impl IntoView {
             </div>
         </section>
     }
+}
+
+/// The last run in one line: who answered, how long it took, what it cost in tokens, and whether the inputs have
+/// moved on since.
+#[component]
+fn LastRun(deck: Deck) -> impl IntoView {
+    move || {
+        deck.last.with(|last| {
+            let run = last.as_ref()?;
+            let ms = run.exchange.latency_ms;
+            let latency = view! {
+                <span class="dot" aria-hidden="true">"·"</span>
+                <span data-testid="latency">
+                    <span data-ms=ms.to_string()>{format!("{ms:.0}")}</span>
+                    " ms"
+                </span>
+            };
+            let stale = move || {
+                deck.stale.get().then(|| {
+                    view! {
+                        <span class="tag" data-testid="stale">"From last run · inputs changed"</span>
+                    }
+                })
+            };
+            Some(match &run.reply {
+                Ok(Reply::Answered { model, .. }) => view! {
+                    <p class="last-run" data-testid="answered-by">
+                        "Answered by "
+                        <Verbatim field="/model".to_string() value=model.clone() class="" />
+                        {latency}
+                        <span class="dot" aria-hidden="true">"·"</span>
+                        <span data-testid="tokens-in">
+                            {usage(deck, |i, _| i, "input_tokens")}
+                            " input"
+                        </span>
+                        <span class="dot" aria-hidden="true">"·"</span>
+                        <span data-testid="tokens-out">
+                            {usage(deck, |_, o| o, "output_tokens")}
+                            " output tokens"
+                        </span>
+                        {stale}
+                    </p>
+                }
+                .into_any(),
+                Ok(Reply::Failed { status, .. }) => view! {
+                    <p class="last-run">"Not answered: HTTP " {*status} {latency} {stale}</p>
+                }
+                .into_any(),
+                Err(_) => view! { <p class="last-run">"No response" {latency} {stale}</p> }.into_any(),
+            })
+        })
+    }
+}
+
+/// One of the last run's token counts, from `usage`, as a figure.
+pub fn usage(
+    deck: Deck,
+    pick: fn(Option<u64>, Option<u64>) -> Option<u64>,
+    key: &'static str,
+) -> Option<AnyView> {
+    deck.last
+        .with(|last| match last.as_ref().map(|run| &run.reply) {
+            Some(Ok(Reply::Answered {
+                input_tokens,
+                output_tokens,
+                ..
+            })) => pick(*input_tokens, *output_tokens).map(|n| {
+                view! { <Verbatim field=format!("/usage/{key}") value=n.to_string() class="" /> }.into_any()
+            }),
+            _ => None,
+        })
 }
 
 /// The last run's error, as the API reported it.
@@ -122,18 +197,19 @@ fn Fault(deck: Deck) -> impl IntoView {
                             </p>
                         }
                         .into_any(),
-                        Detail::Other(text) => view! { <pre class="fault-raw">{text.clone()}</pre> }.into_any(),
+                        Detail::Other(text) => {
+                            view! { <pre class="code-block fault-raw">{text.clone()}</pre> }.into_any()
+                        }
                     };
                     (format!("HTTP {status}"), body)
                 }
             };
             Some(view! {
-                <div class="fault" data-testid="fault">
-                    <p class="fault-title">
-                        <span class="fault-lamp" aria-hidden="true"></span>
-                        {title}
-                        " · the request was not answered."
-                    </p>
+                <div class="callout callout-danger" data-testid="fault">
+                    <div class="callout-row">
+                        <Icon name="alert" />
+                        <p class="fault-title">{title} " · the request was not answered."</p>
+                    </div>
                     {body}
                 </div>
             })
@@ -142,7 +218,7 @@ fn Fault(deck: Deck) -> impl IntoView {
 }
 
 #[component]
-fn Channel(deck: Deck, id: String) -> impl IntoView {
+fn Question(deck: Deck, id: String) -> impl IntoView {
     let key = StoredValue::new(id.clone());
     let spec = Memo::new(move |_| {
         key.with_value(|id| {
@@ -150,7 +226,7 @@ fn Channel(deck: Deck, id: String) -> impl IntoView {
                 .with(|q| q.get(id).cloned().unwrap_or(Value::Null))
         })
     });
-    // This question's answer in the last run, and the run's number, so each run's ladders are drawn afresh.
+    // This question's answer in the last run, and the run's number, so each run's bars are drawn afresh.
     let shown = Memo::new(move |_| {
         deck.last.with(|last| match last {
             Some(run) => {
@@ -176,7 +252,7 @@ fn Channel(deck: Deck, id: String) -> impl IntoView {
         other => Some(other.to_string()),
     };
     let pick = move |kind| key.with_value(|id| deck.switch_kind(id, kind));
-    // Whether this channel's answer came from a request whose state, model or question differs from now.
+    // Whether this question's answer came from a request whose state, model or question differs from now.
     let changed = Memo::new(move |_| {
         deck.inputs_changed.get()
             || deck.sent.with(|sent| {
@@ -219,30 +295,16 @@ fn Channel(deck: Deck, id: String) -> impl IntoView {
     let edit_id = format!("{dom}-edit");
     view! {
         <li
-            class="channel"
+            class="question"
             class:editing=open
             class:stale=move || stale.get()
             class:faulted=move || faults.with(|f| !f.is_empty())
             data-testid="channel"
             data-question=id.clone()
         >
-            <div class="channel-head">
-                <div class="channel-title">
-                    <h3 class="channel-id">{id.clone()}</h3>
-                    {move || instructions().map(|text| view! { <p class="channel-instructions">{text}</p> })}
-                    {move || {
-                        stale
-                            .get()
-                            .then(|| {
-                                view! {
-                                    <p class="stale-note" data-testid="stale">
-                                        "From last run · inputs changed"
-                                    </p>
-                                }
-                            })
-                    }}
-                </div>
-                <div class="channel-controls">
+            <div class="question-head">
+                <h3 class="question-id">{id.clone()}</h3>
+                <div class="question-controls">
                     <Toggle
                         legend="Type"
                         group=format!("{dom}-type")
@@ -254,7 +316,7 @@ fn Channel(deck: Deck, id: String) -> impl IntoView {
                     <button
                         type="button"
                         id=edit_id
-                        class="plate-key edit-key"
+                        class="button button-sm"
                         aria-expanded=move || open.get().to_string()
                         aria-controls=format!("{dom}-program")
                         aria-label=format!("Edit question {id}")
@@ -264,6 +326,14 @@ fn Channel(deck: Deck, id: String) -> impl IntoView {
                     </button>
                 </div>
             </div>
+            {move || instructions().map(|text| view! { <p class="question-instructions">{text}</p> })}
+            {move || {
+                stale
+                    .get()
+                    .then(|| {
+                        view! { <span class="tag" data-testid="stale">"From last run · inputs changed"</span> }
+                    })
+            }}
             {move || {
                 faults
                     .with(|faults| {
@@ -271,9 +341,9 @@ fn Channel(deck: Deck, id: String) -> impl IntoView {
                             .iter()
                             .map(|msg| {
                                 view! {
-                                    <p class="channel-fault" data-testid="channel-fault">
-                                        <span class="fault-lamp" aria-hidden="true"></span>
-                                        {msg.clone()}
+                                    <p class="question-fault" data-testid="channel-fault">
+                                        <Icon name="alert" />
+                                        <span>{msg.clone()}</span>
                                     </p>
                                 }
                             })
@@ -291,8 +361,8 @@ fn Channel(deck: Deck, id: String) -> impl IntoView {
     }
 }
 
-/// The channel's readout: the answer's ladders and figures, raw JSON for an answer of an unknown type, or the
-/// question's options on dark ladders before a run.
+/// The question's answer: its bars and properties, raw JSON for an answer of an unknown type, or the question's
+/// options on empty bars before a run.
 fn answer_view(id: &str, answer: Option<Shown>, spec: &Value) -> AnyView {
     match answer {
         Some(Shown::Typed(typed)) => match *typed {
@@ -302,8 +372,8 @@ fn answer_view(id: &str, answer: Option<Shown>, spec: &Value) -> AnyView {
         },
         Some(Shown::Raw(raw)) => view! {
             <div class="raw-answer">
-                <p class="legend">"Answer of an unknown type, as returned"</p>
-                <pre data-testid="raw-answer">
+                <p>"Answer of an unknown type, as returned"</p>
+                <pre class="code-block" data-testid="raw-answer">
                     {serde_json::to_string_pretty(&raw).unwrap_or_default()}
                 </pre>
             </div>
@@ -313,24 +383,28 @@ fn answer_view(id: &str, answer: Option<Shown>, spec: &Value) -> AnyView {
     }
 }
 
-/// One option's ladder: name, the LED ladder at `level` (0..1), the exact readout, lit when it is the answer.
-fn ladder(
+/// One option's row: the check mark, the name, the bar at `level` (0..1), the exact readout; the answer is checked.
+/// A noul row is `unmarked`: it is a probability, not a pick, so it carries no box.
+fn bar(
     name: String,
     note: Option<String>,
     level: f64,
     readout: AnyView,
     lit: bool,
+    marked: bool,
 ) -> impl IntoView {
     view! {
-        <li class="ladder-row" class:lit=lit data-testid="ladder">
-            <span class="lamp" aria-hidden="true"></span>
-            <span class="ladder-name">
+        <li class="bar-row" class:lit=lit class:unmarked=!marked data-testid="ladder">
+            <span class="bar-mark" aria-hidden="true">
+                <Icon name="check" />
+            </span>
+            <span class="bar-name">
                 {name}
                 {lit.then(|| view! { <span class="visually-hidden">" (answer)"</span> })}
-                {note.map(|note| view! { <span class="ladder-note">{note}</span> })}
+                {note.map(|note| view! { <span class="bar-note">{note}</span> })}
             </span>
-            <span class="ladder" aria-hidden="true" style=("--level", level.clamp(0.0, 1.0).to_string())>
-                <span class="ladder-fill"></span>
+            <span class="bar" aria-hidden="true" style=("--level", level.clamp(0.0, 1.0).to_string())>
+                <span class="bar-fill"></span>
             </span>
             {readout}
         </li>
@@ -341,15 +415,29 @@ fn number(field: String, value: f64, format: Format) -> AnyView {
     view! { <Number field=field value=value format=format class="readout" /> }.into_any()
 }
 
-/// A figure under the ladders: engraved legend, readout.
-fn figure(legend: &'static str, value: AnyView) -> impl IntoView {
+/// A property under the bars: its glyph, its name with a one-line meaning in a tooltip, its value.
+fn property(
+    icon: &'static str,
+    name: &'static str,
+    meaning: &'static str,
+    value: AnyView,
+) -> impl IntoView {
     view! {
-        <div class="figure">
-            <dt class="legend">{legend}</dt>
+        <div class="property">
+            <dt>
+                <Icon name=icon />
+                <dfn class="dfn tip tip-start" data-tip=meaning tabindex="0">{name}</dfn>
+                <span class="visually-hidden">": " {meaning}</span>
+            </dt>
             <dd>{value}</dd>
         </div>
     }
 }
+
+const CONFIDENCE: &str =
+    "How far the top probability stands above an even split: (n × p max − 1) / (n − 1).";
+const P_MAX: &str = "The largest probability among the options.";
+const CERTAINTY: &str = "One minus the normalised entropy of the probabilities.";
 
 fn choice(id: &str, a: ChoiceAnswer) -> impl IntoView {
     let field = |parts: &[&str]| pointer(["answers", id].into_iter().chain(parts.iter().copied()));
@@ -358,20 +446,22 @@ fn choice(id: &str, a: ChoiceAnswer) -> impl IntoView {
         .iter()
         .map(|(name, p)| {
             let readout = number(field(&["probabilities", name]), *p, Format::Percent);
-            ladder(name.clone(), None, *p, readout, *name == a.choice)
+            bar(name.clone(), None, *p, readout, *name == a.choice, true)
         })
         .collect_view();
     view! {
-        <ol class="ladders">{rows}</ol>
-        <dl class="figures">
-            {figure(
+        <ol class="bars">{rows}</ol>
+        <dl class="properties">
+            {property(
+                "check",
                 "Answer",
-                view! { <Verbatim field=field(&["choice"]) value=a.choice.clone() class="figure-text" /> }
-                    .into_any(),
+                "The most probable option.",
+                view! { <Verbatim field=field(&["choice"]) value=a.choice.clone() class="answer" /> }.into_any(),
             )}
-            {figure("Confidence", number(field(&["confidence"]), a.confidence, Format::Fixed2))}
-            {a.x_p_max.map(|v| figure("P max", number(field(&["x_p_max"]), v, Format::Percent)))}
-            {a.x_certainty.map(|v| figure("Certainty", number(field(&["x_certainty"]), v, Format::Fixed2)))}
+            {property("target", "Confidence", CONFIDENCE, number(field(&["confidence"]), a.confidence, Format::Fixed2))}
+            {a.x_p_max.map(|v| property("hash", "P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent)))}
+            {a.x_certainty
+                .map(|v| property("gauge", "Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2)))}
         </dl>
     }
 }
@@ -385,7 +475,7 @@ fn score(id: &str, a: ScoreAnswer) -> impl IntoView {
         .map(|(level, p)| {
             let fit = a.x_level_fit.as_ref().and_then(|fits| fits.get(level)).map(|fit| {
                 view! {
-                    <span class="ladder-fit">
+                    <span class="bar-fit">
                         "fit "
                         <Number field=field(&["x_level_fit", level]) value=*fit format=Format::Percent class="fit" />
                     </span>
@@ -396,17 +486,31 @@ fn score(id: &str, a: ScoreAnswer) -> impl IntoView {
                 {fit}
             }
             .into_any();
-            ladder(level.clone(), a.legend.get(level).cloned(), *p, readout, *p == top)
+            bar(level.clone(), a.legend.get(level).cloned(), *p, readout, *p == top, true)
         })
         .collect_view();
     view! {
-        <ol class="ladders">{rows}</ol>
-        <dl class="figures">
-            {figure("Score", number(field(&["score"]), a.score, Format::Fixed2))}
-            {figure("Confidence", number(field(&["confidence"]), a.confidence, Format::Fixed2))}
-            {a.x_p_max.map(|v| figure("P max", number(field(&["x_p_max"]), v, Format::Percent)))}
-            {a.x_certainty.map(|v| figure("Certainty", number(field(&["x_certainty"]), v, Format::Fixed2)))}
-            {a.x_fit_mass.map(|v| figure("Fit mass", number(field(&["x_fit_mass"]), v, Format::Fixed2)))}
+        <ol class="bars">{rows}</ol>
+        <dl class="properties">
+            {property(
+                "gauge",
+                "Score",
+                "The expected level: each level weighted by its probability, to two places.",
+                number(field(&["score"]), a.score, Format::Fixed2),
+            )}
+            {property("target", "Confidence", "The score's confidence, as the API returned it.", number(field(&["confidence"]), a.confidence, Format::Fixed2))}
+            {a.x_p_max.map(|v| property("hash", "P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent)))}
+            {a.x_certainty
+                .map(|v| property("gauge", "Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2)))}
+            {a.x_fit_mass
+                .map(|v| {
+                    property(
+                        "hash",
+                        "Fit mass",
+                        "The sum of the level fits before normalising (isolated levels only).",
+                        number(field(&["x_fit_mass"]), v, Format::Fixed2),
+                    )
+                })}
         </dl>
     }
 }
@@ -414,15 +518,16 @@ fn score(id: &str, a: ScoreAnswer) -> impl IntoView {
 fn noul(id: &str, a: NoulAnswer) -> impl IntoView {
     let readout = number(pointer(["answers", id, "noul"]), a.noul, Format::Fixed2);
     view! {
-        <ol class="ladders">
-            {ladder("noul".into(), Some("probability of yes".into()), a.noul, readout, false)}
+        <ol class="bars">
+            {bar("noul".into(), Some("probability of yes".into()), a.noul, readout, false, false)}
         </ol>
     }
 }
 
-/// Before a run: the options the question names, on dark ladders.
+/// Before a run: the options the question names, on empty bars.
 fn idle(kind: &str, spec: &Value) -> impl IntoView {
     let criteria = &spec["criteria"];
+    let marked = kind != "noul";
     let options: Vec<(String, Option<String>)> = match (kind, criteria) {
         ("noul", _) => vec![("noul".into(), Some("probability of yes".into()))],
         ("score", Value::Array(levels)) => levels
@@ -438,18 +543,18 @@ fn idle(kind: &str, spec: &Value) -> impl IntoView {
         _ => Vec::new(),
     };
     view! {
-        <ol class="ladders">
+        <ol class="bars">
             {options
                 .into_iter()
                 .map(|(name, note)| {
                     let readout = view! {
                         <span class="readout idle">
-                            <span aria-hidden="true">"\u{a0}"</span>
+                            <span aria-hidden="true">"–"</span>
                             <span class="visually-hidden">"not run yet"</span>
                         </span>
                     }
                     .into_any();
-                    ladder(name, note, 0.0, readout, false)
+                    bar(name, note, 0.0, readout, false, marked)
                 })
                 .collect_view()}
         </ol>

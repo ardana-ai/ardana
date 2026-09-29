@@ -1,10 +1,12 @@
-//! The fascia's small controls: the chrome toggle (a native radio group, so arrow keys move the selection) and the
-//! copy key.
+//! Shared controls: the segmented control (a native radio group, so arrow keys move the selection) and the copy
+//! button with its toast.
 
 use leptos::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
-/// A chrome toggle: one pressed key per option, its lamp lit; an engraved legend names the group.
+use super::icons::Icon;
+
+/// A segmented control: one segment per option, the checked one raised; a small legend names the group.
 #[component]
 pub fn Toggle<T>(
     legend: &'static str,
@@ -21,24 +23,23 @@ where
     let legend_id = format!("{group}-legend");
     let labelled_by = legend_id.clone();
     view! {
-        <div class="toggle" role="radiogroup" aria-labelledby=labelled_by data-testid=testid>
-            <span class="legend toggle-legend" id=legend_id>{legend}</span>
-            <span class="toggle-keys">
+        <div class="segmented" role="radiogroup" aria-labelledby=labelled_by data-testid=testid>
+            <span class="segmented-legend" id=legend_id>{legend}</span>
+            <span class="segmented-options">
                 {options
                     .into_iter()
                     .map(|(value, label)| {
                         view! {
-                            <label class="toggle-key" class:on=move || checked(value)>
+                            <label class="segment" class:on=move || checked(value)>
                                 <input
                                     type="radio"
-                                    class="toggle-input"
+                                    class="segment-input"
                                     name=group.clone()
                                     value=label
                                     prop:checked=move || checked(value)
                                     on:change=move |_| pick(value)
                                 />
-                                <span class="lamp" aria-hidden="true"></span>
-                                <span class="toggle-name">{label}</span>
+                                {label}
                             </label>
                         }
                     })
@@ -48,10 +49,10 @@ where
     }
 }
 
-/// A plate key that copies `text()` to the clipboard and says whether it did.
+/// A button that copies `text()` to the clipboard and says so in a toast.
 #[component]
 pub fn CopyKey(
-    /// What the key copies, for its accessible name: "Copy <what>".
+    /// What the button copies, for its accessible name: "Copy <what>".
     what: &'static str,
     text: impl Fn() -> String + Send + Sync + 'static,
 ) -> impl IntoView {
@@ -64,7 +65,7 @@ pub fn CopyKey(
         leptos::task::spawn_local(async move {
             let done = JsFuture::from(clipboard.write_text(&text)).await;
             status.set(Some(match done {
-                Ok(_) => "Copied".to_string(),
+                Ok(_) => format!("Copied the {what}"),
                 Err(_) => {
                     "The browser refused the clipboard; select the text and copy it".to_string()
                 }
@@ -74,10 +75,11 @@ pub fn CopyKey(
     };
     view! {
         <span class="copy">
-            <button type="button" class="plate-key" aria-label=format!("Copy {what}") on:click=copy>
+            <button type="button" class="button button-sm" aria-label=format!("Copy {what}") on:click=copy>
+                <Icon name="copy" />
                 "Copy"
             </button>
-            <span class="copy-status" role="status">{move || status.get()}</span>
+            <span class="toast" role="status">{move || status.get()}</span>
         </span>
     }
 }

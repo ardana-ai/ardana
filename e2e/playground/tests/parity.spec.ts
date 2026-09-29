@@ -9,8 +9,12 @@ import {
   channel,
   editorTexts,
   expectFiguresMatch,
+  loadPreset,
+  pickModel,
+  picker,
   pointer,
   readRequest,
+  restorePrevious,
   root,
   run,
   runKey,
@@ -22,7 +26,6 @@ import {
 
 const stateBox = (page: Page) => page.getByRole('textbox', { name: 'State' });
 const questionsBox = (page: Page) => page.getByRole('textbox', { name: 'Questions JSON' });
-const picker = (page: Page) => page.getByRole('combobox', { name: 'Model' });
 const questionsJson = async (page: Page) => JSON.parse(await questionsBox(page).inputValue()) as Record<string, Json>;
 
 /** The model `ardana serve` has pulled: decider-2b. */
@@ -77,8 +80,8 @@ test('builder_sync', async ({ page }, testInfo) => {
   await id.press('Tab');
   const refund = channel(page, 'refund');
   await expect(refund.getByRole('textbox', { name: 'Question id' })).toHaveValue('refund');
-  // The channel is drawn again under its new id, and focus returns to its id field.
-  await expect(refund.getByRole('textbox', { name: 'Question id' })).toBeFocused();
+  // The block is drawn again under its new id, and focus follows the Tab to its Instructions field.
+  await expect(refund.getByRole('textbox', { name: 'Instructions' })).toBeFocused();
   expect(Object.keys(await questionsJson(page))).toEqual(['refund']);
 
   // The type toggle is a radio group: arrow keys switch noul to choice, which starts with two named options.
@@ -196,7 +199,7 @@ test('builder_sync', async ({ page }, testInfo) => {
   await channel(page, 'q3').getByRole('button', { name: 'Remove question' }).click();
   await expect(page.getByTestId('channel')).toHaveCount(2);
   await expect(page.getByRole('button', { name: 'Add question' })).toBeFocused();
-  await page.getByRole('button', { name: 'Restore previous' }).click();
+  await restorePrevious(page);
   await expect(questionsBox(page)).toHaveValue(beforeRemoval);
   await expect(stateBox(page)).toBeFocused();
   await expect(page.getByRole('button', { name: 'Restore previous' })).toHaveCount(0);
@@ -292,7 +295,7 @@ test.describe('jev_share_links', () => {
         const refused = await run(page);
         expect(refused.status()).toBe(404);
         await expect(page.getByTestId('fault-message')).toContainText(`no model named "${model}"`);
-        await picker(page).selectOption(served);
+        await pickModel(page, served);
       }
       const response = await run(page);
       expect(response.status()).toBe(200);
@@ -312,11 +315,11 @@ test.describe('jev_share_links', () => {
 test('share_roundtrip', async ({ page, browser, baseURL }, testInfo) => {
   const origin = new URL(baseURL!).origin;
   await page.goto('/');
-  await page.getByRole('button', { name: 'Support-chat audit' }).click();
+  await loadPreset(page, 'Support-chat audit');
   const transcript = await stateBox(page).inputValue();
   await stateBox(page).fill(transcript.replace('OK, thanks.', 'OK, merci ☕'));
   const model = await servedModel(page);
-  await picker(page).selectOption(model);
+  await pickModel(page, model);
   const state = await stateBox(page).inputValue();
   const questions = await questionsBox(page).inputValue();
 
@@ -343,7 +346,7 @@ test('share_roundtrip', async ({ page, browser, baseURL }, testInfo) => {
 
 test('stale_and_restore', async ({ page }, testInfo) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Ticket routing' }).click();
+  await loadPreset(page, 'Ticket routing');
   const ticketState = await stateBox(page).inputValue();
   expect((await run(page)).status()).toBe(200);
   const changed = page.getByTestId('changed');
@@ -355,8 +358,8 @@ test('stale_and_restore', async ({ page }, testInfo) => {
   }
   const department = channel(page, 'department');
   const refund = channel(page, 'refund');
-  const winner = department.locator('[data-testid="ladder"].lit .ladder-name');
-  await expect(winner).toHaveCSS('text-decoration-line', 'underline');
+  await expect(department.locator('[data-testid="ladder"].lit')).toHaveCount(1);
+  await expect(department).not.toHaveClass(/\bstale\b/);
   const figuresBefore = await page.locator('[data-field]').evaluateAll((els) => els.map((e) => e.getAttribute('data-value')));
 
   // One question edited: only its channel is from the last run; the figures stay exactly as returned.
@@ -367,10 +370,10 @@ test('stale_and_restore', async ({ page }, testInfo) => {
   await expect(department.getByTestId('stale')).toHaveCount(0);
   await expect(page.getByTestId('answered-by').getByTestId('stale')).toBeVisible();
 
-  // The state edited: every channel is from the last run, the winner loses its underline, figures unchanged.
+  // The state edited: every question is from the last run and marked stale, figures unchanged.
   await stateBox(page).fill(`${ticketState} Also, the app crashes.`);
   await expect(department.getByTestId('stale')).toBeVisible();
-  await expect(winner).toHaveCSS('text-decoration-line', 'none');
+  await expect(department).toHaveClass(/\bstale\b/);
   expect(await page.locator('[data-field]').evaluateAll((els) => els.map((e) => e.getAttribute('data-value')))).toEqual(
     figuresBefore,
   );
@@ -382,18 +385,18 @@ test('stale_and_restore', async ({ page }, testInfo) => {
   await expect(page.getByTestId('stale')).toHaveCount(0);
 
   // The model changed: stale again.
-  await picker(page).selectOption(await otherModel(page));
+  await pickModel(page, await otherModel(page));
   await expect(changed).toHaveClass(/\bon\b/);
 
   // A preset over edited work can be undone once; the next edit retires the offer.
   const edited = await stateBox(page).inputValue();
   const questions = await questionsBox(page).inputValue();
-  await page.getByRole('button', { name: 'Resume screening' }).click();
+  await loadPreset(page, 'Resume screening');
   await expect(stateBox(page)).not.toHaveValue(edited);
-  await page.getByRole('button', { name: 'Restore previous' }).click();
+  await restorePrevious(page);
   await expect(stateBox(page)).toHaveValue(edited);
   await expect(questionsBox(page)).toHaveValue(questions);
-  await page.getByRole('button', { name: 'Support-chat audit' }).click();
+  await loadPreset(page, 'Support-chat audit');
   await stateBox(page).fill('A new state.');
   await expect(page.getByRole('button', { name: 'Restore previous' })).toHaveCount(0);
   await screenshot(page, testInfo, 'stale_and_restore');
@@ -412,7 +415,7 @@ test('presets', async ({ page }, testInfo) => {
   await page.goto('/');
   for (const [name, file, types] of presets) {
     const request = readRequest(file);
-    await page.getByRole('button', { name }).click();
+    await loadPreset(page, name);
     const { documentText, promptsText } = editorTexts(request);
     await expect(stateBox(page)).toHaveValue(documentText);
     await expect(questionsBox(page)).toHaveValue(promptsText);
@@ -452,7 +455,7 @@ test('snippets', async ({ page, baseURL }, testInfo) => {
   const env = { ...process.env, TYPESAFE_BASE_URL: origin, TYPESAFE_API_KEY: 'ardana-e2e-unused' };
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Ticket routing' }).click();
+  await loadPreset(page, 'Ticket routing');
   const response = await run(page);
   expect(response.status()).toBe(200);
   const shown = await figures(page);
@@ -503,7 +506,7 @@ test('snippets', async ({ page, baseURL }, testInfo) => {
 
   // The snippets follow the editors: a new state and model are in the next snippet.
   await stateBox(page).fill('I was charged twice for order B-7.');
-  await picker(page).selectOption(await otherModel(page));
+  await pickModel(page, await otherModel(page));
   await language('curl').check();
   const body = JSON.parse((await snippet.textContent())!.split("<<'JSON'\n")[1].split('\nJSON\n')[0]);
   expect(body.state).toBe('I was charged twice for order B-7.');

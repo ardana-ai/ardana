@@ -1,10 +1,11 @@
-//! A channel's builder: its id, instructions and criteria as fields. Every edit rewrites the questions JSON at once;
+//! A question's builder: its id, instructions and criteria as fields. Every edit rewrites the questions JSON at once;
 //! JSON structure the fields cannot hold is shown read only and left to the JSON editor.
 
 use leptos::prelude::*;
 use serde_json::Value;
 
 use super::focus_later;
+use super::icons::Icon;
 use crate::builder::{self, CHOICE_OPTIONS, Criteria, Field, SCORE_LEVELS};
 use crate::deck::Deck;
 
@@ -28,7 +29,7 @@ fn report(deck: Deck, error: RwSignal<Option<String>>, field: &str, result: Resu
     }
 }
 
-/// After a row is removed, focus the Remove key of the row that took its place, else the Add key.
+/// After a row is removed, focus the Remove button of the row that took its place, else the Add button.
 fn focus_after_removal(dom: &str, kind: &str, index: usize, count: usize, least: usize) {
     focus_later(if index < count && count > least {
         format!("{dom}-{kind}-{index}-remove")
@@ -67,6 +68,9 @@ pub fn Program(
     });
 
     let id_error = RwSignal::new(None::<String>);
+    // Whether the rename is being committed by Tab: `change` fires before focus has moved, so the key itself is
+    // the signal. The block is drawn again under its new id, and focus follows the Tab to Instructions there.
+    let tabbed = StoredValue::new(false);
     let rename = move |event| {
         let new = event_target_value(&event);
         let old = id.get_value();
@@ -74,9 +78,14 @@ pub fn Program(
         let moved = renamed.is_ok() && old != new;
         report(deck, id_error, "Question id", renamed);
         if moved {
-            // The channel is drawn again under its new id: carry focus to the new id field.
-            focus_later(format!("{}-id", super::dom_id(&new)));
+            let field = if tabbed.get_value() {
+                "instructions"
+            } else {
+                "id"
+            };
+            focus_later(format!("{}-{field}", super::dom_id(&new)));
         }
+        tabbed.set_value(false);
     };
     let remove = move |_| {
         let next = id.with_value(|id| deck.remove_question(id));
@@ -94,7 +103,7 @@ pub fn Program(
     view! {
         <div class="program-panel" id=panel_id>
             <div class="field">
-                <label class="legend" for=id_input.clone()>"Question id"</label>
+                <label class="field-label" for=id_input.clone()>"Question id"</label>
                 <input
                     id=id_input
                     class="field-input field-code"
@@ -103,12 +112,14 @@ pub fn Program(
                     prop:value=move || id.get_value()
                     aria-invalid=move || id_error.with(Option::is_some).to_string()
                     aria-describedby=id_error_line.clone()
+                    on:keydown=move |event| tabbed.set_value(event.key() == "Tab" && !event.shift_key())
+                    on:focus=move |_| tabbed.set_value(false)
                     on:change=rename
                 />
                 <p id=id_error_line class="fault-line field-error">{move || id_error.get()}</p>
             </div>
             <div class="field">
-                <label class="legend" for=instructions_input.clone()>"Instructions"</label>
+                <label class="field-label" for=instructions_input.clone()>"Instructions"</label>
                 <textarea
                     id=instructions_input
                     class="field-input"
@@ -137,7 +148,8 @@ pub fn Program(
                 .into_any(),
             }}
             <div class="program-foot">
-                <button type="button" class="plate-key" on:click=remove>
+                <button type="button" class="button button-sm" on:click=remove>
+                    <Icon name="trash" />
                     "Remove question"
                 </button>
             </div>
@@ -147,6 +159,59 @@ pub fn Program(
 
 fn structured_note() -> impl IntoView {
     view! { <p class="field-note">"Structured JSON: edit it in the questions JSON below."</p> }
+}
+
+/// An icon button that removes a row; held with `aria-disabled` at the lower bound, so it keeps focus.
+fn remove_button(
+    id: String,
+    label: String,
+    held: impl Fn() -> bool + Copy + Send + Sync + 'static,
+    act: impl Fn() + Copy + Send + Sync + 'static,
+) -> impl IntoView {
+    view! {
+        <button
+            type="button"
+            id=id
+            class="button button-icon button-sm tip tip-end"
+            aria-label=label.clone()
+            data-tip=label
+            aria-disabled=move || held().to_string()
+            on:click=move |_| {
+                if !held() {
+                    act();
+                }
+            }
+        >
+            <Icon name="trash" />
+        </button>
+    }
+}
+
+/// The row that adds one more; held with `aria-disabled` at the upper bound.
+fn add_button(
+    id: String,
+    label: &'static str,
+    held: impl Fn() -> bool + Copy + Send + Sync + 'static,
+    act: impl Fn() + Copy + Send + Sync + 'static,
+) -> impl IntoView {
+    view! {
+        <div class="criteria-foot">
+            <button
+                type="button"
+                id=id
+                class="button button-sm"
+                aria-disabled=move || held().to_string()
+                on:click=move |_| {
+                    if !held() {
+                        act();
+                    }
+                }
+            >
+                <Icon name="plus" />
+                {label}
+            </button>
+        </div>
+    }
 }
 
 /// What a true and a false answer mean, both optional.
@@ -180,7 +245,7 @@ fn noul(
         let input = format!("{dom}-{}", if yes { "true" } else { "false" });
         view! {
             <div class="field">
-                <label class="legend" for=input.clone()>{label}</label>
+                <label class="field-label" for=input.clone()>{label}</label>
                 <input
                     id=input
                     class="field-input"
@@ -233,6 +298,24 @@ fn choice(
         let error = RwSignal::new(None::<String>);
         let number = index + 1;
         let error_line = dom.with_value(|dom| format!("{dom}-option-{index}-error"));
+        let remove = remove_button(
+            dom.with_value(|dom| format!("{dom}-option-{index}-remove")),
+            format!("Remove option {number}"),
+            move || count.get() <= *CHOICE_OPTIONS.start(),
+            move || {
+                if edit(&|spec| builder::remove_option(spec, index)).is_ok() {
+                    dom.with_value(|dom| {
+                        focus_after_removal(
+                            dom,
+                            "option",
+                            index,
+                            count.get_untracked(),
+                            *CHOICE_OPTIONS.start(),
+                        )
+                    });
+                }
+            },
+        );
         view! {
             <li class="criteria-row">
                 <input
@@ -261,45 +344,27 @@ fn choice(
                         let _ = edit(&|spec| builder::set_option_note(spec, index, &note));
                     }
                 />
-                <button
-                    type="button"
-                    id=dom.with_value(|dom| format!("{dom}-option-{index}-remove"))
-                    class="plate-key"
-                    aria-label=format!("Remove option {number}")
-                    disabled=move || { count.get() <= *CHOICE_OPTIONS.start() }
-                    on:click=move |_| {
-                        if edit(&|spec| builder::remove_option(spec, index)).is_ok() {
-                            dom.with_value(|dom| {
-                                focus_after_removal(dom, "option", index, count.get_untracked(), *CHOICE_OPTIONS.start())
-                            });
-                        }
-                    }
-                >
-                    "Remove"
-                </button>
+                {remove}
                 <p id=error_line class="fault-line criteria-error">{move || error.get()}</p>
             </li>
         }
     };
     view! {
         <div class="criteria">
-            <p class="legend criteria-legend">
+            <p class="criteria-legend">
                 {move || format!("Options · {} ({} to {})", count.get(), CHOICE_OPTIONS.start(), CHOICE_OPTIONS.end())}
             </p>
             <ol class="criteria-rows">
                 <For each=move || 0..count.get() key=|index| *index children=row />
             </ol>
-            <button
-                type="button"
-                id=dom.with_value(|dom| format!("{dom}-add-option"))
-                class="plate-key"
-                disabled=move || { count.get() >= *CHOICE_OPTIONS.end() }
-                on:click=move |_| {
+            {add_button(
+                dom.with_value(|dom| format!("{dom}-add-option")),
+                "Add option",
+                move || count.get() >= *CHOICE_OPTIONS.end(),
+                move || {
                     let _ = edit(&builder::add_option);
-                }
-            >
-                "Add option"
-            </button>
+                },
+            )}
         </div>
     }
 }
@@ -334,6 +399,24 @@ fn score(
                 .cloned()
                 .unwrap_or(Field::Text(String::new()))
         };
+        let remove = remove_button(
+            dom.with_value(|dom| format!("{dom}-level-{index}-remove")),
+            format!("Remove level {index}"),
+            move || count.get() <= *SCORE_LEVELS.start(),
+            move || {
+                if edit(&|spec| builder::remove_level(spec, index)).is_ok() {
+                    dom.with_value(|dom| {
+                        focus_after_removal(
+                            dom,
+                            "level",
+                            index,
+                            count.get_untracked(),
+                            *SCORE_LEVELS.start(),
+                        )
+                    });
+                }
+            },
+        );
         view! {
             <li class="criteria-row level-row">
                 <span class="level-number" aria-hidden="true">{index}</span>
@@ -348,44 +431,26 @@ fn score(
                         let _ = edit(&|spec| builder::set_level(spec, index, &text));
                     }
                 />
-                <button
-                    type="button"
-                    id=dom.with_value(|dom| format!("{dom}-level-{index}-remove"))
-                    class="plate-key"
-                    aria-label=format!("Remove level {index}")
-                    disabled=move || { count.get() <= *SCORE_LEVELS.start() }
-                    on:click=move |_| {
-                        if edit(&|spec| builder::remove_level(spec, index)).is_ok() {
-                            dom.with_value(|dom| {
-                                focus_after_removal(dom, "level", index, count.get_untracked(), *SCORE_LEVELS.start())
-                            });
-                        }
-                    }
-                >
-                    "Remove"
-                </button>
+                {remove}
             </li>
         }
     };
     view! {
         <div class="criteria">
-            <p class="legend criteria-legend">
+            <p class="criteria-legend">
                 {move || format!("Levels, lowest first · {} ({} to {})", count.get(), SCORE_LEVELS.start(), SCORE_LEVELS.end())}
             </p>
             <ol class="criteria-rows">
                 <For each=move || 0..count.get() key=|index| *index children=row />
             </ol>
-            <button
-                type="button"
-                id=dom.with_value(|dom| format!("{dom}-add-level"))
-                class="plate-key"
-                disabled=move || { count.get() >= *SCORE_LEVELS.end() }
-                on:click=move |_| {
+            {add_button(
+                dom.with_value(|dom| format!("{dom}-add-level")),
+                "Add level",
+                move || count.get() >= *SCORE_LEVELS.end(),
+                move || {
                     let _ = edit(&builder::add_level);
-                }
-            >
-                "Add level"
-            </button>
+                },
+            )}
         </div>
     }
 }

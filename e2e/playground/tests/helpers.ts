@@ -58,6 +58,42 @@ export function shareHash(request: Request): string {
 
 export const runKey = (page: Page) => page.getByRole('button', { name: /^Run/ });
 
+/**
+ * The model picker and the presets live in the sidebar, which is a drawer behind "Open sidebar" on a phone (and when
+ * a wide screen has collapsed it): opens it for `act` when it is closed, and closes it again afterwards.
+ */
+export async function inSidebar<T>(page: Page, act: () => Promise<T>): Promise<T> {
+  const opener = page.getByRole('button', { name: 'Open sidebar' });
+  const closed = await opener.isVisible();
+  if (closed) {
+    await opener.click();
+  }
+  const result = await act();
+  // A pick that loads a preset or jumps to a section closes the drawer itself; only a lingering one is closed here.
+  if (closed && (await opener.getAttribute('aria-expanded')) === 'true') {
+    await page.getByRole('button', { name: 'Close sidebar' }).click();
+  }
+  return result;
+}
+
+/** Loads a preset from the sidebar. */
+export const loadPreset = (page: Page, name: string) =>
+  inSidebar(page, () => page.getByRole('button', { name }).click());
+
+/**
+ * The model picker, for reading its value and options. It is `#model` rather than a role locator: on a phone the
+ * closed drawer is `visibility: hidden`, which takes the select out of the accessibility tree.
+ */
+export const picker = (page: Page) => page.locator('#model');
+
+/** Picks a model in the sidebar. */
+export const pickModel = (page: Page, name: string) =>
+  inSidebar(page, () => page.getByRole('combobox', { name: 'Model' }).selectOption(name));
+
+/** Puts both editors back as they were before the last preset load or removal, from the sidebar. */
+export const restorePrevious = (page: Page) =>
+  inSidebar(page, () => page.getByRole('button', { name: 'Restore previous' }).click());
+
 /** Presses RUN and returns the `/v1/systemone` response, however long the model takes (the test timeout bounds it). */
 export async function run(page: Page): Promise<Response> {
   const replied = page.waitForResponse((r) => isSystemOne(r.url()), { timeout: 0 });

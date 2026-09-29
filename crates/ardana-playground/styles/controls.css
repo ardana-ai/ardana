@@ -1,108 +1,158 @@
-/* The fascia's small controls: chrome plate keys, the chrome toggle, and the paper fields of the builder. */
+/* The workspace's controls: ghost and primary buttons, the segmented control (a native radio group), fields, tags,
+   and the dark tooltip that names a control's shortcut or a figure's meaning. */
 
-/* Plate key: a chrome plate like the model switch. Pressed (or open) it sits into the panel; it has no key skirt,
-   which belongs to the RUN transport key alone. */
-.plate-key {
+/* Buttons: quiet by default, filled blue for the one primary action. */
+.button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 6px 14px;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
   border: 0;
-  border-radius: var(--radius-control);
-  background: linear-gradient(180deg, var(--chrome-hi), #d3d8dc 48%, var(--chrome-lo));
+  border-radius: var(--radius-md);
+  background: transparent;
   color: var(--ink);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.95),
-    inset 0 -1px 0 rgb(0 0 0 / 0.18),
-    0 1px 2px rgb(0 0 0 / 0.3);
-  font: 600 0.8125rem/1.1 var(--font-legend);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: var(--text-14);
+  font-weight: 500;
+  line-height: 1.2;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 80ms var(--ease-out), box-shadow 80ms var(--ease-out);
+  transition: background var(--fast) ease-in, color var(--fast) ease-in;
 }
 
-.plate-key:hover:not(:disabled) {
-  background: linear-gradient(180deg, #ffffff, #dfe3e6 48%, #bcc2c7);
+.button:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--hover);
 }
 
-.plate-key:active:not(:disabled),
-.plate-key[aria-expanded="true"] {
-  background: linear-gradient(180deg, #b9bec3, #cfd3d7 60%, #dde0e3);
-  box-shadow:
-    inset 0 2px 3px rgb(0 0 0 / 0.3),
-    inset 0 -1px 0 rgb(255 255 255 / 0.6);
+.button:active:not(:disabled, [aria-disabled="true"]),
+.button[aria-expanded="true"] {
+  background: var(--pressed);
 }
 
-.plate-key:disabled {
-  background: linear-gradient(180deg, #e3e6e9, #c9ced2);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
-  color: var(--ink-soft);
-  cursor: not-allowed;
+.button:disabled,
+.button[aria-disabled="true"] {
+  color: var(--ink-3);
+  cursor: default;
 }
 
-.plate-key:focus-visible {
-  outline-offset: 3px;
+.button .icon {
+  color: var(--ink-2);
 }
 
-/* Chrome toggle: a native radio group dressed as a row of chrome keys in a milled track; the pressed key sits in
-   and its lamp is lit. */
-.toggle {
+.button:hover:not(:disabled, [aria-disabled="true"]) .icon {
+  color: var(--ink);
+}
+
+/* Primary: the blue Run. White text on the fill reads at 4.6:1 and more. */
+.button-primary {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  padding: 0 12px;
+  box-shadow: none;
+}
+
+.button-primary:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--accent-fill-hover);
+}
+
+.button-primary:active:not(:disabled, [aria-disabled="true"]) {
+  background: var(--accent-fill-hover);
+}
+
+.button-primary:disabled,
+.button-primary[aria-disabled="true"] {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  opacity: 0.5;
+}
+
+.button-primary[aria-busy="true"] {
+  opacity: 1;
+}
+
+.button-primary .icon {
+  color: inherit;
+}
+
+/* Icon button: a square ghost for one drawn glyph; its name is its aria-label and its tooltip. */
+.button-icon {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.button-icon.button-sm {
+  width: 24px;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* Small: 24px tall, for row-level actions. */
+.button-sm {
+  min-height: 24px;
+  font-size: var(--text-13);
+}
+
+/* The busy spinner in the Run button: a drawn arc, turning; still under reduced motion. */
+.spinner {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Segmented control: a native radio group in a low track; the checked option lifts onto a raised plate. */
+.segmented {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
 
-.toggle-legend {
-  color: var(--ink-soft);
+.segmented-legend {
+  color: var(--ink-2);
+  font-size: var(--text-13);
 }
 
-.toggle-keys {
+.segmented-options {
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
   padding: 2px;
-  border-radius: var(--radius-control);
-  background: #aeb4ba;
-  border-style: solid;
-  border-width: 2px 1px 1px;
-  border-color: #8d9399 var(--alu-lo) var(--alu-hi);
+  border-radius: var(--radius-md);
+  background: var(--hover);
 }
 
-.toggle-key {
+.segment {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 4px 10px;
-  border-radius: 4px;
-  background: linear-gradient(180deg, var(--chrome-hi), #d3d8dc 48%, var(--chrome-lo));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(0 0 0 / 0.18);
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: var(--text-13);
+  font-weight: 500;
+  line-height: 1;
   cursor: pointer;
-  transition: background 80ms var(--ease-out), box-shadow 80ms var(--ease-out);
+  transition: background var(--fast) ease-in, color var(--fast) ease-in, box-shadow var(--fast) ease-in;
 }
 
-.toggle-key:hover:not(.on) {
-  background: linear-gradient(180deg, #ffffff, #dfe3e6 48%, #bcc2c7);
+.segment:hover:not(.on) {
+  color: var(--ink);
 }
 
-.toggle-key.on {
-  background: linear-gradient(180deg, #b9bec3, #cfd3d7 60%, #dde0e3);
-  box-shadow: inset 0 2px 3px rgb(0 0 0 / 0.3), inset 0 -1px 0 rgb(255 255 255 / 0.6);
+/* The picked segment is a raised plate with an edge that holds 3:1 on the track, not colour alone. */
+.segment.on {
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--edge-strong), rgb(15 15 15 / 0.1) 0 1px 2px;
   cursor: default;
 }
 
-.toggle-key:has(.toggle-input:focus-visible) {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-
-/* The real radio covers its key, invisible: pointer, keyboard and assistive tech all reach the native control. */
-.toggle-input {
+/* The real radio covers its segment, invisible: pointer, arrow keys and assistive tech all reach the native control. */
+.segment-input {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -112,89 +162,267 @@
   cursor: inherit;
 }
 
-.toggle-name {
-  font: 600 0.8125rem/1 var(--font-legend);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink);
+.segment:has(.segment-input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
-/* Paper fields sunk into the aluminium: the builder's inputs and the share link. */
+/* Fields: low inputs on a faint fill with a hairline, blue when focused. */
 .field {
   display: grid;
   gap: var(--space-1);
   min-width: 0;
 }
 
-.field .legend {
-  color: var(--ink-soft);
+.field-label {
+  color: var(--ink-2);
+  font-size: var(--text-12);
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .field-input {
   display: block;
   width: 100%;
-  min-height: 36px;
-  padding: 6px 10px;
-  border-radius: 4px;
-  background: var(--paper);
-  border-style: solid;
-  border-width: 2px 1px 1px;
-  border-color: var(--field-edge-top) var(--field-edge) var(--field-edge);
-  box-shadow: 0 1px 0 var(--alu-hi);
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
   color: var(--ink);
-  caret-color: var(--ink);
-  font: 400 0.9375rem/1.4 var(--font-text);
+  font-size: var(--text-14);
+  line-height: 1.5;
+  transition: box-shadow var(--fast) ease-in;
 }
 
 textarea.field-input {
   resize: vertical;
 }
 
-.field-code {
-  font: 400 0.875rem/1.45 var(--font-code);
-}
-
 .field-input::placeholder {
-  color: var(--paper-hint);
+  color: var(--ink-2);
   opacity: 1;
 }
 
-/* On aluminium the amber ring would read at 1.2:1: paper fields take the ink outline. */
 .field-input:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--accent-tint);
 }
 
 .field-input[aria-invalid="true"] {
-  border-color: var(--fault-ink);
+  box-shadow: inset 0 0 0 1px var(--danger);
 }
 
 .field-input:disabled {
-  background: var(--paper-shade);
-  color: var(--ink-soft);
+  color: var(--ink-2);
+  background: transparent;
+}
+
+.field-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-13);
 }
 
 .field-note {
-  color: var(--ink-soft);
-  font-size: 0.875rem;
+  color: var(--ink-2);
+  font-size: var(--text-12);
   line-height: 1.4;
 }
 
-/* Copy: the key and what it reports. */
+/* Native select dressed as a row: the model picker and nothing else. */
+.select {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.select-input {
+  appearance: none;
+  width: 100%;
+  min-height: 28px;
+  padding: 3px 28px 3px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  color: var(--ink);
+  font-size: var(--text-14);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background var(--fast) ease-in;
+}
+
+.select-input:hover {
+  background: var(--hover);
+}
+
+.select-input:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--accent-tint);
+}
+
+.select .icon {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  margin-top: -7px;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+
+/* Tag: a small grey chip for a state word (Sent as JSON, From last run). */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--tag);
+  color: var(--tag-ink);
+  font-size: var(--text-12);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Tooltip: the dark card Notion shows on hover and focus, with an optional shortcut line. It is a description, never
+   the only name of a control. */
+.tip {
+  position: relative;
+}
+
+/* Hidden tooltips take no layout at all (an absolutely positioned box off the page edge would scroll the page).
+   The 6px gap to the control is a transparent border, so the pointer can cross onto the tooltip and it stays
+   (WCAG 1.4.13); Escape dismisses every tooltip through `.tips-off` on the root. */
+.tip::after {
+  content: attr(data-tip);
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: max-content;
+  max-width: min(272px, 60vw);
+  padding: 4px 8px;
+  border: 6px solid transparent;
+  border-radius: 10px;
+  background: var(--tooltip);
+  background-clip: padding-box;
+  color: var(--tooltip-ink);
+  font-size: var(--text-12);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: pre-line;
+  text-align: center;
+}
+
+.tip:hover::after,
+.tip:focus-visible::after,
+.tip:has(:focus-visible)::after {
+  display: block;
+}
+
+.tips-off .tip::after {
+  display: none;
+}
+
+.tip-below::after {
+  bottom: auto;
+  top: 100%;
+}
+
+.tip-end::after {
+  left: auto;
+  right: -6px;
+  transform: none;
+}
+
+.tip-start::after {
+  left: -6px;
+  transform: none;
+}
+
+/* A defined term in a property name: plain, its meaning in the tooltip on hover or focus. */
+.dfn {
+  font-style: normal;
+  cursor: help;
+  border-radius: 3px;
+}
+
+/* Copy: the button and a transient toast saying what it did. */
 .copy {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
 }
 
-.copy-status {
-  color: var(--ink-soft);
-  font-size: 0.875rem;
+.toast {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 40;
+  max-width: calc(100vw - 24px);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--tooltip);
+  color: var(--tooltip-ink);
+  font-size: var(--text-13);
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: rgb(15 15 15 / 0.3) 0 4px 16px;
+}
+
+.toast:empty {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .plate-key,
-  .toggle-key {
+  .button,
+  .segment,
+  .field-input,
+  .select-input {
     transition: none;
+  }
+
+  .spinner {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .button,
+  .field-input,
+  .select-input,
+  .tag {
+    border: 1px solid ButtonText;
+  }
+
+  .button-primary {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .button[aria-disabled="true"],
+  .button:disabled {
+    color: GrayText;
+  }
+
+  .toast,
+  .skip-link {
+    border: 1px solid CanvasText;
+  }
+
+  .segment.on {
+    outline: 2px solid Highlight;
+  }
+
+  .tip::after {
+    border: 1px solid CanvasText;
   }
 }

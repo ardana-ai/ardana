@@ -7,6 +7,8 @@ import {
   expectFiguresMatch,
   fixture,
   isSystemOne,
+  pickModel,
+  picker as modelPicker,
   runKey,
   screenshot,
   shareHash,
@@ -47,7 +49,9 @@ test('embedded_binary', async ({ page }, testInfo) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Ardana' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'State' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Questions JSON' })).toBeVisible();
-  await expect(runKey(page)).toBeEnabled();
+  // Run is held while there is nothing to run, and says why.
+  await expect(runKey(page)).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByTestId('run-note')).toHaveText('Add a question to run');
   await screenshot(page, testInfo, 'embedded_binary');
 });
 
@@ -125,10 +129,10 @@ test('answers_match_api', async ({ page }, testInfo) => {
   expect(fields).toContain('/model');
   await expect(page.getByTestId('tokens-in')).toContainText(String(json.usage.input_tokens));
   await expect(page.getByTestId('tokens-out')).toContainText(String(json.usage.output_tokens));
-  await expect(page.getByTestId('cassette-tokens')).toContainText(String(json.usage.input_tokens));
+  await expect(page.getByTestId('state-tokens')).toContainText(String(json.usage.input_tokens));
 
   expect(timing.responseEnd, 'Playwright timed the request').toBeGreaterThan(0);
-  const shown = Number(await page.getByTestId('latency').locator('.matrix-digits').textContent());
+  const shown = Number(await page.getByTestId('latency').locator('[data-ms]').textContent());
   expect(Math.abs(shown - timing.responseEnd), `displayed ${shown} ms, measured ${timing.responseEnd} ms`).toBeLessThanOrEqual(20);
 
   await screenshot(page, testInfo, 'answers_match_api');
@@ -148,7 +152,7 @@ test('picker_raw_errors', async ({ page, baseURL }, testInfo) => {
   expect(library.length).toBeGreaterThan(0);
   const ticket = fixture('ticket.json');
   await page.goto(`/${shareHash(ticket)}`);
-  const picker = page.getByRole('combobox', { name: 'Model' });
+  const picker = modelPicker(page);
   await expect(picker.locator('option')).toHaveCount(names.length);
   expect(await picker.locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
     names,
@@ -159,7 +163,7 @@ test('picker_raw_errors', async ({ page, baseURL }, testInfo) => {
   );
 
   // The raw panel shows exactly what was sent and received.
-  await picker.selectOption(names[0]);
+  await pickModel(page, names[0]);
   let replied = page.waitForResponse((r) => isSystemOne(r.url()));
   await runKey(page).click();
   let response = await replied;

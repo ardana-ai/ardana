@@ -41,11 +41,16 @@ language: real local model names, never Jev's.
   latency; the raw request and response; `detail` of 413 and 422 errors.
 - Every displayed value equals the API response it came from.
 - Stack: Leptos CSR built with trunk and embedded in the binary; styles live in `.css` files.
-- Step 1 excludes remote endpoints, theming, image inputs, and Jev's lesson walkthroughs.
+- Step 1 excludes remote endpoints, a theme switcher, image inputs, and Jev's lesson walkthroughs. The page follows
+  the system's light or dark scheme (`prefers-color-scheme`) and offers no control of its own.
 
 ## Brand Commitments
 - Jev's playground structure is binding: the state on the left, questions and results on the right.
 - The product name is Ardana.
+- The playground is drawn in Notion's app design language, played straight (decided 2026-09-28): a workspace sidebar
+  beside one page of blocks, the system sans, warm neutrals with one blue, hairlines, small radii, hover-reveal
+  chrome, toggles, callouts and property rows. Linear and GitHub set the craft bar beside Notion. No instrument or
+  hardware metaphor.
 
 ## Evidence on Hand
 - Real requests: `tests/fixtures/requests/ticket.json`, `sentiment.json`; JevBench's 231 public items under

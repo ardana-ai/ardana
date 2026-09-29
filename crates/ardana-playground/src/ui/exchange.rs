@@ -1,7 +1,9 @@
-//! The raw exchange: the exact JSON the last run sent, and the exact body it received with its status.
+//! The raw exchange: a toggle block holding the exact JSON the last run sent and the exact body it received, with
+//! its status.
 
 use leptos::prelude::*;
 
+use super::icons::Icon;
 use crate::deck::Deck;
 
 #[component]
@@ -19,14 +21,17 @@ pub fn Exchange(deck: Deck) -> impl IntoView {
         })
     };
     view! {
-        <section class="exchange" aria-labelledby="exchange-title">
-            <div class="panel-head">
-                <h2 id="exchange-title" class="engraved">"Raw exchange"</h2>
-                <p class="legend">"Last run, byte for byte"</p>
-            </div>
+        <details class="toggle" id="exchange" open=true>
+            <summary>
+                <span class="toggle-marker">
+                    <Icon name="triangle" />
+                </span>
+                <h2 class="toggle-heading">"Raw exchange"</h2>
+                <span class="toggle-caption">"Last run, byte for byte"</span>
+            </summary>
             <div class="exchange-grid">
                 <div class="exchange-side">
-                    <h3 class="legend">"Sent · POST /v1/systemone"</h3>
+                    <h3>"Sent · POST /v1/systemone"</h3>
                     <Show
                         when=move || sent().is_some()
                         fallback=|| {
@@ -37,13 +42,13 @@ pub fn Exchange(deck: Deck) -> impl IntoView {
                             }
                         }
                     >
-                        <pre class="wire" tabindex="0" data-testid="raw-request" aria-label="Request sent">
+                        <pre class="code-block wire" tabindex="0" role="group" data-testid="raw-request" aria-label="Request sent">
                             {move || sent().unwrap_or_default()}
                         </pre>
                     </Show>
                 </div>
                 <div class="exchange-side">
-                    <h3 class="legend">
+                    <h3>
                         "Received"
                         {move || received().map(|(status, _)| view! { " · " <span data-testid="raw-status">{status}</span> })}
                     </h3>
@@ -51,12 +56,12 @@ pub fn Exchange(deck: Deck) -> impl IntoView {
                         when=move || received().is_some()
                         fallback=|| view! { <p class="wire-empty">"The response body appears here, byte for byte."</p> }
                     >
-                        <pre class="wire" tabindex="0" data-testid="raw-response" aria-label="Response received">
+                        <pre class="code-block wire" tabindex="0" role="group" data-testid="raw-response" aria-label="Response received">
                             {move || received().map(|(_, body)| body).unwrap_or_default()}
                         </pre>
                     </Show>
                 </div>
             </div>
-        </section>
+        </details>
     }
 }

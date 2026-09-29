@@ -1,0 +1,435 @@
+/* The shell: the sidebar of pages and settings on the left, the sticky top bar with Run over the page on the right,
+   the banner under the top bar, the share popover, and the drawer the sidebar becomes on narrow screens. */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+  min-height: 100vh;
+  transition: grid-template-columns var(--normal) var(--ease);
+}
+
+.shell.collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 50;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-popover);
+  font-weight: 500;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* ---- Sidebar ---- */
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow: hidden auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-2) var(--space-4);
+  background: var(--panel);
+  box-shadow: inset -1px 0 0 var(--hairline);
+  color: var(--ink);
+}
+
+.shell.collapsed .sidebar {
+  visibility: hidden;
+}
+
+.workspace {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 4px 0 6px;
+}
+
+.workspace-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--page);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.workspace-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-14);
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The collapse control shows itself when the header is hovered or it has focus. */
+.workspace .button-icon {
+  opacity: 0;
+  transition: opacity var(--fast) ease-in;
+}
+
+.workspace:hover .button-icon,
+.workspace .button-icon:focus-visible,
+.sidebar:focus-within .workspace .button-icon {
+  opacity: 1;
+}
+
+.sidebar-section {
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-heading {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  color: var(--ink-2);
+  font-size: var(--text-12);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.sidebar-section .select {
+  margin: 0 6px;
+}
+
+/* A row: a page in the list, with its glyph; the button rows take the hover fill like Notion's pages. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--text-14);
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fast) ease-in;
+}
+
+.row:hover {
+  background: var(--hover);
+}
+
+.row:active {
+  background: var(--pressed);
+}
+
+/* The section in view, in the "On this page" list. */
+.row[aria-current="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.row .icon {
+  color: var(--ink-2);
+}
+
+.row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-undo {
+  color: var(--ink-2);
+}
+
+.row-undo:hover {
+  color: var(--ink);
+}
+
+.sidebar-foot {
+  margin-top: auto;
+  display: grid;
+  gap: 4px;
+  padding: 0 8px;
+  color: var(--ink-2);
+  font-size: var(--text-12);
+  line-height: 1.4;
+}
+
+.sidebar-foot code {
+  font-size: var(--text-12);
+  background: transparent;
+  padding: 0;
+  color: var(--ink-2);
+}
+
+/* ---- Main column: top bar, banner, page ---- */
+
+.main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* A tooltip near the right edge clips at the page rather than widening it; clip keeps the top bar sticky. */
+  overflow-x: clip;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--topbar);
+  padding: 0 var(--space-3);
+  background: var(--page);
+  box-shadow: inset 0 -1px 0 var(--hairline);
+}
+
+.topbar-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: var(--text-14);
+  font-weight: 500;
+}
+
+.topbar-crumb .icon {
+  color: var(--ink-2);
+}
+
+.topbar-crumb-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Share and Run never shrink; the stale tag gives way first, then the crumb. */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.topbar-actions > .share,
+.topbar-actions > .run-key {
+  flex: none;
+}
+
+/* The sidebar's opener lives in the top bar only while the sidebar is collapsed or a drawer. */
+.topbar .opener {
+  display: none;
+}
+
+.shell.collapsed .topbar .opener {
+  display: inline-flex;
+}
+
+/* The stale tag in the top bar: nothing while the last run still matches. */
+.changed {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.changed .tag {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 20px;
+}
+
+.changed:not(.on) .tag {
+  display: none;
+}
+
+/* The banner under the top bar: why Run is held, or what a first run is downloading. A wait is grey; a fault is red. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 6px var(--space-4);
+  background: var(--danger-tint);
+  color: var(--danger);
+  font-size: var(--text-13);
+  font-weight: 500;
+  box-shadow: inset 0 -1px 0 var(--hairline);
+}
+
+.banner:empty {
+  display: none;
+}
+
+.banner.quiet {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+/* ---- Share popover: anchored under the Share button ---- */
+
+.share {
+  position: relative;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: min(420px, calc(100vw - 24px));
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-popover);
+}
+
+.popover-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.popover-row .field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  /* The stale state is carried by each question's tag; a truncated stub in the top bar says nothing. */
+  .changed .tag {
+    display: none;
+  }
+
+  .popover {
+    position: fixed;
+    top: calc(var(--topbar) + 6px);
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}
+
+/* ---- The drawer: below 960px the sidebar slides in over the page. ---- */
+
+.scrim {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .shell,
+  .shell.collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 60;
+    width: min(var(--sidebar), 85vw);
+    height: 100vh;
+    height: 100dvh;
+    box-shadow: var(--shadow-drawer);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform var(--normal) var(--ease), visibility 0s var(--normal);
+  }
+
+  .shell.drawer-open .sidebar {
+    transform: none;
+    visibility: visible;
+    transition: transform var(--normal) var(--ease), visibility 0s;
+  }
+
+  .shell.collapsed .sidebar {
+    visibility: hidden;
+  }
+
+  .shell.drawer-open.collapsed .sidebar {
+    visibility: visible;
+  }
+
+  .workspace .button-icon {
+    opacity: 1;
+  }
+
+  .shell .topbar .opener,
+  .shell.collapsed .topbar .opener {
+    display: inline-flex;
+  }
+
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    border: 0;
+    padding: 0;
+    background: var(--overlay);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--normal) var(--ease);
+  }
+
+  .shell.drawer-open .scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell,
+  .sidebar,
+  .scrim,
+  .row,
+  .workspace .button-icon {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .sidebar {
+    border-right: 1px solid CanvasText;
+  }
+
+  .topbar,
+  .banner {
+    border-bottom: 1px solid CanvasText;
+  }
+
+  .popover {
+    border: 1px solid CanvasText;
+  }
+}

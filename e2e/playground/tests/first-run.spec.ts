@@ -7,6 +7,7 @@ import {
   expectFiguresMatch,
   fixture,
   isSystemOne,
+  picker as modelPicker,
   runKey,
   screenshot,
   shareHash,
@@ -43,7 +44,7 @@ test('first_run_pull', async ({ page }, testInfo) => {
   const ticket = fixture('ticket.json');
   expect(ticket.model).toBe('jev-latest');
   await page.goto(`${base}/${shareHash(ticket)}`);
-  const picker = page.getByRole('combobox', { name: 'Model' });
+  const picker = modelPicker(page);
   await expect(picker).toHaveValue('decider-2b');
   await expect(picker.locator('optgroup[label="Pulled"]')).toHaveCount(0);
   await expect(picker.locator('optgroup[label="Library · pulls on first run"] option').first()).toHaveText(
@@ -57,10 +58,10 @@ test('first_run_pull', async ({ page }, testInfo) => {
     const seen: string[] = [];
     (window as unknown as { seen: string[] }).seen = seen;
     const record = () => {
-      seen.push(`key:${document.querySelector('.run-legend')?.textContent ?? ''}`);
+      seen.push(`key:${document.querySelector('[data-testid="run-label"]')?.textContent ?? ''}`);
       seen.push(`note:${document.querySelector('[data-testid="run-note"]')?.textContent ?? ''}`);
     };
-    new MutationObserver(record).observe(document.querySelector('.rail')!, {
+    new MutationObserver(record).observe(document.body, {
       subtree: true,
       childList: true,
       characterData: true,

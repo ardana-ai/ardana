@@ -79,7 +79,7 @@ share-link decoding.
 - Screenshots, Ardana's naming: each case's final state is `tmp/screens/<case>/<project>.png`; intermediate states it
   also captures are `<state>-<project>.png` (`answers_match_api/loaded-*`, `picker_raw_errors/413-*`,
   `picker_raw_errors/unknown-type-*`). xtask checks every case's pair exists at 1280 and 390 px wide. Screenshots
-  pass `animations: 'disabled'` so the ladder climb shows its final state.
+  pass `animations: 'disabled'` so the bars show their final widths.
 - Figures (R6.5): `expectFiguresMatch` in `tests/helpers.ts` reads every `[data-field]` element, resolves its JSON
   pointer in the response the page received, and checks `data-value` (numbers compared as numbers) and the text in
   its `data-format`; `roundDecimal` implements the display rounding independently of the Rust code (BigInt, half up
@@ -103,8 +103,12 @@ share-link decoding.
   API URL starts with `<baseURL>/v1/`; use `request.postDataJSON()` to compare the sent body with the raw panel.
 - Share links in W6 cases are written with `lz-string`'s `compressToEncodedURIComponent` (`shareHash` in
   `tests/helpers.ts`), as Jev's playground writes them, so the Rust decoder is checked against the JS encoder.
-- `run(page)` in `tests/helpers.ts` presses RUN and waits for the `/v1/systemone` response with `timeout: 0`, so a
+- `run(page)` in `tests/helpers.ts` presses Run and waits for the `/v1/systemone` response with `timeout: 0`, so a
   heavy request is bounded by the test's own timeout (`test.setTimeout`), not the 30 s default of `waitForResponse`.
+- The model picker, the presets and Restore previous live in the sidebar, a drawer behind the "Open sidebar" button
+  on the mobile project: `pickModel`, `loadPreset` and `restorePrevious` in `tests/helpers.ts` open it when it is
+  closed and close it again (`inSidebar`). Never click a sidebar control directly in a case that runs on both
+  projects.
 - Docs share links (R7.3): `fixtures/jev-share-links.json` vendors every `console.typesafe.ai/playground#share/` link
   found on docs.typesafe.ai (17, all on cookbook pages) with its page. `jev_share_links` has one test per link: the
   editors hold the decoded `documentText` and `promptsText`, the picker the first `selectedModels` entry (the
@@ -115,7 +119,8 @@ share-link decoding.
   `HF_HUB_OFFLINE=1` (`Server::start_empty`) and passes it as `ARDANA_EMPTY_URL_DESKTOP` / `ARDANA_EMPTY_URL_MOBILE`,
   since the first run pulls decider-2b and the next project needs an empty registry again. The case opens a Jev-style
   share link (`jev-latest`), checks the picker starts on `decider-2b` and that no readable text (body text, option and
-  optgroup labels, `placeholder`, `aria-label`, `title`) contains "jev", records the RUN legend and `run-note` with a
+  optgroup labels, `placeholder`, `aria-label`, `title`) contains "jev", records the Run label (`run-label`) and
+  `run-note` with a
   `MutationObserver` while the pull runs ("Pulling", "Downloading decider-2b (1.3 GB) on first run"), and checks every
   `data-value` against the response.
 - Snippets (R7.6): the `snippets` case writes each snippet to `tmp/playwright/snippets/<project>/` and executes it
@@ -124,12 +129,12 @@ share-link decoding.
   (`decide.mts`, type stripping) through a `node_modules` symlink to `e2e/playground/node_modules`. Both SDKs get a
   placeholder `TYPESAFE_API_KEY`; the SDK outputs must equal every displayed figure except Ardana's `x_` extras,
   which the SDK models drop.
-- Recovery and announcements: `stale_and_restore` checks the Changed lamp, the "From last run · inputs changed"
-  labels (only the edited channel when one spec changes, every channel when the state changes), unchanged
-  `data-value`s, the winner's underline gone, Restore previous after a preset, and on the mobile project that the
-  first channel is in view after RUN. `answers_match_api` checks RUN keeps focus and the `run-status` text,
-  `picker_raw_errors` the 413 status text and the 422 issue marked on its channel, `builder_sync` focus after
-  rename and removals, the type round trip, `notice` and the RUN reason. Use `toBeFocused`,
+- Recovery and announcements: `stale_and_restore` checks the `changed` tag, the "From last run · inputs changed"
+  tags (only the edited question when one spec changes, every question when the state changes), unchanged
+  `data-value`s, the question's `stale` class, Restore previous after a preset, and on the mobile project that the
+  first question is in view after Run. `answers_match_api` checks Run keeps focus and the `run-status` text,
+  `picker_raw_errors` the 413 status text and the 422 issue marked on its question block, `builder_sync` focus after
+  rename and removals, the type round trip, `notice` and the Run reason (the `#run-note` banner). Use `toBeFocused`,
   `toHaveAccessibleDescription` and `toBeInViewport` for these.
 - Radio groups (the type toggle, the snippet language): the native radio covers its key, so `check()` and
   `click()` hit the real input; arrow keys move the selection (`builder_sync` switches noul to choice by keyboard).

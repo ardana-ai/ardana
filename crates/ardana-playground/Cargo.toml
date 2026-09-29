@@ -27,6 +27,7 @@ web-sys = { workspace = true, features = [
     "Location",
     "MediaQueryList",
     "Navigator",
+    "Node",
     "Performance",
     "Request",
     "RequestInit",
@@ -34,6 +35,10 @@ web-sys = { workspace = true, features = [
     "ScrollBehavior",
     "ScrollIntoViewOptions",
     "ScrollLogicalPosition",
+    "DomRect",
+    "DomTokenList",
+    "FocusOptions",
+    "Storage",
     "UrlSearchParams",
     "Window",
 ] }

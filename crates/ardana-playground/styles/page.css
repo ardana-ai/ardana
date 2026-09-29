@@ -1,0 +1,813 @@
+/* The page: its title, the two columns (the state block left, the question blocks right), the question blocks with
+   their property bars and property lists, the callouts, the toggle blocks for the raw exchange and the snippets, and
+   the code blocks. */
+
+.page {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-8) 20vh;
+  display: grid;
+  gap: var(--space-6);
+}
+
+/* ---- Title ---- */
+
+.page-title {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.page-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.page-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--ink);
+}
+
+.page-heading {
+  font-size: var(--text-32);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.page-lede {
+  max-width: 56ch;
+  color: var(--ink-2);
+  font-size: var(--text-14);
+  line-height: 1.5;
+}
+
+.page-lede code {
+  font-size: 0.85em;
+}
+
+/* ---- Columns: state left, questions right ---- */
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+/* A block head: a heading with something beside it. */
+.block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  min-height: 28px;
+}
+
+.block-heading {
+  font-size: var(--text-16);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.block-heading label {
+  cursor: text;
+}
+
+/* ---- State block ---- */
+
+.state {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.state-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Code blocks: the state, the questions JSON, the wire panes and the snippet, all on the same paper. */
+.code-block {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--code);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-13);
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+textarea.code-block {
+  padding: var(--space-4);
+  resize: vertical;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow var(--fast) ease-in;
+}
+
+textarea.code-block::placeholder {
+  color: var(--ink-2);
+  opacity: 1;
+}
+
+textarea.code-block:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--accent-tint);
+}
+
+textarea.code-block[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+.state-text {
+  min-height: clamp(280px, 52vh, 600px);
+}
+
+.state-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  color: var(--ink-2);
+  font-size: var(--text-12);
+  line-height: 1.4;
+}
+
+.state-foot .fault-line {
+  flex: 1 1 100%;
+}
+
+/* ---- Questions column ---- */
+
+.questions {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The last run's line: model, latency, tokens, and the stale note. */
+.last-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  color: var(--ink-2);
+  font-size: var(--text-12);
+  line-height: 1.4;
+}
+
+.last-run .dot {
+  color: var(--ink-2);
+}
+
+.last-run [data-field="/model"] {
+  color: var(--ink);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.question-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* Anything the page scrolls to lands under the sticky top bar, not behind it. */
+.page,
+.question,
+.callout,
+.toggle {
+  scroll-margin-top: calc(var(--topbar) + var(--space-3));
+}
+
+/* A question block: a white block with a hairline, like a callout with an outline. */
+.question {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  box-shadow: var(--shadow-hairline);
+  transition: box-shadow var(--fast) ease-in;
+}
+
+/* The head: the id and the controls on one line (the controls drop under it when the block is narrow), then the
+   instructions across the whole block. */
+.question-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.question-id {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-size: var(--text-16);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.question-instructions {
+  color: var(--ink-2);
+  font-size: var(--text-14);
+  line-height: 1.5;
+  max-width: 65ch;
+  overflow-wrap: anywhere;
+}
+
+.question-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.question > .tag {
+  justify-self: start;
+}
+
+/* ---- Rows: one per option, name, bar, exact value. The winner is the checked row in blue. ---- */
+
+.bars {
+  display: grid;
+  gap: 6px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 16px minmax(6rem, 12rem) minmax(0, 1fr) auto;
+  grid-template-areas: "mark name bar value";
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 24px;
+}
+
+.bar-mark {
+  grid-area: mark;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  color: var(--on-accent);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+}
+
+.bar-row.lit .bar-mark {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.bar-mark .icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+  opacity: 0;
+}
+
+.bar-row.lit .bar-mark .icon {
+  opacity: 1;
+}
+
+/* A noul row is a probability, not a pick: no box to read as checked or unchecked. */
+.bar-row.unmarked .bar-mark {
+  visibility: hidden;
+}
+
+.bar-name {
+  grid-area: name;
+  min-width: 0;
+  font-size: var(--text-14);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.bar-row.lit .bar-name {
+  font-weight: 600;
+}
+
+.bar-note {
+  display: block;
+  color: var(--ink-2);
+  font-size: var(--text-12);
+  font-weight: 400;
+}
+
+/* The bar: a low rounded track, the fill grown to the returned probability. */
+.bar {
+  grid-area: bar;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--level, 0) * 100%);
+  border-radius: 3px;
+  background: var(--bar-muted);
+  animation: bar-grow 400ms var(--ease) both;
+}
+
+.bar-row.lit .bar-fill {
+  background: var(--accent);
+}
+
+@keyframes bar-grow {
+  from {
+    width: 0;
+  }
+}
+
+/* The exact figure, tabular, right-aligned. */
+.readout {
+  grid-area: value;
+  min-width: 4.5rem;
+  text-align: right;
+  font-size: var(--text-14);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.readout.idle {
+  color: var(--ink-2);
+}
+
+.bar-fit {
+  grid-column: 3 / -1;
+  justify-self: end;
+  color: var(--ink-2);
+  font-size: var(--text-12);
+}
+
+.bar-fit .fit {
+  color: var(--ink);
+}
+
+/* Stale: the answer came from other inputs. The figures stay; the blue and the check go grey. */
+.question.stale .bar-row.lit .bar-fill,
+.question.stale .bar-row.lit .bar-mark {
+  background: var(--bar-muted);
+}
+
+.question.stale .readout {
+  color: var(--ink-2);
+}
+
+/* ---- Property list under the bars: name, value ---- */
+
+.properties {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding-top: var(--space-3);
+  box-shadow: inset 0 1px 0 var(--hairline);
+}
+
+/* One property per row: a fixed name column, the value beside it. */
+.property {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+}
+
+.property dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: var(--text-14);
+}
+
+.property dt .icon {
+  color: var(--ink-3);
+}
+
+.property dd {
+  font-size: var(--text-14);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.property .answer {
+  font-weight: 600;
+}
+
+.raw-answer {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.raw-answer p {
+  color: var(--ink-2);
+  font-size: var(--text-12);
+}
+
+.raw-answer pre {
+  padding: var(--space-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Callouts: the fault, the empty list ---- */
+
+.callout {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--code);
+  color: var(--ink);
+}
+
+.callout-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.callout-row .icon {
+  margin-top: 2px;
+  color: var(--ink-2);
+}
+
+.callout p {
+  max-width: 56ch;
+  line-height: 1.5;
+}
+
+.callout code {
+  background: var(--hover);
+}
+
+.callout-danger {
+  background: var(--danger-tint);
+}
+
+.callout-danger .callout-row > .icon,
+.callout-danger .fault-title {
+  color: var(--danger);
+}
+
+.fault-title {
+  font-weight: 600;
+}
+
+.fault-issues {
+  display: grid;
+  gap: 6px;
+}
+
+.fault-issues li,
+.callout-danger p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  align-items: baseline;
+}
+
+/* Specific enough to win over `.callout code`. */
+.callout .fault-loc {
+  color: var(--danger);
+  background: var(--danger-tint-2);
+}
+
+.fault-msg {
+  color: var(--ink);
+}
+
+.fault-raw {
+  padding: var(--space-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A fault on its question: the message under the head, in the fault's colours. */
+.question-fault {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--danger-tint);
+  color: var(--ink);
+  font-size: var(--text-13);
+}
+
+.question-fault .icon {
+  margin-top: 1px;
+  color: var(--danger);
+}
+
+/* The "+ Add question" row at the end of the list, like a database's New row. */
+.add-row {
+  justify-content: flex-start;
+  color: var(--ink-2);
+}
+
+.add-row:hover {
+  color: var(--ink);
+}
+
+/* ---- Builder: the fields under a hairline inside the question block ---- */
+
+.program-panel {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  box-shadow: inset 0 1px 0 var(--hairline);
+}
+
+.criteria {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.criteria-legend {
+  color: var(--ink-2);
+  font-size: var(--text-12);
+  font-weight: 500;
+}
+
+.criteria-rows {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.criteria-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.level-row {
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+}
+
+.level-number {
+  color: var(--ink-2);
+  font-size: var(--text-13);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.criteria-error {
+  grid-column: 1 / -1;
+}
+
+.criteria-foot,
+.program-foot {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.program-foot {
+  justify-content: flex-end;
+}
+
+.program-foot .button {
+  color: var(--danger);
+}
+
+/* ---- Questions JSON ---- */
+
+.program {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.program-text {
+  min-height: 200px;
+  padding: var(--space-4);
+}
+
+/* ---- Toggle blocks: the raw exchange and the snippets ---- */
+
+.toggle {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.toggle > summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  list-style: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  width: fit-content;
+  padding-right: 6px;
+}
+
+.toggle > summary::-webkit-details-marker {
+  display: none;
+}
+
+.toggle > summary:hover {
+  background: var(--hover);
+}
+
+.toggle > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.toggle-marker {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--ink-2);
+  transition: transform var(--fast) ease-in;
+}
+
+.toggle[open] > summary .toggle-marker {
+  transform: rotate(90deg);
+}
+
+.toggle-heading {
+  font-size: var(--text-16);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.toggle-caption {
+  margin-left: var(--space-2);
+  color: var(--ink-2);
+  font-size: var(--text-13);
+  font-weight: 400;
+}
+
+.toggle-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* Wire panes: the sent and received bodies, side by side. */
+.exchange-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.exchange-side {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.exchange-side h3 {
+  color: var(--ink-2);
+  font-size: var(--text-12);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.wire {
+  padding: var(--space-4);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wire-empty {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--code);
+  color: var(--ink-2);
+  font-size: var(--text-13);
+  line-height: 1.5;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 1200px) {
+  .page {
+    padding-inline: var(--space-6);
+  }
+}
+
+@media (max-width: 960px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+
+  .state-text {
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: var(--space-4) var(--space-4) 20vh;
+    gap: var(--space-5);
+  }
+
+  .page-heading {
+    font-size: 1.5rem;
+  }
+
+  .page-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .question {
+    padding: var(--space-3);
+  }
+
+  .question-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .question-controls {
+    justify-content: flex-start;
+  }
+
+  .bar-row {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "mark name value"
+      ". bar bar";
+    gap: 4px var(--space-2);
+  }
+
+  .criteria-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .criteria-row > .field-input:nth-of-type(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .level-row {
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  }
+
+  .exchange-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill {
+    animation: none;
+  }
+
+  .toggle-marker,
+  .question,
+  textarea.code-block {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .question,
+  .callout,
+  .code-block,
+  .wire-empty {
+    border: 1px solid CanvasText;
+  }
+
+  .bar {
+    border: 1px solid CanvasText;
+  }
+
+  .bar-fill {
+    forced-color-adjust: none;
+    background: GrayText;
+  }
+
+  .bar-row.lit .bar-fill {
+    background: Highlight;
+  }
+
+  .bar-row.lit .bar-mark {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}

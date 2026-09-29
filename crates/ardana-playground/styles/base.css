@@ -1,44 +1,54 @@
-/* The deck's materials: beige plastic surround, brushed aluminium fascia, engraved ink legends, amber LEDs behind
-   smoked display glass, and a red reserved for faults. */
+/* The workspace's materials: warm ink on a white page beside a paper-grey sidebar, hairline dividers, one blue for
+   the primary action and the winning answer, red only inside fault callouts. The dark scheme follows the system. */
 
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
 
-  --surround: #e6dfc9;
-  --surround-shade: #cfc6aa;
-  --alu-hi: #e4e7ea;
-  --alu: #c7ccd1;
-  --alu-lo: #a9afb5;
-  --chrome-hi: #f7f8f9;
-  --chrome-lo: #b0b6bc;
-  --ink: #1b1b1b;
-  --ink-soft: #35383b;
-  --engrave: rgb(255 255 255 / 0.6);
-  --glass: #15140f;
-  --glass-edge: #2b2a24;
-  --glass-text: #e9e4d4;
-  --amber: #ffb000;
-  --amber-dim: #cc7a00;
-  --amber-off: #3d2e0d;
-  --amber-rim: #6e4300;
-  --field-edge: #676d73;
-  --field-edge-top: #4f5459;
-  --amber-ghost: #282010;
-  --paper: #f4efe0;
-  --paper-shade: #e3dcc7;
-  --paper-hint: #5e584a;
-  --shell: #282620;
-  --bevel-deep: #050403;
-  --bevel-side: #1d1c17;
-  --shell-hi: #3a372f;
-  --fault-ink: #8f1d17;
-  --fault-lamp: #e0301e;
-  --fault-paper: #f7e4df;
+  --page: #ffffff;
+  --panel: #fbfbfa;
+  --raised: #ffffff;
+  --code: #f7f6f3;
+  --ink: #37352f;
+  --ink-2: rgb(25 23 17 / 0.65);
+  --ink-3: rgb(55 53 47 / 0.45);
+  --hairline: #e9e9e7;
+  --hairline-strong: rgb(55 53 47 / 0.16);
+  --edge-strong: rgb(55 53 47 / 0.55);
+  --hover: rgb(55 53 47 / 0.08);
+  --pressed: rgb(55 53 47 / 0.16);
+  --field: rgb(242 241 238 / 0.6);
+  --tag: rgb(227 226 224 / 0.5);
+  --tag-ink: #32302c;
+  --track: rgb(55 53 47 / 0.14);
+  --bar-muted: #787774;
+  --accent: #2383e2;
+  --accent-fill: #0075d3;
+  --accent-fill-hover: #0066bd;
+  --accent-tint: rgb(35 131 226 / 0.14);
+  --on-accent: #ffffff;
+  --selection: rgb(35 131 226 / 0.3);
+  --danger: #b3372f;
+  --danger-tint: #fdebec;
+  --danger-tint-2: rgb(212 76 71 / 0.16);
+  --tooltip: #0f0f0f;
+  --tooltip-ink: rgb(255 255 255 / 0.9);
+  --overlay: rgb(15 15 15 / 0.6);
+  --shadow-hairline: rgb(15 15 15 / 0.1) 0 0 0 1px;
+  --shadow-popover: rgb(15 15 15 / 0.1) 0 0 0 1px, rgb(15 15 15 / 0.1) 0 3px 6px, rgb(15 15 15 / 0.2) 0 9px 24px;
+  --shadow-drawer: rgb(15 15 15 / 0.2) 0 0 0 1px, rgb(15 15 15 / 0.3) 0 12px 32px;
+  --scroll-thumb: #d3d1cb;
+  --scroll-track: transparent;
 
-  --font-legend: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --font-text: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
-  --font-code: "IBM Plex Mono", ui-monospace, monospace;
-  --font-matrix: "Doto", "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial,
+    sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", Courier, monospace;
+
+  --text-12: 0.75rem;
+  --text-13: 0.8125rem;
+  --text-14: 0.875rem;
+  --text-16: 1rem;
+  --text-20: 1.25rem;
+  --text-32: 2rem;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -46,12 +56,51 @@
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+  --space-8: 48px;
 
-  --radius-fascia: 16px;
-  --radius-module: 10px;
-  --radius-control: 6px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --sidebar: 240px;
+  --topbar: 45px;
+
+  --ease: cubic-bezier(0.3, 0, 0.5, 1);
+  --fast: 100ms;
+  --normal: 200ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #191919;
+    --panel: #202020;
+    --raised: #252525;
+    --code: #252525;
+    --ink: rgb(255 255 255 / 0.81);
+    --ink-2: #9b9b9b;
+    --ink-3: #7f7f7f;
+    --hairline: #2f2f2f;
+    --hairline-strong: rgb(255 255 255 / 0.13);
+    --edge-strong: rgb(255 255 255 / 0.45);
+    --hover: rgb(255 255 255 / 0.055);
+    --pressed: rgb(255 255 255 / 0.11);
+    --field: rgb(255 255 255 / 0.04);
+    --tag: rgb(255 255 255 / 0.094);
+    --tag-ink: rgb(255 255 255 / 0.81);
+    --track: rgb(255 255 255 / 0.13);
+    --bar-muted: #9b9b9b;
+    --accent-tint: rgb(35 131 226 / 0.22);
+    --danger: #f28b88;
+    --danger-tint: #362422;
+    --danger-tint-2: rgb(0 0 0 / 0.3);
+    --tooltip: #ffffff;
+    --tooltip-ink: #191919;
+    --overlay: rgb(15 15 15 / 0.8);
+    --shadow-hairline: rgb(255 255 255 / 0.094) 0 0 0 1px;
+    --shadow-popover: rgb(255 255 255 / 0.094) 0 0 0 1px, rgb(15 15 15 / 0.5) 0 3px 6px, rgb(15 15 15 / 0.6) 0 9px 24px;
+    --shadow-drawer: rgb(255 255 255 / 0.094) 0 0 0 1px, rgb(15 15 15 / 0.7) 0 12px 32px;
+    --scroll-thumb: #454545;
+  }
 }
 
 *,
@@ -61,22 +110,21 @@
 }
 
 html {
-  background: var(--surround);
+  background: var(--page);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  padding: var(--space-5);
-  background:
-    radial-gradient(120% 80% at 50% 0%, rgb(255 255 255 / 0.35), transparent 70%),
-    var(--surround);
+  background: var(--page);
   color: var(--ink);
-  font: 400 1rem/1.45 var(--font-text);
+  font: 400 var(--text-14) / 1.5 var(--font-sans);
   font-variant-numeric: tabular-nums;
-  scrollbar-color: var(--alu-lo) var(--surround-shade);
+  -webkit-font-smoothing: antialiased;
+  caret-color: var(--ink);
 }
 
 h1,
@@ -86,7 +134,8 @@ p,
 ol,
 ul,
 dl,
-dd {
+dd,
+pre {
   margin: 0;
 }
 
@@ -96,19 +145,39 @@ ul {
   list-style: none;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  margin: 0;
+}
+
 code {
-  font-family: var(--font-code);
-  font-size: 0.875em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: var(--hover);
 }
 
 ::selection {
-  background: var(--amber);
-  color: var(--ink);
+  background: var(--selection);
 }
 
 :focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Thin scrollbars on the panes that scroll, in the page's own colours. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
 }
 
 .visually-hidden {
@@ -123,90 +192,46 @@ code {
   border: 0;
 }
 
-/* The fascia: one aluminium panel set into the beige surround, lit from above. */
-.fascia {
-  max-width: 1440px;
-  margin: 0 auto;
-  border-radius: var(--radius-fascia);
-  background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.4), transparent 18%, transparent 82%, rgb(0 0 0 / 0.07)),
-    var(--alu);
-  border-style: solid;
-  border-width: 1px 1px 4px;
-  border-color: var(--alu-hi) #9f9a88 #8c8674;
+/* Secondary text: captions, property names, notes. */
+.muted {
+  color: var(--ink-2);
 }
 
-/* Engraved legend: narrow caps cut into the panel, lit from above. */
-.legend,
-.engraved {
-  font-family: var(--font-legend);
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--ink);
-  text-shadow: 0 1px 0 var(--engrave);
-}
-
-.legend {
-  font-size: 0.75rem;
-  line-height: 1.2;
-  letter-spacing: 0.12em;
-}
-
-.engraved {
-  font-size: 1.125rem;
-  line-height: 1.1;
-  letter-spacing: 0.1em;
-}
-
-.panel-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-2) var(--space-4);
-  padding-bottom: var(--space-2);
-  margin-bottom: var(--space-3);
-  box-shadow: 0 1px 0 var(--alu-lo), 0 2px 0 var(--alu-hi);
-}
-
-.panel-head .legend {
-  color: var(--ink-soft);
-}
-
-/* LED lamp: dark until lit. */
-.lamp {
-  display: inline-block;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--amber-off);
-  border: 1px solid #1a1407;
-}
-
-/* A lit lamp keeps a dark amber rim, so it reads against the aluminium (3:1 and more) as well as by its glow. */
-.on > .lamp,
-.lit > .lamp {
-  background: radial-gradient(circle at 40% 35%, #fff1c9, var(--amber) 55%, var(--amber-dim));
-  border-color: var(--amber-rim);
-}
-
-/* A fault line: red is spent on errors only. */
+/* A fault line under a field: red only for what was refused. It is text tied to its field, never a live region. */
 .fault-line {
-  color: var(--fault-ink);
-  font-weight: 500;
+  color: var(--danger);
+  font-size: var(--text-13);
+  line-height: 1.4;
 }
 
-/* No fault line is a live region: the page announces through its status regions, so an empty line may collapse. */
 .fault-line:empty {
   display: none;
 }
 
-@media (max-width: 720px) {
-  body {
-    padding: var(--space-2);
-  }
+/* Icons are drawn: one stroke, one weight, current colour. */
+.icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
-  .fascia {
-    border-radius: var(--radius-module);
+.icon-sm {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-filled {
+  fill: currentColor;
+  stroke: none;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
   }
 }
