@@ -1,0 +1,49 @@
+# Ardana's model library: the short names `ardana pull`, `ardana run` and the API resolve, as Ollama's library does.
+# Each name is a Hugging Face GGUF repository read at its `main` commit; `<name>:<quant>` picks another GGUF of the
+# same repository, matched like an `hf.co/` quant. A new model family is one `[[model]]` entry.
+#
+# name          the registry name the model is pulled as (`<name>:<quant>` for another quant)
+# weights       `hf.co/<org>/<repo>`, the GGUF repository
+# quant         the GGUF a bare name picks
+# size          that GGUF's size in bytes, shown before the first pull
+# release_date  the model's release: `decider_config.json`'s `release_date` for decider models, else the day the
+#               upstream model repository was created
+# tokenizer     `hf.co/<org>/<repo>` of the tokenizer and chat template, when the GGUF repository has none
+# layout        `plain` or `chat`; without it, `plain` with `decider_config.json`, else `chat`
+#
+# Sizes, dates and files were read from the Hugging Face API on 2026-09-28: every decider GGUF repository Mapika
+# publishes (`/api/models?author=Mapika`), and the two stock instruct models the plan reads zero-shot.
+
+default = "decider-2b"
+
+[[model]]
+name = "decider-2b"
+weights = "hf.co/Mapika/decider-2b-GGUF"
+quant = "Q4_K_M"
+size = 1_274_396_800
+release_date = "2026-09-24"
+
+[[model]]
+name = "decider-4b"
+weights = "hf.co/Mapika/decider-4b-GGUF"
+quant = "Q4_K_M"
+size = 2_708_804_640
+release_date = "2026-09-24"
+
+[[model]]
+name = "qwen3.5-0.8b"
+weights = "hf.co/ggml-org/Qwen3.5-0.8B-GGUF"
+quant = "Q4_0"
+size = 563_036_064
+release_date = "2026-02-28"
+tokenizer = "hf.co/Qwen/Qwen3.5-0.8B"
+layout = "chat"
+
+[[model]]
+name = "smollm3-3b"
+weights = "hf.co/ggml-org/SmolLM3-3B-GGUF"
+quant = "Q4_K_M"
+size = 1_915_305_312
+release_date = "2025-07-08"
+tokenizer = "hf.co/HuggingFaceTB/SmolLM3-3B"
+layout = "chat"

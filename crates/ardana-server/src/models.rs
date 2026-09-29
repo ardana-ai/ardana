@@ -1,7 +1,12 @@
-//! [`Models`]: registry models behind the API, loaded on their first request.
+//! [`Models`]: registry models behind the API, pulled and loaded on their first request.
 //!
-//! Every model reads its requests through a [`Decider`] (tokenizer and profile, built on the first request and kept),
-//! so a request is validated and sized before any weights load. Loaded weights live on one worker thread per model
+//! The registry is `models.toml` as last read: it is reread whenever the file's modification time changes, so a
+//! model `ardana pull` adds while the server runs is servable at once. A request naming a library model that is not
+//! pulled yet (the library default, for `jev-*` and no model, while the registry is empty) pulls it first; requests
+//! for the same model share one pull, which finishes even when its requester goes away.
+//!
+//! Every model reads its requests through a [`Decider`] (tokenizer and profile, built on the first request and kept
+//! while its registry entry is unchanged), so a request is validated and sized before any weights load. Loaded weights live on one worker thread per model
 //! that decodes one request at a time from a FIFO channel. At most `max_loaded_models` hold weights at once, counting
 //! models still loading and unloaded ones still answering their queue; loading one more evicts the least recently
 //! used and waits until its weights are dropped, and a model idle for `keep_alive` is unloaded. Unloading closes the
@@ -12,25 +17,29 @@
 
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, Weak};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
+use std::time::{Duration, Instant, SystemTime};
 
 use ardana_api::{ModelInfo, ModelsResponse, SystemOneRequest, SystemOneResponse};
 use ardana_core::{DecideError, Decider, Limits, LoadOptions, LoadedModel, Plan, Runtimes};
-use ardana_registry::{Registry, RegistryError, ResolvedModel};
+use ardana_registry::library::library;
+use ardana_registry::{Named, PullOptions, Registry, RegistryError, ResolvedModel};
 use serde_json::{Map, Value, json};
-use tokio::sync::{Notify, mpsc, oneshot};
+use tokio::sync::{Notify, mpsc, oneshot, watch};
 
 use crate::error::{ApiError, ValidationItem};
 
-/// Every `jev-*` model name, `jev-latest` included, means the default model (Q7).
+/// Every `jev-*` model name, `jev-latest` included, means the default model (Q7): the aliases TypeSafe SDKs and Jev
+/// clients send.
 const JEV_PREFIX: &str = "jev-";
 
 /// How [`Models`] loads and schedules.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelOptions {
-    /// The model `jev-*` names and requests without a model resolve to; `None` is the first registry entry.
+    /// The model `jev-*` names and requests without a model resolve to, a registry entry or a library model; `None`
+    /// is the first registry entry, else the library default.
     pub default_model: Option<String>,
     pub load: LoadOptions,
     /// How long a model stays loaded after its last request.
@@ -64,12 +73,14 @@ pub enum ModelsError {
 }
 
 pub struct Models {
-    registry: Registry,
+    catalog: Arc<Mutex<Catalog>>,
     runtimes: Arc<Runtimes>,
     opts: ModelOptions,
-    /// The resolved default model; `None` only for an empty registry.
+    /// `--default-model` as the registry names it (`decider-2b` for `decider-2b:Q4_K_M`).
     default: Option<String>,
-    deciders: Mutex<HashMap<String, Arc<Decider>>>,
+    /// Per model, the reader built from its registry entry.
+    deciders: Mutex<HashMap<String, (ResolvedModel, Arc<Decider>)>>,
+    pulls: Arc<Mutex<Pulls>>,
     /// Per model, the turn a request holds from looking up its worker (loading it if needed) to queueing on it, so
     /// one model's requests queue in arrival order and it loads once.
     turns: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
@@ -82,7 +93,7 @@ pub struct Models {
 impl std::fmt::Debug for Models {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Models")
-            .field("names", &self.registry.names())
+            .field("names", &lock(&self.catalog).registry.names())
             .field("runtimes", &self.runtimes)
             .field("opts", &self.opts)
             .finish()
@@ -103,13 +114,12 @@ impl Models {
         }
         let default = match &opts.default_model {
             Some(name) => Some(
-                registry
-                    .entry(name)
-                    .map_err(ModelsError::DefaultModel)?
-                    .name
-                    .clone(),
+                match registry.named(name).map_err(ModelsError::DefaultModel)? {
+                    Named::Pulled(model) => model.name.clone(),
+                    Named::Library(pick) => pick.name(),
+                },
             ),
-            None => registry.names().into_iter().next(),
+            None => None,
         };
         let residents = Arc::new(Residents {
             count: AtomicUsize::new(0),
@@ -117,11 +127,15 @@ impl Models {
             changed: Notify::new(),
         });
         Ok(Models {
-            registry,
+            catalog: Arc::new(Mutex::new(Catalog {
+                modified: registry.modified(),
+                registry: Arc::new(registry),
+            })),
             runtimes: Arc::new(runtimes),
             opts,
             default,
             deciders: Mutex::new(HashMap::new()),
+            pulls: Arc::new(Mutex::new(HashMap::new())),
             turns: Mutex::new(HashMap::new()),
             loaded: Arc::new(tokio::sync::Mutex::new(Vec::new())),
             residents,
@@ -129,45 +143,118 @@ impl Models {
         })
     }
 
-    /// The registry name a request's `model` means: `jev-*` and no model are the default model (Q7).
-    pub fn resolve(&self, requested: Option<&str>) -> Result<String, ApiError> {
-        let name = match requested {
-            None => self.default.as_deref(),
-            Some(name) if name.starts_with(JEV_PREFIX) => self.default.as_deref(),
-            Some(name) => Some(name),
-        };
-        let name = name.unwrap_or(requested.unwrap_or("jev-latest"));
-        self.registry
-            .entry(name)
-            .map(|model| model.name.clone())
-            .map_err(|err| ApiError::UnknownModel(err.to_string()))
+    /// The registry as `models.toml` holds it now: reread when the file's modification time changed since the last
+    /// read.
+    pub fn registry(&self) -> Result<Arc<Registry>, ApiError> {
+        lock(&self.catalog)
+            .current()
+            .map_err(|err| ApiError::Internal(err.to_string()))
     }
 
-    /// `GET /v1/models`: every registry entry, described by its source reference and dated by its profile's release
-    /// date, else the day it was pulled.
-    pub fn list(&self) -> ModelsResponse {
-        ModelsResponse {
-            models: self
-                .registry
-                .entries()
-                .iter()
-                .map(|m| ModelInfo {
-                    name: m.name.clone(),
-                    description: m.source.clone(),
-                    release_date: m
-                        .profile
-                        .release_date
-                        .clone()
-                        .unwrap_or_else(|| m.pulled_at.clone()),
-                })
-                .collect(),
+    /// The model `jev-*` names and requests without a model mean: `--default-model`, else the first registry entry,
+    /// else the library default.
+    fn default_name(&self, registry: &Registry) -> String {
+        self.default
+            .clone()
+            .or_else(|| registry.names().into_iter().next())
+            .unwrap_or_else(|| library().default.clone())
+    }
+
+    /// The registry entry a request's `model` means, pulling a library model that is not pulled yet: `jev-*` and no
+    /// model are the default model (Q7); a name that is neither pulled nor in the library is a 404 listing both.
+    pub async fn resolve(&self, requested: Option<&str>) -> Result<ResolvedModel, ApiError> {
+        let registry = self.registry()?;
+        let name = match requested {
+            Some(name) if !name.starts_with(JEV_PREFIX) => name.to_string(),
+            _ => self.default_name(&registry),
+        };
+        let name = match registry.named(&name) {
+            Ok(Named::Pulled(model)) => model.name.clone(),
+            Ok(Named::Library(pick)) => {
+                let name = pick.name();
+                self.pull(&name).await?;
+                name
+            }
+            Err(err) => return Err(ApiError::UnknownModel(err.to_string())),
+        };
+        self.registry()?
+            .resolve(&name)
+            .map_err(|err| ApiError::Internal(err.to_string()))
+    }
+
+    /// Pulls the library model `name` into the registry, or waits for the pull already under way.
+    async fn pull(&self, name: &str) -> Result<(), ApiError> {
+        let mut outcome = {
+            let mut pulls = lock(&self.pulls);
+            match pulls.get(name) {
+                Some(outcome) => outcome.clone(),
+                None => {
+                    let (done, outcome) = watch::channel(None);
+                    pulls.insert(name.to_string(), outcome.clone());
+                    let home = lock(&self.catalog).home();
+                    tokio::spawn(pull_task(
+                        name.to_string(),
+                        home,
+                        self.runtimes.clone(),
+                        self.pulls.clone(),
+                        done,
+                    ));
+                    outcome
+                }
+            }
+        };
+        let outcome = outcome
+            .wait_for(Option::is_some)
+            .await
+            .map_err(|_| ApiError::Internal(format!("the pull of model {name} stopped")))?
+            .clone();
+        match outcome {
+            Some(Ok(())) => Ok(()),
+            Some(Err(err)) => Err(ApiError::Internal(err)),
+            None => unreachable!("wait_for returns a sent outcome"),
         }
     }
 
+    /// `GET /v1/models`: every registry entry, described by its source reference and dated by its profile's release
+    /// date, else the day it was pulled, then every library model not pulled yet, described by the reference it
+    /// pulls, with its download size. `x_pulled` tells them apart and `x_default` marks the default model.
+    pub fn list(&self) -> Result<ModelsResponse, ApiError> {
+        let registry = self.registry()?;
+        let default = self.default_name(&registry);
+        let pulled = registry.entries().iter().map(|m| ModelInfo {
+            name: m.name.clone(),
+            description: m.source.clone(),
+            release_date: m
+                .profile
+                .release_date
+                .clone()
+                .unwrap_or_else(|| m.pulled_at.clone()),
+            x_pulled: Some(true),
+            x_default: m.name == default,
+            x_size: None,
+        });
+        let pullable = library()
+            .models
+            .iter()
+            .filter(|m| registry.entry(&m.name).is_err())
+            .filter_map(|m| library().find(&m.name))
+            .map(|pick| ModelInfo {
+                name: pick.name(),
+                description: pick.reference(),
+                release_date: pick.model.release_date.clone(),
+                x_pulled: Some(false),
+                x_default: pick.name() == default,
+                x_size: pick.size(),
+            });
+        Ok(ModelsResponse {
+            models: pulled.chain(pullable).collect(),
+        })
+    }
+
     /// `GET /health`: `status` plus the loaded models (most recently used first) and every model's temperatures.
-    pub async fn health(&self) -> Value {
+    pub async fn health(&self) -> Result<Value, ApiError> {
         let temperatures: Map<String, Value> = self
-            .registry
+            .registry()?
             .entries()
             .iter()
             .map(|m| {
@@ -180,11 +267,11 @@ impl Models {
                 (m.name.clone(), Value::Object(by_type))
             })
             .collect();
-        json!({
+        Ok(json!({
             "status": "ok",
             "x_loaded": self.loaded().await,
             "x_temperature_by_type": temperatures,
-        })
+        }))
     }
 
     /// The loaded models, most recently used first.
@@ -194,7 +281,7 @@ impl Models {
             .lock()
             .await
             .iter()
-            .map(|w| (w.last_used(), w.name.clone()))
+            .map(|w| (w.last_used(), w.model.name.clone()))
             .collect();
         loaded.sort_by_key(|(used, _)| std::cmp::Reverse(*used));
         loaded.into_iter().map(|(_, name)| name).collect()
@@ -209,27 +296,30 @@ impl Models {
     /// the rows, load the model if needed and queue the request on its worker. The job holds the admitted rows, so
     /// they stay counted until the worker is done with it, even when the client goes away.
     pub async fn decide(&self, req: SystemOneRequest) -> Result<SystemOneResponse, ApiError> {
-        let name = self.resolve(req.model.as_deref())?;
-        let decider = self.decider(&name).await?;
+        let model = self.resolve(req.model.as_deref()).await?;
+        let decider = self.decider(&model).await?;
         let planner = decider.clone();
         let plan = tokio::task::spawn_blocking(move || planner.plan(&req))
             .await
             .map_err(|err| ApiError::Internal(format!("planning the request failed: {err}")))?
             .map_err(decide_error)?;
         let admission = self.admit(plan.rows())?;
-        let (_lease, reply) = self.enqueue(&name, &decider, plan, admission).await?;
-        let answer = reply
-            .await
-            .map_err(|_| ApiError::Internal(format!("the worker of model {name} stopped")))?;
+        let (_lease, reply) = self.enqueue(&model, &decider, plan, admission).await?;
+        let answer = reply.await.map_err(|_| {
+            ApiError::Internal(format!("the worker of model {} stopped", model.name))
+        })?;
         answer.map_err(decide_error)
     }
 
-    /// The model's reader, built on its first request.
-    async fn decider(&self, name: &str) -> Result<Arc<Decider>, ApiError> {
-        if let Some(decider) = self.lock_deciders().get(name) {
+    /// The model's reader, built on its first request and again when its registry entry changes.
+    async fn decider(&self, model: &ResolvedModel) -> Result<Arc<Decider>, ApiError> {
+        if let Some((built_from, decider)) = lock(&self.deciders).get(&model.name)
+            && built_from == model
+        {
             return Ok(decider.clone());
         }
-        let model = self.resolved(name)?;
+        let entry = model.clone();
+        let model = model.clone();
         let limits = Limits {
             context_window: Some(self.opts.load.n_ctx as usize),
             ..Limits::default()
@@ -244,23 +334,9 @@ impl Models {
         .await
         .map_err(|err| ApiError::Internal(format!("reading the tokenizer failed: {err}")))?
         .map_err(ApiError::Internal)?;
-        Ok(self
-            .lock_deciders()
-            .entry(name.to_string())
-            .or_insert_with(|| Arc::new(decider))
-            .clone())
-    }
-
-    fn lock_deciders(&self) -> std::sync::MutexGuard<'_, HashMap<String, Arc<Decider>>> {
-        self.deciders
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
-    fn resolved(&self, name: &str) -> Result<ResolvedModel, ApiError> {
-        self.registry
-            .resolve(name)
-            .map_err(|err| ApiError::Internal(err.to_string()))
+        let decider = Arc::new(decider);
+        lock(&self.deciders).insert(entry.name.clone(), (entry, decider.clone()));
+        Ok(decider)
     }
 
     /// Reserves `rows` queued rows, or refuses with 503.
@@ -281,51 +357,54 @@ impl Models {
         })
     }
 
-    /// Queues `plan` on the worker of `name`, loading the model when needed, in `name`'s turn.
+    /// Queues `plan` on the worker of `model`, loading the model when needed, in its turn. A worker loaded from an
+    /// older registry entry of the same name is unloaded.
     async fn enqueue(
         &self,
-        name: &str,
+        model: &ResolvedModel,
         decider: &Arc<Decider>,
         plan: Plan,
         admission: Admission,
     ) -> Result<(Lease, oneshot::Receiver<Answer>), ApiError> {
-        let turn = self
-            .turns
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .entry(name.to_string())
+        let turn = lock(&self.turns)
+            .entry(model.name.clone())
             .or_default()
             .clone();
         let _turn = turn.lock().await;
         let listed = {
             let mut loaded = self.loaded.lock().await;
-            loaded.retain(|w| w.alive());
+            loaded.retain(|w| w.alive() && (w.model.name != model.name || w.model == *model));
             loaded
                 .iter()
-                .find(|w| w.name == name)
+                .find(|w| w.model == *model)
                 .cloned()
                 .map(Lease::new)
         };
         let lease = match listed {
             Some(lease) => lease,
-            None => Lease::new(self.load(name, decider).await?),
+            None => Lease::new(self.load(model, decider).await?),
         };
         let reply = lease.worker.submit(plan, admission)?;
         Ok((lease, reply))
     }
 
-    /// Loads `name` once a model's place is free and lists its worker.
-    async fn load(&self, name: &str, decider: &Arc<Decider>) -> Result<Arc<Worker>, ApiError> {
+    /// Loads `model` once a model's place is free and lists its worker.
+    async fn load(
+        &self,
+        model: &ResolvedModel,
+        decider: &Arc<Decider>,
+    ) -> Result<Arc<Worker>, ApiError> {
         let residence = self.reserve().await;
-        let model = self.resolved(name)?;
-        let runtimes = self.runtimes.clone();
+        let (runtimes, loading) = (self.runtimes.clone(), model.clone());
         let opts = self.opts.load;
-        let weights = tokio::task::spawn_blocking(move || model.load(&runtimes, &opts))
+        let weights = tokio::task::spawn_blocking(move || loading.load(&runtimes, &opts))
             .await
-            .map_err(|err| ApiError::Internal(format!("loading model {name} failed: {err}")))?
+            .map_err(|err| {
+                ApiError::Internal(format!("loading model {} failed: {err}", model.name))
+            })?
             .map_err(|err| ApiError::Internal(err.to_string()))?;
         let worker = Worker::start(
-            name,
+            model,
             decider.clone(),
             weights,
             residence,
@@ -376,6 +455,107 @@ impl Models {
             let _ = tokio::task::spawn_blocking(move || thread.join()).await;
         }
     }
+}
+
+/// Library pulls in flight, by registry name; each sends its outcome once.
+type Pulls = HashMap<String, watch::Receiver<Option<PullOutcome>>>;
+
+/// How a pull ended: pulled (or found pulled), or why not.
+type PullOutcome = Result<(), String>;
+
+/// Locks `mutex`, whose data no panic leaves inconsistent.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// The registry as last read, and the modification time of `models.toml` it was read at.
+struct Catalog {
+    registry: Arc<Registry>,
+    modified: Option<SystemTime>,
+}
+
+impl Catalog {
+    /// The registry, reread first when `models.toml` changed (or appeared, or went away) since the last read.
+    fn current(&mut self) -> Result<Arc<Registry>, RegistryError> {
+        let modified = self.registry.modified();
+        if modified != self.modified {
+            self.registry = Arc::new(Registry::open(&self.home())?);
+            self.modified = modified;
+        }
+        Ok(self.registry.clone())
+    }
+
+    /// The Ardana home holding `models.toml`.
+    fn home(&self) -> PathBuf {
+        self.registry
+            .path()
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or_default()
+    }
+}
+
+/// Pulls the library model `name` into the registry in `home` (unless it is there by now), then sends the outcome
+/// to everyone waiting on it and forgets the pull.
+async fn pull_task(
+    name: String,
+    home: PathBuf,
+    runtimes: Arc<Runtimes>,
+    pulls: Arc<Mutex<Pulls>>,
+    done: watch::Sender<Option<PullOutcome>>,
+) {
+    let outcome = pull_into(&name, &home, runtimes).await;
+    if let Err(err) = &outcome {
+        eprintln!("ardana serve: pulling {name} failed: {err}");
+    }
+    lock(&pulls).remove(&name);
+    // Every waiter may have gone away; the model is pulled all the same.
+    let _ = done.send(Some(outcome));
+}
+
+async fn pull_into(name: &str, home: &std::path::Path, runtimes: Arc<Runtimes>) -> PullOutcome {
+    if Registry::open(home)
+        .map_err(|err| err.to_string())?
+        .entry(name)
+        .is_ok()
+    {
+        return Ok(());
+    }
+    let pick = library()
+        .find(name)
+        .ok_or_else(|| format!("{name} is not a library model"))?;
+    let size = pick
+        .size()
+        .map(|bytes| format!(", {}", ardana_api::human_size(bytes)))
+        .unwrap_or_default();
+    eprintln!("ardana serve: pulling {name} ({}{size})", pick.reference());
+    let opts = PullOptions {
+        progress: true,
+        ..PullOptions::default()
+    };
+    let handle = tokio::runtime::Handle::current();
+    let pulling = name.to_string();
+    // The pull reads the tokenizer and the chat template synchronously: off the async workers.
+    let model = tokio::task::spawn_blocking(move || {
+        handle.block_on(ardana_registry::pull(&pulling, &opts, &runtimes))
+    })
+    .await
+    .map_err(|err| format!("pulling {name} stopped: {err}"))?
+    .map_err(|err| format!("pulling {name}: {err}"))?;
+    // Read again right before writing, one pull at a time: `ardana pull` and other pulls may have added models
+    // meanwhile.
+    static WRITING: Mutex<()> = Mutex::new(());
+    let _writing = lock(&WRITING);
+    let mut registry = Registry::open(home).map_err(|err| err.to_string())?;
+    registry.insert(model);
+    registry.save().map_err(|err| err.to_string())?;
+    eprintln!(
+        "ardana serve: pulled {name} into {}",
+        registry.path().display()
+    );
+    Ok(())
 }
 
 /// A decide failure as an API error: bad input is 422, too much input 413, a runtime failure 500.
@@ -467,7 +647,8 @@ struct Job {
 
 /// A loaded model: the channel to the thread that owns it.
 struct Worker {
-    name: String,
+    /// The registry entry it was loaded from.
+    model: ResolvedModel,
     jobs: mpsc::Sender<Job>,
     in_flight: AtomicUsize,
     last_used: Mutex<Instant>,
@@ -478,12 +659,13 @@ impl Worker {
     /// Starts the thread that owns `model` and answers jobs in arrival order until every sender is gone, then drops
     /// the model and gives back its `residence`.
     fn start(
-        name: &str,
+        model: &ResolvedModel,
         decider: Arc<Decider>,
-        mut model: Box<dyn LoadedModel>,
+        mut weights: Box<dyn LoadedModel>,
         residence: Residence,
         capacity: usize,
     ) -> Result<Arc<Worker>, ApiError> {
+        let name = &model.name;
         let (jobs, mut rx) = mpsc::channel::<Job>(capacity);
         let thread = std::thread::Builder::new()
             .name(format!("ardana-model-{name}"))
@@ -495,7 +677,7 @@ impl Worker {
                 }) = rx.blocking_recv()
                 {
                     let answer =
-                        catch_unwind(AssertUnwindSafe(|| decider.run(model.as_mut(), &plan)));
+                        catch_unwind(AssertUnwindSafe(|| decider.run(weights.as_mut(), &plan)));
                     let panicked = answer.is_err();
                     let answer = answer.unwrap_or_else(|_| {
                         Err(DecideError::Runtime(anyhow::anyhow!(
@@ -510,14 +692,14 @@ impl Worker {
                         break;
                     }
                 }
-                drop(model);
+                drop(weights);
                 drop(residence);
             })
             .map_err(|err| {
                 ApiError::Internal(format!("starting the worker of model {name}: {err}"))
             })?;
         Ok(Arc::new(Worker {
-            name: name.to_string(),
+            model: model.clone(),
             jobs,
             in_flight: AtomicUsize::new(0),
             last_used: Mutex::new(Instant::now()),
@@ -541,10 +723,10 @@ impl Worker {
             .map_err(|err| match err {
                 mpsc::error::TrySendError::Full(_) => ApiError::Busy(format!(
                     "server busy: the queue of model {} is full; retry later",
-                    self.name
+                    self.model.name
                 )),
                 mpsc::error::TrySendError::Closed(_) => {
-                    ApiError::Internal(format!("the worker of model {} stopped", self.name))
+                    ApiError::Internal(format!("the worker of model {} stopped", self.model.name))
                 }
             })?;
         Ok(answer)
@@ -556,24 +738,15 @@ impl Worker {
     }
 
     fn last_used(&self) -> Instant {
-        *self
-            .last_used
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        *lock(&self.last_used)
     }
 
     fn touch(&self) {
-        *self
-            .last_used
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Instant::now();
+        *lock(&self.last_used) = Instant::now();
     }
 
     fn take_thread(&self) -> Option<std::thread::JoinHandle<()>> {
-        self.thread
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .take()
+        lock(&self.thread).take()
     }
 }
 

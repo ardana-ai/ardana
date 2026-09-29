@@ -19,13 +19,13 @@ pub struct SharePayload {
 }
 
 impl SharePayload {
-    /// The payload of the playground's editors and picked model.
+    /// The payload of the playground's editors and picked model (none while no model is picked).
     pub fn new(document_text: String, prompts_text: String, model: String) -> SharePayload {
         SharePayload {
             api_version: "v1".to_string(),
             document_text,
             prompts_text,
-            selected_models: vec![model],
+            selected_models: (!model.is_empty()).then_some(model).into_iter().collect(),
         }
     }
 }
@@ -57,7 +57,7 @@ pub fn decode(encoded: &str) -> Result<SharePayload, String> {
         .ok_or("the link's data is not an lz-string payload")?;
     let json = String::from_utf16(&units).map_err(|_| "the link's data is not valid text")?;
     let payload: SharePayload = serde_json::from_str(&json)
-        .map_err(|err| format!("the link's data is not a Jev share payload: {err}"))?;
+        .map_err(|err| format!("the link's data is not a share payload: {err}"))?;
     if payload.api_version != "v1" {
         return Err(format!(
             "the link is for API version {:?}; this playground reads \"v1\"",
@@ -84,6 +84,14 @@ mod tests {
         assert_eq!(payload.document_text, "Hi");
         assert_eq!(payload.selected_models, ["jev-latest"]);
         assert!(payload.prompts_text.contains("greeting"));
+    }
+
+    #[test]
+    fn a_link_without_a_picked_model_carries_none() {
+        let payload = SharePayload::new("Hi".into(), "{}".into(), String::new());
+        assert!(payload.selected_models.is_empty());
+        let payload = SharePayload::new("Hi".into(), "{}".into(), "decider-2b".into());
+        assert_eq!(payload.selected_models, ["decider-2b"]);
     }
 
     #[test]

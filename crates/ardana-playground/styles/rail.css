@@ -212,7 +212,7 @@
   color: var(--ink);
 }
 
-/* Why RUN is held, under the rail's right edge; it describes the key. */
+/* Why RUN is held, or what it is waiting on, under the rail's right edge; it describes the key. */
 .run-note {
   grid-column: 1 / -1;
   justify-self: end;
@@ -222,6 +222,11 @@
 
 .run-note:empty {
   display: none;
+}
+
+/* While a first run downloads its model, the note says so in plain ink: it is a wait, not a fault. */
+.run-note.pulling {
+  color: var(--ink-soft);
 }
 
 .stale-note {

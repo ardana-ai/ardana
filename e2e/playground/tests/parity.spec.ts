@@ -26,9 +26,16 @@ const picker = (page: Page) => page.getByRole('combobox', { name: 'Model' });
 const questionsJson = async (page: Page) => JSON.parse(await questionsBox(page).inputValue()) as Record<string, Json>;
 
 /** The model `ardana serve` has pulled: decider-2b. */
+/** The server's default model, which the picker starts on. */
 async function servedModel(page: Page): Promise<string> {
-  const list = (await (await page.request.get('/v1/models')).json()) as { models: { name: string }[] };
-  return list.models[0].name;
+  const list = (await (await page.request.get('/v1/models')).json()) as { models: { name: string; x_default?: boolean }[] };
+  return list.models.find((m) => m.x_default)!.name;
+}
+
+/** A listed model other than the default one (a library model; picking it runs nothing). */
+async function otherModel(page: Page): Promise<string> {
+  const list = (await (await page.request.get('/v1/models')).json()) as { models: { name: string; x_default?: boolean }[] };
+  return list.models.find((m) => !m.x_default)!.name;
 }
 
 /** Every displayed figure's field and raw value. */
@@ -274,14 +281,13 @@ test.describe('jev_share_links', () => {
       await expect(questionsBox(page)).toHaveValue(payload.promptsText);
       await expect(page.getByTestId('share-error')).toHaveCount(0);
       await expect(page.getByTestId('channel')).toHaveCount(ids.length);
-      const model = payload.selectedModels?.[0] ?? 'jev-latest';
-      await expect(picker(page)).toHaveValue(model);
-      if (model.startsWith('jev-')) {
-        await expect(picker(page).locator(`option[value="${model}"]`)).toHaveText(`${model} (server default)`);
-      }
-
+      // A link without a model, or with a `jev-*` alias, opens on the server's default model.
       const served = await servedModel(page);
-      if (!model.startsWith('jev-') && model !== served) {
+      const linked = payload.selectedModels?.[0];
+      const model = linked === undefined || linked.startsWith('jev-') ? served : linked;
+      await expect(picker(page)).toHaveValue(model);
+
+      if (model !== served) {
         // A model this server does not have is refused with the names it has (Q7); then run on decider-2b.
         const refused = await run(page);
         expect(refused.status()).toBe(404);
@@ -315,7 +321,7 @@ test('share_roundtrip', async ({ page, browser, baseURL }, testInfo) => {
   const questions = await questionsBox(page).inputValue();
 
   await page.getByRole('button', { name: 'Share link' }).click();
-  const link = await page.getByRole('textbox', { name: /Jev share link/ }).inputValue();
+  const link = await page.getByRole('textbox', { name: 'Link to these inputs' }).inputValue();
   expect(link.startsWith(`${origin}/#share/`), link).toBe(true);
   const decoded = LZString.decompressFromEncodedURIComponent(link.split('#share/')[1]);
   expect(decoded, 'lz-string 1.5.0 decodes the link').toBeTruthy();
@@ -376,7 +382,7 @@ test('stale_and_restore', async ({ page }, testInfo) => {
   await expect(page.getByTestId('stale')).toHaveCount(0);
 
   // The model changed: stale again.
-  await picker(page).selectOption(await servedModel(page));
+  await picker(page).selectOption(await otherModel(page));
   await expect(changed).toHaveClass(/\bon\b/);
 
   // A preset over edited work can be undone once; the next edit retires the offer.
@@ -497,11 +503,11 @@ test('snippets', async ({ page, baseURL }, testInfo) => {
 
   // The snippets follow the editors: a new state and model are in the next snippet.
   await stateBox(page).fill('I was charged twice for order B-7.');
-  await picker(page).selectOption(await servedModel(page));
+  await picker(page).selectOption(await otherModel(page));
   await language('curl').check();
   const body = JSON.parse((await snippet.textContent())!.split("<<'JSON'\n")[1].split('\nJSON\n')[0]);
   expect(body.state).toBe('I was charged twice for order B-7.');
-  expect(body.model).toBe(await servedModel(page));
+  expect(body.model).toBe(await otherModel(page));
   await language('TypeScript').check();
   await expect(snippet).toContainText('state: "I was charged twice for order B-7."');
   await screenshot(page, testInfo, 'snippets');

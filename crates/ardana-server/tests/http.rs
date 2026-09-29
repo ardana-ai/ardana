@@ -7,7 +7,7 @@ mod common;
 
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use ardana_server::{ModelOptions, ServeArgs, router};
 use clap::{CommandFactory, Parser};
 use common::{Reply, eventually, get, models, post, send};
@@ -75,8 +75,15 @@ async fn surface() -> Result<()> {
     assert_eq!(
         listed.body,
         json!({"models": [
-            {"name": "decider-2b", "description": "hf.co/test/decider-2b-GGUF", "release_date": "2026-09-24"},
-            {"name": "stock", "description": "hf.co/test/stock-GGUF", "release_date": "2026-09-28"},
+            {"name": "decider-2b", "description": "hf.co/test/decider-2b-GGUF", "release_date": "2026-09-24",
+             "x_pulled": true, "x_default": true},
+            {"name": "stock", "description": "hf.co/test/stock-GGUF", "release_date": "2026-09-28", "x_pulled": true},
+            {"name": "decider-4b", "description": "hf.co/Mapika/decider-4b-GGUF:Q4_K_M", "release_date": "2026-09-24",
+             "x_pulled": false, "x_size": 2_708_804_640_u64},
+            {"name": "qwen3.5-0.8b", "description": "hf.co/ggml-org/Qwen3.5-0.8B-GGUF:Q4_0",
+             "release_date": "2026-02-28", "x_pulled": false, "x_size": 563_036_064},
+            {"name": "smollm3-3b", "description": "hf.co/ggml-org/SmolLM3-3B-GGUF:Q4_K_M",
+             "release_date": "2025-07-08", "x_pulled": false, "x_size": 1_915_305_312},
         ]})
     );
     assert_eq!(fake.loads(), 0, "listing loads nothing");
@@ -165,7 +172,8 @@ async fn model_resolution() -> Result<()> {
     assert_eq!(unknown.status, 404);
     assert_eq!(
         error_shape(&unknown, "not_found_error"),
-        "no model named \"gamma\"; available: alpha, beta"
+        "no model named \"gamma\"; pulled: alpha, beta; library, pulled on first use: decider-2b, decider-4b, \
+         qwen3.5-0.8b, smollm3-3b"
     );
 
     let opts = ModelOptions {
@@ -189,17 +197,117 @@ async fn model_resolution() -> Result<()> {
     let err = common::models("http-model-resolution-bad-default", &["alpha"], opts).unwrap_err();
     assert!(
         err.to_string()
-            .contains("no model named \"gamma\"; available: alpha"),
+            .contains("no model named \"gamma\"; pulled: alpha; library"),
         "{err}"
     );
 
+    // A library model may be the default before it is pulled; a registry entry of its name is the pulled one.
+    let opts = ModelOptions {
+        default_model: Some("decider-4b:q4_k_m".into()),
+        ..ModelOptions::default()
+    };
+    let (_, models) = common::models(
+        "http-model-resolution-library-default",
+        &["decider-2b"],
+        opts,
+    )?;
+    let listed = get(&router(models, None), "/v1/models").await?.body;
+    let flags: Vec<(&str, bool, bool)> = listed["models"]
+        .as_array()
+        .context("models")?
+        .iter()
+        .map(|m| {
+            (
+                m["name"].as_str().unwrap_or_default(),
+                m["x_pulled"] == true,
+                m["x_default"] == true,
+            )
+        })
+        .collect();
+    assert_eq!(
+        flags,
+        [
+            ("decider-2b", true, false),
+            ("decider-4b", false, true),
+            ("qwen3.5-0.8b", false, false),
+            ("smollm3-3b", false, false),
+        ]
+    );
+
+    // With nothing pulled, the library default is the default model and an unknown name lists the library.
     let (_, models) = common::models("http-model-resolution-empty", &[], ModelOptions::default())?;
-    let reply = post(&router(models, None), &ask(Some("jev-latest"))).await?;
+    let app = router(models, None);
+    let listed = get(&app, "/v1/models").await?.body;
+    assert_eq!(listed["models"][0]["name"], "decider-2b");
+    assert_eq!(listed["models"][0]["x_default"], true);
+    assert_eq!(listed["models"][0]["x_size"], 1_274_396_800_u64);
+    assert_eq!(
+        listed["models"].as_array().map(Vec::len),
+        Some(4),
+        "{listed}"
+    );
+    let reply = post(&app, &ask(Some("gamma"))).await?;
     assert_eq!(reply.status, 404);
     assert!(
-        error_shape(&reply, "not_found_error").contains("the registry is empty"),
+        error_shape(&reply, "not_found_error").starts_with(
+            "no model named \"gamma\"; none pulled yet; library, pulled on first use: decider-2b,"
+        ),
         "{reply:?}"
     );
+    Ok(())
+}
+
+/// `models.toml` is reread when it changes: a model added while serving is listed and answers, a removed one is gone,
+/// and a changed entry is read with its new profile.
+#[tokio::test]
+async fn registry_changes_are_picked_up() -> Result<()> {
+    let (fake, models) = models("http-registry-changes", &["alpha"], ModelOptions::default())?;
+    let app = router(models.clone(), None);
+    let ask =
+        |model: &str| json!({"model": model, "state": "s", "questions": {"q": noul("Is it?")}});
+    assert_eq!(post(&app, &ask("alpha")).await?.status, 200);
+    let path = models
+        .registry()
+        .map_err(|err| anyhow::anyhow!("{err:?}"))?
+        .path()
+        .to_path_buf();
+    let home = path.parent().context("home")?;
+    let dir = home.parent().context("the test's scratch directory")?;
+
+    let mut registry = ardana_registry::Registry::open(home)?;
+    registry.insert(common::fake_entry(dir, "beta")?);
+    registry.save()?;
+    let names = |body: &Value| -> Vec<String> {
+        body["models"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|m| m["x_pulled"] == true)
+            .filter_map(|m| m["name"].as_str().map(String::from))
+            .collect()
+    };
+    assert_eq!(
+        names(&get(&app, "/v1/models").await?.body),
+        ["alpha", "beta"]
+    );
+    let beta = post(&app, &ask("beta")).await?;
+    assert_eq!(
+        (beta.status.as_u16(), &beta.body["model"]),
+        (200, &json!("beta"))
+    );
+
+    let mut registry = ardana_registry::Registry::open(home)?;
+    registry.remove("alpha")?;
+    let mut renamed = registry.entry("beta")?.clone();
+    renamed.profile.name = "beta-v2".into();
+    registry.insert(renamed);
+    registry.save()?;
+    assert_eq!(names(&get(&app, "/v1/models").await?.body), ["beta"]);
+    let gone = post(&app, &ask("alpha")).await?;
+    assert_eq!(gone.status, 404, "{gone:?}");
+    let changed = post(&app, &ask("beta")).await?;
+    assert_eq!(changed.body["model"], "beta-v2", "{changed:?}");
+    assert_eq!(fake.loads(), 3, "the changed entry is loaded again");
     Ok(())
 }
 

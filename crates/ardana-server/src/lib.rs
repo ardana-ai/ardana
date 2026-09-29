@@ -1,7 +1,7 @@
-//! The Jev-compatible HTTP server, model lifecycle and the embedded playground.
+//! The HTTP server (compatible with Jev and TypeSafe clients), model lifecycle and the embedded playground.
 //!
 //! `ardana serve` answers `POST /v1/systemone`, `GET /v1/models` and `GET /health` for the models of an Ardana
-//! registry ([`Models`]). The binary passes in the registry and the [`ardana_core::Runtimes`] it is built with, so
+//! registry and the model library ([`Models`]). The binary passes in the registry and the [`ardana_core::Runtimes`] it is built with, so
 //! this crate never sees a concrete runtime. Every other path serves the playground embedded at build time.
 
 mod body;
@@ -44,8 +44,8 @@ pub struct ServeArgs {
     /// Require `Authorization: Bearer <key>` on `/v1/*`; without a key the API is open.
     #[arg(long, env = "ARDANA_API_KEY", hide_env_values = true)]
     pub api_key: Option<String>,
-    /// The model `jev-latest`, every `jev-*` name and requests without a model use; default the first registry
-    /// entry.
+    /// The model requests without a model (and the API's `jev-*` compatibility aliases) use: a pulled or a library
+    /// model; default the first pulled model, else the library default (decider-2b).
     #[arg(long)]
     pub default_model: Option<String>,
     /// How long a model stays loaded after its last request: `300ms`, `30s`, `5m`, `1h` or plain seconds.
@@ -182,12 +182,12 @@ async fn systemone(
     Ok(Json(models.decide(request).await?))
 }
 
-async fn list_models(State(models): State<Arc<Models>>) -> Json<ModelsResponse> {
-    Json(models.list())
+async fn list_models(State(models): State<Arc<Models>>) -> Result<Json<ModelsResponse>, ApiError> {
+    Ok(Json(models.list()?))
 }
 
-async fn health(State(models): State<Arc<Models>>) -> Json<Value> {
-    Json(models.health().await)
+async fn health(State(models): State<Arc<Models>>) -> Result<Json<Value>, ApiError> {
+    Ok(Json(models.health().await?))
 }
 
 /// Lets a request through when its bearer key equals `key`: no key is 403, another key (or scheme) 401.

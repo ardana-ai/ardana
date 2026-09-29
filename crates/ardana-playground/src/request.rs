@@ -35,10 +35,10 @@ pub fn parse_questions(text: &str) -> Result<Questions, String> {
     }
 }
 
-/// The request the editors describe.
+/// The request the editors describe; no model (empty) leaves the choice to the server.
 pub fn request(model: &str, state_text: &str, questions: &Questions) -> SystemOneRequest {
     SystemOneRequest {
-        model: Some(model.to_string()),
+        model: (!model.is_empty()).then(|| model.to_string()),
         state: state_value(state_text),
         questions: questions.clone(),
     }
@@ -206,11 +206,14 @@ mod tests {
     #[test]
     fn body_is_the_request() {
         let q = parse_questions(r#"{"r": {"type": "noul", "instructions": "Refund?"}}"#).unwrap();
-        let sent: Value = serde_json::from_str(&body(&request("jev-latest", "Hi", &q))).unwrap();
+        let sent: Value = serde_json::from_str(&body(&request("decider-2b", "Hi", &q))).unwrap();
         assert_eq!(
             sent,
-            json!({"model": "jev-latest", "state": "Hi", "questions": {"r": {"type": "noul", "instructions": "Refund?"}}})
+            json!({"model": "decider-2b", "state": "Hi", "questions": {"r": {"type": "noul", "instructions": "Refund?"}}})
         );
+        // No model picked yet: the server's default answers.
+        let sent: Value = serde_json::from_str(&body(&request("", "Hi", &q))).unwrap();
+        assert_eq!(sent.get("model"), None);
     }
 
     #[test]

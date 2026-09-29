@@ -1,15 +1,27 @@
 //! The top rail: maker's plate, the model switch, the amber counters and the RUN transport key.
 
-use ardana_api::ModelsResponse;
+use ardana_api::{ModelsResponse, human_size};
 use leptos::prelude::*;
 
 use super::figure::Verbatim;
-use crate::deck::{DEFAULT_MODEL, Deck};
+use crate::deck::Deck;
 use crate::request::Reply;
 
 #[component]
 pub fn Rail(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>) -> impl IntoView {
     let pending = deck.runner.pending();
+    // The run in flight names a model the server pulls first. `/v1/models` gives no progress, so the page says what
+    // is downloading and how much, not how far along it is.
+    let pulling = move || {
+        if !pending.get() {
+            return None;
+        }
+        let name = deck.run_model.get()?;
+        deck.unpulled(&name).map(|model| match model.x_size {
+            Some(bytes) => format!("Downloading {name} ({}) on first run", human_size(bytes)),
+            None => format!("Downloading {name} on first run"),
+        })
+    };
     view! {
         <header class="rail">
             <div class="maker">
@@ -61,7 +73,13 @@ pub fn Rail(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>) -
                     <svg class="run-glyph" viewBox="0 0 16 16" aria-hidden="true">
                         <path d="M4 2.5v11l9-5.5z" />
                     </svg>
-                    <span class="run-legend">{move || if pending.get() { "Running" } else { "Run" }}</span>
+                    <span class="run-legend">
+                        {move || match (pending.get(), pulling().is_some()) {
+                            (true, true) => "Pulling",
+                            (true, false) => "Running",
+                            _ => "Run",
+                        }}
+                    </span>
                 </button>
                 <p class="changed" class:on=move || deck.stale.get() data-testid="changed">
                     <span class="lamp" aria-hidden="true"></span>
@@ -77,8 +95,15 @@ pub fn Rail(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>) -
                     </span>
                 </p>
             </div>
-            <p id="run-note" class="run-note">
-                {move || deck.questions_error.with(Option::is_some).then_some("Questions JSON has an error")}
+            <p id="run-note" class="run-note" class:pulling=move || pulling().is_some() data-testid="run-note">
+                {move || {
+                    pulling()
+                        .or_else(|| {
+                            deck.questions_error
+                                .with(Option::is_some)
+                                .then(|| "Questions JSON has an error".to_string())
+                        })
+                }}
             </p>
         </header>
     }
@@ -140,30 +165,44 @@ pub fn Counter(
 
 #[component]
 fn ModelSwitch(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>) -> impl IntoView {
-    let names = move || -> Vec<String> {
-        let mut names = vec![DEFAULT_MODEL.to_string()];
-        if let Some(Ok(list)) = models.get() {
-            names.extend(list.models.into_iter().map(|m| m.name));
-        }
-        let picked = deck.model.get();
-        if !names.contains(&picked) {
-            names.push(picked);
-        }
-        names
-    };
-    // A `jev-*` alias means the server's default model, which only a response names: the alias it was sent as and
-    // the model the last answer reported.
-    let answered_alias = move || -> Option<(String, String)> {
-        let sent = deck.sent.with(|sent| sent.as_ref()?.model.clone())?;
-        deck.last
-            .with(|last| match last.as_ref().map(|run| &run.reply) {
-                Some(Ok(Reply::Answered { model, .. })) => Some((sent, model.clone())),
-                _ => None,
-            })
-    };
     let failure = move || match models.get() {
         Some(Err(err)) => Some(view! { <p class="fault-line" role="alert">{err}</p> }),
         _ => None,
+    };
+    // Pulled models first, then the library models a first run pulls, marked with their download size. A picked
+    // model the list does not name (a share link's) is offered as it is.
+    let options = move || {
+        let picked = deck.model.get();
+        let option = move |name: String, label: String| {
+            let selected = deck.model.get_untracked() == name;
+            view! { <option value=name selected=selected>{label}</option> }
+        };
+        deck.models.with(|models| {
+            let pulled: Vec<_> = models
+                .iter()
+                .filter(|m| m.pulled())
+                .map(|m| option(m.name.clone(), m.name.clone()))
+                .collect();
+            let library: Vec<_> = models
+                .iter()
+                .filter(|m| !m.pulled())
+                .map(|m| {
+                    let label = match m.x_size {
+                        Some(bytes) => format!("{} · {}", m.name, human_size(bytes)),
+                        None => m.name.clone(),
+                    };
+                    option(m.name.clone(), label)
+                })
+                .collect();
+            let unlisted = (!picked.is_empty() && !models.iter().any(|m| m.name == picked))
+                .then(|| option(picked.clone(), picked.clone()));
+            view! {
+                {(!pulled.is_empty()).then(|| view! { <optgroup label="Pulled">{pulled}</optgroup> })}
+                {(!library.is_empty())
+                    .then(|| view! { <optgroup label="Library · pulls on first run">{library}</optgroup> })}
+                {unlisted}
+            }
+        })
     };
     view! {
         <div class="switch">
@@ -174,21 +213,7 @@ fn ModelSwitch(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>
                     prop:value=move || deck.model.get()
                     on:change=move |event| deck.model.set(event_target_value(&event))
                 >
-                    {move || {
-                        let answered = answered_alias();
-                        names()
-                            .into_iter()
-                            .map(|name| {
-                                let label = match &answered {
-                                    _ if !name.starts_with("jev-") => name.clone(),
-                                    Some((sent, model)) if *sent == name => format!("{name} → {model}"),
-                                    _ => format!("{name} (server default)"),
-                                };
-                                let selected = deck.model.get_untracked() == name;
-                                view! { <option value=name selected=selected>{label}</option> }
-                            })
-                            .collect_view()
-                    }}
+                    {options}
                 </select>
             </div>
             <label class="legend" for="model">"Model"</label>

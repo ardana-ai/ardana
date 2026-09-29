@@ -52,7 +52,7 @@ pub fn Channels(deck: Deck) -> impl IntoView {
                                 "No channels yet. Add a question and set its type: " <code>"noul"</code>
                                 " for a yes/no probability, " <code>"choice"</code> " for named options, "
                                 <code>"score"</code>
-                                " for ordered levels. Or load a preset, write the questions JSON below, or open a Jev share link."
+                                " for ordered levels. Or load a preset, write the questions JSON below, or open a share link."
                             </p>
                         </div>
                     }

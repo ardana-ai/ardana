@@ -2,10 +2,13 @@
 //!
 //! `hf-hub` 1.0.0 does not read `HF_HUB_OFFLINE`, so [`offline`] reads it and every download passes
 //! `local_files_only`. Offline, a repository's files are those of its cached `main` snapshot and no metadata endpoint
-//! is called.
+//! is called. A pull that asks for progress prints each download's bytes to stderr ([`FileReport`]).
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
+use hf_hub::progress::{DownloadEvent, FileStatus, Progress, ProgressEvent, ProgressHandler};
 use hf_hub::{HFClient, HFError};
 
 use crate::RegistryError;
@@ -28,6 +31,8 @@ pub fn offline() -> bool {
 pub(crate) struct Hub {
     client: HFClient,
     offline: bool,
+    /// Print download progress to stderr.
+    progress: bool,
 }
 
 /// The files of one repository commit.
@@ -51,7 +56,7 @@ impl Snapshot {
 }
 
 impl Hub {
-    pub fn from_env() -> Result<Hub, RegistryError> {
+    pub fn from_env(progress: bool) -> Result<Hub, RegistryError> {
         let client = HFClient::new().map_err(|err| RegistryError::Hub {
             repo: "the Hugging Face client".into(),
             err,
@@ -59,6 +64,7 @@ impl Hub {
         Ok(Hub {
             client,
             offline: offline(),
+            progress,
         })
     }
 
@@ -125,6 +131,10 @@ impl Hub {
             .filename(file)
             .revision(snapshot.commit.clone())
             .local_files_only(self.offline)
+            .maybe_progress(
+                self.progress
+                    .then(|| Progress::new(FileReport::new(format!("downloading {file}")))),
+            )
             .send()
             .await;
         match result {
@@ -137,6 +147,85 @@ impl Hub {
                 repo: snapshot.id(),
                 err,
             }),
+        }
+    }
+}
+
+/// How often [`FileReport`] prints while bytes move.
+const REPORT_EVERY: Duration = Duration::from_secs(1);
+
+/// Prints one file's download to stderr, `<label>: <bytes so far> / <size>`, at most once a [`REPORT_EVERY`] when the
+/// count moved and once when it completes. A file already in the cache moves no bytes and prints nothing.
+struct FileReport {
+    label: String,
+    state: Mutex<ReportState>,
+}
+
+#[derive(Default)]
+struct ReportState {
+    /// The file's size, from the download's start (0 until known).
+    total: u64,
+    /// When the last line was printed and the count it printed; `None` until bytes move.
+    printed: Option<(Instant, u64)>,
+}
+
+impl FileReport {
+    fn new(label: String) -> FileReport {
+        FileReport {
+            label,
+            state: Mutex::new(ReportState::default()),
+        }
+    }
+
+    fn moved(&self, state: &mut ReportState, done: u64, total: u64) {
+        if total > 0 {
+            state.total = total;
+        }
+        let due = state
+            .printed
+            .is_none_or(|(at, printed)| printed != done && at.elapsed() >= REPORT_EVERY);
+        if due {
+            state.printed = Some((Instant::now(), done));
+            eprintln!(
+                "{}: {} / {}",
+                self.label,
+                ardana_core::human_size(done),
+                ardana_core::human_size(state.total)
+            );
+        }
+    }
+}
+
+impl ProgressHandler for FileReport {
+    fn on_progress(&self, event: &ProgressEvent) {
+        let ProgressEvent::Download(event) = event else {
+            return;
+        };
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match event {
+            DownloadEvent::Start { total_bytes, .. } => state.total = *total_bytes,
+            DownloadEvent::Progress { files } => {
+                for file in files.iter().filter(|f| f.status == FileStatus::InProgress) {
+                    self.moved(&mut state, file.bytes_completed, file.total_bytes);
+                }
+            }
+            DownloadEvent::AggregateProgress {
+                bytes_completed,
+                total_bytes,
+                ..
+            } => self.moved(&mut state, *bytes_completed, *total_bytes),
+            DownloadEvent::Complete => {
+                if state.printed.is_some() {
+                    eprintln!(
+                        "{}: {} done",
+                        self.label,
+                        ardana_core::human_size(state.total)
+                    );
+                }
+            }
         }
     }
 }

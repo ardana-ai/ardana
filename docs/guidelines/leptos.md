@@ -89,9 +89,15 @@ design workflow that gates every UI change (Q23, Q27).
   `data-value` (the raw value: a number as the shortest JSON text, a string as is) and `data-format` (`percent`,
   `fixed2`, `verbatim`). Formatting rounds the number's decimal text half up (`format::round_decimal`), never the
   binary value, so `0.1235` shows `12.4%` on every platform; the Playwright helpers apply the same rule with BigInt.
-- The model picker offers `jev-latest` (the server's default model, as Jev's share links name it) and then every
-  `/v1/models` name; a share link naming another model adds it. A `jev-*` option reads "(server default)" until a run sent
-  under it is answered, then "→ <the response's `model`>"; the page never guesses the default from `/v1/models`. `?autorun=1` runs once after `/v1/models` answers.
+- The page speaks only real model names; no text on it mentions Jev. The model picker lists `/v1/models`: the pulled
+  models (`x_pulled` not `false`) in an optgroup "Pulled", then the library models a first run pulls in "Library ·
+  pulls on first run", labelled with their `x_size` (`decider-4b · 2.7 GB`, `ardana_api::human_size`); a share link
+  naming a model the list lacks adds it as is. The picked model starts empty and `Deck::set_models` picks the
+  `x_default` entry (else the first pulled one) once the list arrives; while nothing is picked a request names no
+  model. The list is fetched again after every run, since a run may have pulled its model. `?autorun=1` runs once
+  after `/v1/models` answers.
+- While a run whose model the list marks unpulled is in flight, the RUN legend reads "Pulling" and `#run-note` says
+  "Downloading <name> (<size>) on first run": the API reports no pull progress, so the page never draws one.
 - Per-run visuals (the ladder climb) restart because `For` keys each channel by id, spec, run number and answer.
 - Set dynamic CSS custom properties with a style tuple, `style=("--level", value.to_string())`; the rules that read
   them live in `.css`.
@@ -104,9 +110,11 @@ design workflow that gates every UI change (Q23, Q27).
   `String::from_utf16` and treat `None`, invalid UTF-16 or bad JSON as a visible share-link error, never a panic.
 - Read the hash on load and on `hashchange`; `location.hash` includes the leading `#`. `?autorun=1` runs the loaded
   share once after models load (R6.2 URLs).
-- `selectedModels` is optional when reading (a docs link has none); the model is then `jev-latest`.
+- `selectedModels` is optional when reading (a docs link has none); a link without one, or with a `jev-*` alias
+  (`jev-latest`, `jev-1.12`), opens on the server's default model, so Jev's links keep working.
 - The playground writes its own link with `share::link(origin, &SharePayload::new(state, questions, model))`, keys in
-  Jev's order; the share key opens it, recomputed from the editors while open, with a copy key.
+  Jev's order and the real model name in `selectedModels`; the share key opens it, recomputed from the editors while
+  open, with a copy key.
 - Round-trip test: the playground's own link must decode with lz-string 1.5.0 in Playwright (R7.4).
 
 ## Build: trunk, wasm-bindgen, wasm-opt

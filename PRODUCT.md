@@ -12,24 +12,27 @@ ticket, a transcript, a resume, a JSON record) and a handful of questions they w
 `noul`, and they want to see what a local model answers before they put the same request into code.
 
 ## Product Purpose
-Ardana runs System 1 decision models locally behind a Jev-compatible HTTP API, from one `ardana` binary. A decision is
+Ardana is a local-first tool that pulls and runs open System 1 decision models the way Ollama does (`ardana pull
+decider-2b`, or just a first request naming it), from one `ardana` binary. A decision is
 one forward pass: the model reads the state and every question once and returns calibrated probabilities, never
 generated text. The playground bundled in the binary is where a developer tries a state and questions against a local
 model, reads the calibrated answers, and copies the exact request into code. Success is a developer who trusts the
 numbers enough to wire them in.
 
 ## Positioning
-Local, one binary, one forward pass per decision, and a drop-in for Jev and TypeSafe clients: the same request that
-runs against Jev's hosted API runs against `ardana serve` unchanged, on models the developer holds.
+Local, one binary, open models pulled by name, one forward pass per decision. The HTTP API stays compatible with
+TypeSafe and Jev clients (their `jev-latest` alias means the local default model), but the product speaks its own
+language: real local model names, never Jev's.
 
 ## Operating Context
 - The playground is served by `ardana serve` at `/`, same origin as the public API (`/v1/systemone`, `/v1/models`,
   `/health`); it has no remote endpoints in Step 1.
 - Developers move between the playground, their editor and a terminal; they copy curl, Python (`typesafe-sdk`) and
   TypeScript (`@typesafe-ai/sdk`) snippets out of it.
-- Jev share links (`#share/<lz-string payload>`) from docs.typesafe.ai open in it.
-- Models are pulled with `ardana pull` and listed by `/v1/models`: decider-format System 1 models and stock instruct
-  models read in chat layout.
+- Share links (`#share/<lz-string payload>`), including those on docs.typesafe.ai, open in it.
+- Models come from Ardana's library (`decider-2b` by default) or any `hf.co/` GGUF, pulled with `ardana pull` or on
+  their first run, and are listed by `/v1/models`: decider-format System 1 models and stock instruct models read in
+  chat layout. A first run on an empty machine downloads the model, and the page says so.
 
 ## Capabilities and Constraints
 - Inputs: state as text or JSON; a `questions` map with `noul` (optional true/false criteria), `choice` (2..255 named

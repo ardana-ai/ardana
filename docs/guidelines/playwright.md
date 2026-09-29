@@ -107,10 +107,17 @@ share-link decoding.
   heavy request is bounded by the test's own timeout (`test.setTimeout`), not the 30 s default of `waitForResponse`.
 - Docs share links (R7.3): `fixtures/jev-share-links.json` vendors every `console.typesafe.ai/playground#share/` link
   found on docs.typesafe.ai (17, all on cookbook pages) with its page. `jev_share_links` has one test per link: the
-  editors hold the decoded `documentText` and `promptsText`, the picker the first `selectedModels` entry
-  (`jev-latest` when absent), and every question id gets a displayed answer. Two links name `speed_latest`, which
+  editors hold the decoded `documentText` and `promptsText`, the picker the first `selectedModels` entry (the
+  server's default model, decider-2b, when absent or a `jev-*` alias), and every question id gets a displayed answer. Two links name `speed_latest`, which
   Ardana does not serve: the test first checks the 404 fault naming it (Q7), then picks decider-2b and runs. The
   largest links take minutes (every row decodes a 12k-token state), hence `test.setTimeout(900_000)`.
+- First run (`first_run_pull`): xtask starts one more `ardana serve` per project on an empty `ARDANA_HOME` with
+  `HF_HUB_OFFLINE=1` (`Server::start_empty`) and passes it as `ARDANA_EMPTY_URL_DESKTOP` / `ARDANA_EMPTY_URL_MOBILE`,
+  since the first run pulls decider-2b and the next project needs an empty registry again. The case opens a Jev-style
+  share link (`jev-latest`), checks the picker starts on `decider-2b` and that no readable text (body text, option and
+  optgroup labels, `placeholder`, `aria-label`, `title`) contains "jev", records the RUN legend and `run-note` with a
+  `MutationObserver` while the pull runs ("Pulling", "Downloading decider-2b (1.3 GB) on first run"), and checks every
+  `data-value` against the response.
 - Snippets (R7.6): the `snippets` case writes each snippet to `tmp/playwright/snippets/<project>/` and executes it
   there: curl with `bash` (its body must equal the request the page sent, its output the response the page
   received), Python with `tmp/py/sdk/bin/python` and `TYPESAFE_BASE_URL`, TypeScript with the running Node

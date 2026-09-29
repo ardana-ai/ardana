@@ -1,5 +1,5 @@
 //! The console strip above the deck: the preset keys, which load a state and its questions, and the share key, which
-//! opens a Jev share link of the editors and the picked model.
+//! opens a share link (Jev's link format) of the editors and the picked model.
 
 use leptos::prelude::*;
 
@@ -72,7 +72,7 @@ pub fn Console(deck: Deck) -> impl IntoView {
             <Show when=move || open.get()>
                 <div class="share-panel" id="share-panel">
                     <label class="legend" for="share-link">
-                        "Jev share link"
+                        "Link to these inputs"
                     </label>
                     <div class="share-row">
                         <input

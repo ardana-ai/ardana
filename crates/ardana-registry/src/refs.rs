@@ -1,5 +1,6 @@
 //! Model references (Q3): `hf.co/<org>/<repo>[:<quant>]`, `hf.co/<org>/<repo>:<file>.gguf`,
-//! `ollama:[<namespace>/]<name>[:<tag>]` and local paths.
+//! `ollama:[<namespace>/]<name>[:<tag>]` and local paths. Library names (`decider-2b`) are resolved before these, by
+//! [`crate::library`].
 
 use std::path::{Path, PathBuf};
 
@@ -14,8 +15,8 @@ pub const OLLAMA_NAMESPACE: &str = "library";
 /// The Ollama tag of a reference without one.
 pub const OLLAMA_TAG: &str = "latest";
 
-const GRAMMAR: &str = "use hf.co/<org>/<repo>[:<quant>], hf.co/<org>/<repo>:<file>.gguf, \
-                       ollama:[<namespace>/]<name>[:<tag>] or a path to a local file";
+const GRAMMAR: &str = "use a library model <name>[:<quant>], hf.co/<org>/<repo>[:<quant>], \
+                       hf.co/<org>/<repo>:<file>.gguf, ollama:[<namespace>/]<name>[:<tag>] or a path to a local file";
 
 /// A parsed model reference.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,13 +87,15 @@ impl Ref {
         if input.contains('/') || input.to_ascii_lowercase().ends_with(".gguf") {
             return Ok(Ref::Local(PathBuf::from(input)));
         }
+        let library = crate::library::library().names().join(", ");
         if valid_name(input.split_once(':').map_or(input, |(name, _)| name)) {
             return Err(fail(format!(
-                "it is neither {HF_PREFIX}, {OLLAMA_PREFIX} nor a path (for an Ollama model write {OLLAMA_PREFIX}{input})"
+                "it is neither a library model ({library}), {HF_PREFIX}, {OLLAMA_PREFIX} nor a path (for an Ollama \
+                 model write {OLLAMA_PREFIX}{input})"
             )));
         }
         Err(fail(format!(
-            "it is neither {HF_PREFIX}, {OLLAMA_PREFIX} nor a path"
+            "it is neither a library model ({library}), {HF_PREFIX}, {OLLAMA_PREFIX} nor a path"
         )))
     }
 
@@ -188,7 +191,7 @@ fn parse_ollama(rest: &str) -> Result<Ref, String> {
 }
 
 /// A non-empty name of ASCII letters, digits, `.`, `_` and `-` that is not `.` or `..`.
-fn valid_name(s: &str) -> bool {
+pub(crate) fn valid_name(s: &str) -> bool {
     !s.is_empty()
         && s != "."
         && s != ".."

@@ -1,6 +1,9 @@
 // W6 cases of the embedded playground, against the release `ardana` serving decider-2b (see playwright.config.ts).
+// The share links here are written as Jev's playground writes them, with its `jev-latest` alias; the picker reads
+// the alias as the server's default model and names that model.
 import { expect, test } from '@playwright/test';
 import {
+  decimalSize,
   expectFiguresMatch,
   fixture,
   isSystemOne,
@@ -8,6 +11,7 @@ import {
   screenshot,
   shareHash,
   type Json,
+  type ModelInfo,
   type Request,
 } from './helpers';
 
@@ -55,10 +59,11 @@ test('answers_match_api', async ({ page }, testInfo) => {
   await page.goto(`/${shareHash(ticket)}`);
   await expect(page.getByRole('textbox', { name: 'State' })).toHaveValue(ticket.state as string);
   await expect(page.getByTestId('channel')).toHaveCount(Object.keys(ticket.questions).length);
-  await expect(page.locator('#model')).toHaveValue('jev-latest');
-  // The alias names no model until a response does.
-  const alias = page.locator('#model option[value="jev-latest"]');
-  await expect(alias).toHaveText('jev-latest (server default)');
+  const models = (await (await page.request.get('/v1/models')).json()) as { models: ModelInfo[] };
+  const defaultModel = models.models.find((m) => m.x_default)!.name;
+  expect(defaultModel).toBe('decider-2b');
+  await expect(page.locator('#model')).toHaveValue(defaultModel);
+  await expect(page.locator(`#model option[value="${defaultModel}"]`)).toHaveText(defaultModel);
   await screenshot(page, testInfo, 'answers_match_api', 'loaded');
 
   const replied = page.waitForResponse((r) => isSystemOne(r.url()));
@@ -70,7 +75,7 @@ test('answers_match_api', async ({ page }, testInfo) => {
   const timing = (await finished).timing();
 
   await expect(page.getByTestId('fault')).toHaveCount(0);
-  await expect(alias).toHaveText(`jev-latest → ${(json as unknown as { model: string }).model}`);
+  expect(response.request().postDataJSON().model).toBe(defaultModel);
   // Focus stays on RUN, and the polite status region reads the outcome.
   await expect(runKey(page)).toBeFocused();
   await expect(page.getByTestId('run-status')).toHaveText(
@@ -134,18 +139,24 @@ test('picker_raw_errors', async ({ page, baseURL }, testInfo) => {
   const requests: { url: string; type: string }[] = [];
   page.on('request', (r) => requests.push({ url: r.url(), type: r.resourceType() }));
 
-  // The picker lists /v1/models, after the default model alias.
-  const models = (await (await page.request.get('/v1/models')).json()) as { models: { name: string }[] };
+  // The picker lists /v1/models: the pulled models, then the library models a first run pulls, with their size.
+  const models = (await (await page.request.get('/v1/models')).json()) as { models: ModelInfo[] };
   const names = models.models.map((m) => m.name);
-  expect(names.length).toBeGreaterThan(0);
+  const pulled = models.models.filter((m) => m.x_pulled !== false);
+  const library = models.models.filter((m) => m.x_pulled === false);
+  expect(pulled.map((m) => m.name)).toEqual(['decider-2b']);
+  expect(library.length).toBeGreaterThan(0);
   const ticket = fixture('ticket.json');
   await page.goto(`/${shareHash(ticket)}`);
   const picker = page.getByRole('combobox', { name: 'Model' });
-  await expect(picker.locator('option')).toHaveCount(names.length + 1);
-  expect(await picker.locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual([
-    'jev-latest',
-    ...names,
-  ]);
+  await expect(picker.locator('option')).toHaveCount(names.length);
+  expect(await picker.locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
+    names,
+  );
+  await expect(picker.locator('optgroup[label="Pulled"] option')).toHaveText(pulled.map((m) => m.name));
+  await expect(picker.locator('optgroup[label="Library · pulls on first run"] option')).toHaveText(
+    library.map((m) => `${m.name} · ${decimalSize(m.x_size!)}`),
+  );
 
   // The raw panel shows exactly what was sent and received.
   await picker.selectOption(names[0]);

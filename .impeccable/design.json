@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-28T17:31:21+00:00",
+  "generatedAt": "2026-09-29T01:32:59+00:00",
   "title": "Design System: Ardana",
   "extensions": {
     "colorMeta": {
@@ -550,7 +550,7 @@
       "name": "RUN Transport Key",
       "kind": "button",
       "refersTo": "run-key",
-      "description": "The only transport key: a chrome transport key with an LED strip; pressing or running drops it 3px and burns the strip amber. Held with aria-disabled, never disabled; a Changed lamp beneath lights while the inputs differ from the last run.",
+      "description": "The only transport key: a chrome transport key with an LED strip; pressing or running drops it 3px and burns the strip amber. Held with aria-disabled, never disabled; a Changed lamp beneath lights while the inputs differ from the last run. While a run waits on its model's first download the legend reads Pulling, and a Soft Engraving note under the rail says what is downloading and its size; no progress bar is drawn.",
       "html": "<button type=\"button\" class=\"ds-run-key\"><span class=\"ds-run-led\" aria-hidden=\"true\"></span><svg class=\"ds-run-glyph\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 2.5v11l9-5.5z\"/></svg><span class=\"ds-run-legend\">Run</span></button>",
       "css": ".ds-run-key { position: relative; display: grid; justify-items: center; align-content: center; gap: 6px; width: 104px; height: 80px; padding: 14px 10px 10px; border: 0; border-radius: var(--radius-control); background: linear-gradient(180deg, var(--chrome-hi), #d9dde1 45%, var(--chrome-lo)); color: var(--ink); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -2px 0 rgb(0 0 0 / 0.2), 0 3px 0 #7d838a, 0 5px 10px rgb(0 0 0 / 0.3); cursor: pointer; transition: transform 80ms var(--ease-out), box-shadow 80ms var(--ease-out); } .ds-run-led { position: absolute; top: 6px; left: 14px; right: 14px; height: 4px; border-radius: 2px; background: var(--amber-off); border: 1px solid #1a1407; } .ds-run-glyph { width: 22px; height: 22px; fill: var(--ink); } .ds-run-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.875rem; line-height: 1; letter-spacing: 0.16em; text-transform: uppercase; } .ds-run-key:hover { background: linear-gradient(180deg, #ffffff, #e2e6e9 45%, #bcc2c7); } .ds-run-key:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), inset 0 -1px 0 rgb(0 0 0 / 0.2), 0 0 0 #7d838a, 0 2px 4px rgb(0 0 0 / 0.3); } .ds-run-key:active .ds-run-led { background: linear-gradient(180deg, #ffe08a, var(--amber) 60%); border-color: var(--amber-dim); } .ds-run-key:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; } @media (prefers-reduced-motion: reduce) { .ds-run-key { transition: none; } }"
     },
@@ -558,8 +558,8 @@
       "name": "Model Switch",
       "kind": "input",
       "refersTo": "model-switch",
-      "description": "A real select on a chrome plate with an engraved chevron and the Model legend beneath; a jev-* alias reads \"(server default)\" until a response names its model.",
-      "html": "<div class=\"ds-switch\"><div class=\"ds-switch-plate\"><select id=\"ds-model\" class=\"ds-switch-select\"><option>jev-latest (server default)</option><option>decider-2b-v11</option></select></div><label class=\"ds-legend\" for=\"ds-model\">Model</label></div>",
+      "description": "A real select on a chrome plate with an engraved chevron and the Model legend beneath; it names real local models only, the pulled ones first, then the library models a first run pulls with their download size, and starts on the server's default model.",
+      "html": "<div class=\"ds-switch\"><div class=\"ds-switch-plate\"><select id=\"ds-model\" class=\"ds-switch-select\"><optgroup label=\"Pulled\"><option>decider-2b</option></optgroup><optgroup label=\"Library · pulls on first run\"><option>decider-4b · 2.7 GB</option><option>qwen3.5-0.8b · 563.0 MB</option></optgroup></select></div><label class=\"ds-legend\" for=\"ds-model\">Model</label></div>",
       "css": ".ds-switch { display: grid; gap: var(--space-1); max-width: 22rem; } .ds-switch-plate { position: relative; border-radius: var(--radius-control); background: linear-gradient(180deg, var(--chrome-hi), #d3d8dc 48%, var(--chrome-lo)); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(0 0 0 / 0.18), 0 1px 2px rgb(0 0 0 / 0.3); } .ds-switch-plate::after { content: \"\"; position: absolute; top: 50%; right: 14px; width: 8px; height: 8px; margin-top: -6px; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg); pointer-events: none; } .ds-switch-select { appearance: none; width: 100%; padding: 10px 40px 10px 14px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--ink); font: 600 1rem/1.2 var(--font-legend); letter-spacing: 0.04em; cursor: pointer; } .ds-switch-select:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; } .ds-legend { font-family: var(--font-legend); font-weight: 600; font-size: 0.75rem; line-height: 1.2; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); text-shadow: 0 1px 0 var(--engrave); }"
     },
     {

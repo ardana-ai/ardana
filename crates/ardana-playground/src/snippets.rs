@@ -25,13 +25,14 @@ impl Language {
     }
 }
 
-/// The snippet that sends `request` to the API at `origin`.
+/// The snippet that sends `request` to the API at `origin`; a request without a model leaves it to the server.
 pub fn snippet(language: Language, origin: &str, request: &SystemOneRequest) -> String {
     let origin = origin.trim_end_matches('/');
-    let model = request
-        .model
-        .as_deref()
-        .unwrap_or(crate::deck::DEFAULT_MODEL);
+    let model = |literal: fn(&Value, &str) -> String, line: &str, indent: &str| {
+        request.model.as_ref().map_or_else(String::new, |model| {
+            line.replace("{}", &literal(&Value::String(model.clone()), indent))
+        })
+    };
     let questions = Value::Object(request.questions.clone().into_iter().collect());
     match language {
         Language::Curl => format!(
@@ -46,13 +47,13 @@ pub fn snippet(language: Language, origin: &str, request: &SystemOneRequest) -> 
              \n\
              with TypeSafeClient(timeout=120.0) as client:\n\
              \x20   response = client.system_one(\n\
-             \x20       model={},\n\
+             {}\
              \x20       state={},\n\
              \x20       questions={},\n\
              \x20   )\n\
              \n\
              print(response.model_dump_json(indent=2))\n",
-            python(&Value::String(model.to_string()), "        "),
+            model(python, "        model={},\n", "        "),
             python(&request.state, "        "),
             python(&questions, "        "),
         ),
@@ -64,14 +65,14 @@ pub fn snippet(language: Language, origin: &str, request: &SystemOneRequest) -> 
              \n\
              const client = new TypeSafeClient({{ baseURL: {}, timeout: 120_000 }});\n\
              const response = await client.systemOne({{\n\
-             \x20 model: {},\n\
+             {}\
              \x20 state: {},\n\
              \x20 questions: {},\n\
              }});\n\
              \n\
              console.log(JSON.stringify(response, null, 2));\n",
             json(&Value::String(origin.to_string()), ""),
-            json(&Value::String(model.to_string()), "  "),
+            model(json, "  model: {},\n", "  "),
             json(&request.state, "  "),
             json(&questions, "  "),
         ),
@@ -127,7 +128,7 @@ mod tests {
 
     fn ticket() -> SystemOneRequest {
         serde_json::from_value(json!({
-            "model": "jev-latest",
+            "model": "decider-2b",
             "state": {"note": "it's \"null\" and true", "n": null, "ok": false},
             "questions": {"refund": {"type": "noul", "instructions": "Refund?"}}
         }))
@@ -155,7 +156,9 @@ mod tests {
         );
         let text = snippet(Language::Python, "http://127.0.0.1:8000", &ticket());
         assert!(text.contains("TYPESAFE_BASE_URL=http://127.0.0.1:8000 "));
-        assert!(text.contains("        model=\"jev-latest\",\n"));
+        assert!(
+            text.contains("    response = client.system_one(\n        model=\"decider-2b\",\n")
+        );
         assert!(text.contains("        questions={\n          \"refund\": {\n"));
     }
 
@@ -168,5 +171,24 @@ mod tests {
         assert!(text.contains(
             "  state: {\n    \"note\": \"it's \\\"null\\\" and true\",\n    \"n\": null,"
         ));
+        assert!(text.contains("client.systemOne({\n  model: \"decider-2b\",\n  state: "));
+    }
+
+    #[test]
+    fn no_model_leaves_it_to_the_server() {
+        let request = SystemOneRequest {
+            model: None,
+            ..ticket()
+        };
+        let python = snippet(Language::Python, "http://127.0.0.1:8000", &request);
+        assert!(
+            python.contains("client.system_one(\n        state={"),
+            "{python}"
+        );
+        let typescript = snippet(Language::TypeScript, "http://127.0.0.1:8000", &request);
+        assert!(
+            typescript.contains("client.systemOne({\n  state: {"),
+            "{typescript}"
+        );
     }
 }

@@ -3,10 +3,13 @@
 #![allow(dead_code, reason = "each test file uses a different subset")]
 
 use std::ffi::OsStr;
+use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Child, Command, Output, Stdio};
+use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 
 /// A file of the pinned snapshot of `repo` (`org/name`) in `$HF_HOME/hub` (cargo's `[env]` points it at `tmp/hf`).
@@ -154,6 +157,105 @@ impl Ardana {
             .cloned()
             .with_context(|| format!("models.toml has no model {name}"))
     }
+}
+
+/// `ardana serve` on a free port of 127.0.0.1 in an [`Ardana`] home, its stderr in `serve.log` beside the home.
+/// Dropping it kills the server.
+pub struct Served {
+    child: Child,
+    pub port: u16,
+    pub log: PathBuf,
+}
+
+impl Served {
+    /// Starts `ardana serve --port <free port> <extra>` with `env` and waits until `/health` answers.
+    pub fn start(ardana: &Ardana, extra: &[&str], env: &[(&str, &str)]) -> Result<Served> {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")?
+            .local_addr()?
+            .port();
+        let log = ardana
+            .home
+            .parent()
+            .context("the home has a parent")?
+            .join("serve.log");
+        let mut cmd = ardana.command(["serve", "--port", &port.to_string()]);
+        cmd.args(extra)
+            .envs(env.iter().copied())
+            .stderr(std::fs::File::create(&log)?)
+            .stdout(Stdio::null());
+        let served = Served {
+            child: cmd.spawn()?,
+            port,
+            log,
+        };
+        let started = Instant::now();
+        while served.get("/health", "").is_err() {
+            if started.elapsed() > Duration::from_secs(10) {
+                bail!(
+                    "ardana serve did not answer on port {port}:\n{}",
+                    served.log_text()
+                );
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        Ok(served)
+    }
+
+    /// What the server wrote to stderr so far.
+    pub fn log_text(&self) -> String {
+        std::fs::read_to_string(&self.log).unwrap_or_default()
+    }
+
+    /// `GET path` with extra `headers` (each ending in `\r\n`); the status and body.
+    pub fn get(&self, path: &str, headers: &str) -> Result<(u16, String)> {
+        http(self.port, &format!("GET {path}"), headers, "")
+    }
+
+    /// `POST /v1/systemone` with a JSON body; the status and the parsed body.
+    pub fn decide(&self, body: &Value) -> Result<(u16, Value)> {
+        let (status, text) = http(
+            self.port,
+            "POST /v1/systemone",
+            "Content-Type: application/json\r\n",
+            &body.to_string(),
+        )?;
+        let body = serde_json::from_str(&text).with_context(|| format!("{status}: {text:?}"))?;
+        Ok((status, body))
+    }
+
+    /// `GET /v1/models`, parsed.
+    pub fn models(&self) -> Result<Value> {
+        let (status, text) = self.get("/v1/models", "")?;
+        ensure!(status == 200, "GET /v1/models answered {status}: {text}");
+        Ok(serde_json::from_str(&text)?)
+    }
+}
+
+impl Drop for Served {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        println!("{}:\n{}", self.log.display(), self.log_text());
+    }
+}
+
+/// One HTTP/1.1 request (`<METHOD> <path>`) on 127.0.0.1:`port`, the connection closed after it; the status and body.
+pub fn http(port: u16, request_line: &str, headers: &str, body: &str) -> Result<(u16, String)> {
+    let mut stream = TcpStream::connect(("127.0.0.1", port))?;
+    write!(
+        stream,
+        "{request_line} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nContent-Length: {}\r\n{headers}\r\n{body}",
+        body.len()
+    )?;
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    let status = response
+        .split(' ')
+        .nth(1)
+        .and_then(|code| code.parse().ok())
+        .with_context(|| format!("no status in {response:?}"))?;
+    let body = response.split("\r\n\r\n").nth(1).unwrap_or_default();
+    Ok((status, body.to_string()))
 }
 
 /// Runs `cmd` and prints what it wrote.

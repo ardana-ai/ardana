@@ -8,6 +8,30 @@ export const root = process.env.ARDANA_REPO_ROOT ?? path.resolve(__dirname, '../
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Request = { model?: string; state: Json; questions: Record<string, Json> };
+/** A `/v1/models` entry with Ardana's extras. */
+export type ModelInfo = {
+  name: string;
+  description: string;
+  release_date: string;
+  x_pulled?: boolean;
+  x_default?: boolean;
+  x_size?: number;
+};
+
+/** A byte count as Ardana prints model sizes: decimal units, one decimal (`1.3 GB`). */
+export function decimalSize(bytes: number): string {
+  if (bytes < 1000) {
+    return `${bytes} B`;
+  }
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1000;
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  return `${value.toFixed(1)} ${units[unit]}`;
+}
 
 /** A request file, by its path from the repo root. */
 export function readRequest(file: string): Request {
@@ -26,7 +50,7 @@ export function editorTexts(request: Request): { documentText: string; promptsTe
   };
 }
 
-/** The `#share/...` fragment Jev's playground writes for a request. */
+/** The `#share/...` fragment Jev's playground writes for a request (`jev-latest` unless the request names a model). */
 export function shareHash(request: Request): string {
   const payload = { apiVersion: 'v1', ...editorTexts(request), selectedModels: [request.model ?? 'jev-latest'] };
   return `#share/${LZString.compressToEncodedURIComponent(JSON.stringify(payload))}`;

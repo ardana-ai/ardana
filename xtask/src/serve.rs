@@ -1,5 +1,6 @@
-//! A running `ardana serve` for the API suites: the release binary serving decider-2b, pulled offline from `tmp/hf`
-//! into its own `ARDANA_HOME` under `tmp/e2e/<suite>`, on a free port of 127.0.0.1. Dropping it stops the server.
+//! A running `ardana serve` for the end-to-end suites: the release binary serving decider-2b, pulled offline from
+//! `tmp/hf` into its own `ARDANA_HOME` under `tmp/e2e/<suite>` (or with that home empty, so the first request pulls
+//! it), on a free port of 127.0.0.1. Dropping it stops the server.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -10,8 +11,8 @@ use anyhow::{Context, Result, bail};
 
 use crate::sandbox::{Sandbox, cargo};
 
-/// The model every API suite serves, as `ardana pull` names it.
-pub const MODEL_REF: &str = "hf.co/Mapika/decider-2b-GGUF";
+/// The model every suite serves: the library name `ardana pull` resolves to `hf.co/Mapika/decider-2b-GGUF:Q4_K_M`.
+pub const MODEL: &str = "decider-2b";
 
 /// How long the server may take to answer `/health`.
 const START_TIMEOUT: Duration = Duration::from_secs(60);
@@ -41,13 +42,29 @@ pub struct Server {
 }
 
 impl Server {
-    /// Pulls decider-2b into `tmp/e2e/<name>/home` and starts `ardana serve` there (from the binary's own directory), with `ARDANA_API_KEY` set to
-    /// `api_key` when given; returns once `/health` answers.
+    /// Pulls decider-2b into `tmp/e2e/<name>/home` and starts `ardana serve` there (from the binary's own
+    /// directory), with `ARDANA_API_KEY` set to `api_key` when given; returns once `/health` answers.
     pub fn start(
         sandbox: &Sandbox,
         ardana: &Path,
         name: &str,
         api_key: Option<&str>,
+    ) -> Result<Server> {
+        Server::launch(sandbox, ardana, name, api_key, true)
+    }
+
+    /// Starts `ardana serve` on the empty home `tmp/e2e/<name>/home`: its first request pulls decider-2b, offline from
+    /// `tmp/hf`.
+    pub fn start_empty(sandbox: &Sandbox, ardana: &Path, name: &str) -> Result<Server> {
+        Server::launch(sandbox, ardana, name, None, false)
+    }
+
+    fn launch(
+        sandbox: &Sandbox,
+        ardana: &Path,
+        name: &str,
+        api_key: Option<&str>,
+        pull: bool,
     ) -> Result<Server> {
         let dir = sandbox.tmp().join("e2e").join(name);
         if dir.exists() {
@@ -65,12 +82,14 @@ impl Server {
                 .env_remove("ARDANA_API_KEY");
             cmd
         };
-        let pulled = ardana_command()
-            .args(["pull", MODEL_REF])
-            .status()
-            .context("running ardana pull")?;
-        if !pulled.success() {
-            bail!("ardana pull {MODEL_REF} failed ({pulled}); run `cargo xtask fetch`");
+        if pull {
+            let pulled = ardana_command()
+                .args(["pull", MODEL])
+                .status()
+                .context("running ardana pull")?;
+            if !pulled.success() {
+                bail!("ardana pull {MODEL} failed ({pulled}); run `cargo xtask fetch`");
+            }
         }
 
         let port = std::net::TcpListener::bind("127.0.0.1:0")?

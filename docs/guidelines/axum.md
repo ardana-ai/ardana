@@ -101,6 +101,26 @@ runtime, and serving the Leptos playground's `dist` from memory with `memory-ser
   loaded model sleeps until `last use + keep_alive` and unloads the model only when it holds no lease, keeping only
   `Weak` references so it never keeps a model alive.
 
+## Registry and library pulls
+- `Models` keeps the registry as `models.toml` last read and rereads it whenever the file's modification time
+  changes (`Registry::modified`), on every request, `/v1/models` and `/health`; a model `ardana pull` adds, changes or
+  removes while `serve` runs takes effect without a restart. A reader (`Decider`) or a loaded worker built from an
+  older entry of the same name is rebuilt: both remember the `ResolvedModel` they came from and are compared with the
+  current entry.
+- Model resolution: `jev-*` and no model mean the default (`--default-model`, else the first registry entry, else the
+  library default); `Registry::named` then gives a pulled entry, a library model to pull, or the 404 listing pulled
+  and library names.
+- A library model that is not pulled is pulled by one detached `tokio::spawn`ed task per registry name
+  (`Models::pulls`, a `watch` channel per pull): every request for that name waits on the same outcome, and the pull
+  finishes and is recorded even when its requesters go away. The pull itself runs on `spawn_blocking` with
+  `Handle::block_on`, since it reads the tokenizer and chat template synchronously; the task rereads `models.toml`
+  under a process-wide lock right before inserting and saving, so concurrent pulls never drop each other's entries.
+  A failed pull answers its waiters 500 `api_error` and is retried by the next request.
+- The server logs pulls on stderr (`ardana serve: pulling <name> (<ref>, <size>)`, byte progress of each download,
+  `pulled <name> into <models.toml>`); there is still no tracing subscriber.
+- `GET /v1/models` keeps Jev's `{name, description, release_date}` per entry and adds `x_pulled` (every entry),
+  `x_default` (the default model only) and `x_size` (library models not pulled yet, the GGUF's bytes).
+
 ## Embedded playground (memory-serve)
 - List `memory-serve` in both `[dependencies]` and `[build-dependencies]` of `ardana-server`; the build script and
   the runtime both use it.

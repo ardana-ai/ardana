@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use ardana_api::{SystemOneRequest, SystemOneResponse};
+use ardana_api::{SystemOneRequest, SystemOneResponse, human_size};
 use ardana_core::{DecideError, Decider, Layout, Limits, LoadOptions, LoadedModel, Runtimes};
-use ardana_registry::{LayoutKind, PullOptions, Registry, ResolvedModel};
+use ardana_registry::library::library;
+use ardana_registry::{LayoutKind, Named, PullOptions, Registry, ResolvedModel};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use tokenizers::Tokenizer;
 
@@ -14,7 +15,7 @@ use tokenizers::Tokenizer;
 #[command(
     name = "ardana",
     version,
-    about = "Serve System 1 decision models over a Jev-compatible API"
+    about = "Pull, run and serve System 1 decision models locally"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -23,7 +24,8 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Add a model to the registry (`$ARDANA_HOME/models.toml`) from `hf.co/`, `ollama:` or a local GGUF.
+    /// Add a model to the registry (`$ARDANA_HOME/models.toml`): a library model, `hf.co/`, `ollama:` or a local
+    /// GGUF.
     Pull(PullArgs),
     /// List the registry's models.
     List,
@@ -37,16 +39,17 @@ pub enum Command {
         /// The model name.
         name: String,
     },
-    /// Answer one `/v1/systemone` request with a registry model, or with explicit model files, and print the
-    /// response as JSON.
+    /// Answer one `/v1/systemone` request with a registry model (a library model is pulled first), or with explicit
+    /// model files, and print the response as JSON.
     Run(RunArgs),
-    /// Serve the registry's models over the Jev-compatible API: `POST /v1/systemone`, `GET /v1/models`,
-    /// `GET /health`.
+    /// Serve the registry's models, and the library's on first use, over the HTTP API and the playground:
+    /// `POST /v1/systemone`, `GET /v1/models`, `GET /health`.
     Serve(ardana_server::ServeArgs),
 }
 
 #[derive(Debug, Args)]
 pub struct PullArgs {
+    /// A library model `<name>[:<quant>]` (decider-2b, decider-4b, qwen3.5-0.8b, smollm3-3b),
     /// `hf.co/<org>/<repo>[:<quant>]` (default quant Q4_K_M, matched case-insensitively),
     /// `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<namespace>/]<name>[:<tag>]` or a local GGUF path.
     pub reference: String,
@@ -54,7 +57,8 @@ pub struct PullArgs {
     /// directory.
     #[arg(long)]
     pub tokenizer: Option<String>,
-    /// The registry name; default the repository name lowercased without `-GGUF`, or the Ollama model name.
+    /// The registry name; default the library name, the repository name lowercased without `-GGUF`, or the Ollama
+    /// model name.
     #[arg(long)]
     pub name: Option<String>,
     /// The prompt layout; default `plain` for a model with `decider_config.json`, else `chat`.
@@ -64,7 +68,8 @@ pub struct PullArgs {
 
 #[derive(Debug, Args)]
 pub struct RunArgs {
-    /// A registry model (see `ardana list`); instead of `--gguf` and `--tokenizer`.
+    /// A registry model (see `ardana list`) or a library model, pulled first; instead of `--gguf` and
+    /// `--tokenizer`.
     #[arg(conflicts_with_all = ["gguf", "tokenizer", "config", "layout"])]
     pub name: Option<String>,
     /// The GGUF weights.
@@ -171,7 +176,10 @@ fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
             .with_context(|| format!("binding {addr}"))?;
         let local = listener.local_addr().context("reading the bound address")?;
         let served = if names.is_empty() {
-            "no models; add one with `ardana pull`".to_string()
+            format!(
+                "no models pulled yet; the first request pulls {} or the library model it names",
+                library().default
+            )
         } else {
             format!("models {}", names.join(", "))
         };
@@ -190,21 +198,15 @@ fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
     })
 }
 
-/// `ardana pull`: resolve the reference and record it in the registry.
+/// `ardana pull`: resolve the library name or reference and record it in the registry.
 fn pull(args: &PullArgs) -> Result<()> {
     let opts = PullOptions {
         name: args.name.clone(),
         tokenizer: args.tokenizer.clone(),
         layout: args.layout.map(LayoutKind::from),
+        progress: true,
     };
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context("starting the async runtime")?;
-    let model = runtime.block_on(ardana_registry::pull(&args.reference, &opts, &runtimes()))?;
-    let mut registry = Registry::open_default()?;
-    registry.insert(model.clone());
-    registry.save()?;
+    let (model, registry) = pull_into_registry(&args.reference, &opts)?;
     println!(
         "pulled {} ({}) into {}",
         model.name,
@@ -212,6 +214,19 @@ fn pull(args: &PullArgs) -> Result<()> {
         registry.path().display()
     );
     Ok(())
+}
+
+/// Pulls `reference` (download progress on stderr) and records it in the registry, read again after the download.
+fn pull_into_registry(reference: &str, opts: &PullOptions) -> Result<(ResolvedModel, Registry)> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("starting the async runtime")?;
+    let model = runtime.block_on(ardana_registry::pull(reference, opts, &runtimes()))?;
+    let mut registry = Registry::open_default()?;
+    registry.insert(model.clone());
+    registry.save()?;
+    Ok((model, registry))
 }
 
 /// `ardana list`: one row per entry with name, source, format, size and layout.
@@ -263,24 +278,28 @@ fn list(registry: &Registry) -> String {
     out
 }
 
-/// A byte count in decimal units, as Ollama prints model sizes (`2.0 GB`).
-fn human_size(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
-    if bytes < 1000 {
-        return format!("{bytes} B");
-    }
-    let mut value = bytes as f64 / 1000.0;
-    let mut unit = 0;
-    while value >= 1000.0 && unit < UNITS.len() - 1 {
-        value /= 1000.0;
-        unit += 1;
-    }
-    format!("{value:.1} {}", UNITS[unit])
-}
-
-/// `ardana run <name>`: the registry entry's tokenizer, profile and weights.
+/// `ardana run <name>`: the registry entry's tokenizer, profile and weights; a library model not pulled yet is
+/// pulled first, with its progress on stderr.
 fn run_named(name: &str, args: &RunArgs) -> Result<SystemOneResponse> {
-    let model: ResolvedModel = Registry::open_default()?.resolve(name)?;
+    let registry = Registry::open_default()?;
+    let name = match registry.named(name)? {
+        Named::Pulled(model) => model.name.clone(),
+        Named::Library(pick) => {
+            let size = pick
+                .size()
+                .map(|bytes| format!(", {}", human_size(bytes)))
+                .unwrap_or_default();
+            eprintln!("pulling {} ({}{size})", pick.name(), pick.reference());
+            let opts = PullOptions {
+                progress: true,
+                ..PullOptions::default()
+            };
+            let (model, registry) = pull_into_registry(&pick.name(), &opts)?;
+            eprintln!("pulled {} into {}", model.name, registry.path().display());
+            model.name
+        }
+    };
+    let model = Registry::open_default()?.resolve(&name)?;
     let tokenizer = ardana_registry::load_tokenizer(&model.tokenizer)?;
     let runtimes = runtimes();
     decide(tokenizer, model.profile.clone(), args, |opts| {
@@ -348,17 +367,5 @@ fn describe(err: DecideError) -> anyhow::Error {
         }
         DecideError::Capacity(msg) => anyhow::anyhow!("request too large: {msg}"),
         DecideError::Runtime(err) => err,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sizes_are_decimal() {
-        assert_eq!(human_size(999), "999 B");
-        assert_eq!(human_size(2_019_377_376), "2.0 GB");
-        assert_eq!(human_size(563_000_000), "563.0 MB");
     }
 }

@@ -1,9 +1,10 @@
 # Ardana
 
-Ardana serves System 1 decision models (decider-style one-pass readouts) over a Jev-compatible HTTP API from one
-`ardana` Rust binary that bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime`
-abstraction; Qwen3.5 is the first model family. The Step 1 plan lives in `ardana-serve-prd/main.md`: its Decisions and
-Contracts are binding, its Requirements are the definition of done.
+Ardana is a local-first tool that pulls and runs open System 1 decision models (decider-style one-pass readouts) the
+way Ollama does, from one `ardana` Rust binary that serves them over an HTTP API (compatible with Jev and TypeSafe
+clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime` abstraction; Qwen3.5
+is the first model family. The Step 1 plan lives in `ardana-serve-prd/main.md`: its Decisions and Contracts are
+binding (as its Amendments change them), its Requirements are the definition of done.
 
 ## Workspace
 
@@ -13,7 +14,7 @@ Contracts are binding, its Requirements are the definition of done.
 | `crates/ardana-api` | Jev wire types, compiles for `wasm32-unknown-unknown` | none |
 | `crates/ardana-core` | prompts, tokenizer, readout, runtime traits | `ardana-api` |
 | `crates/ardana-llama` | llama.cpp runtime | `ardana-core` |
-| `crates/ardana-registry` | refs, `models.toml`, HF and Ollama resolution | `ardana-core` |
+| `crates/ardana-registry` | refs, the model library, `models.toml`, HF and Ollama resolution | `ardana-core` |
 | `crates/ardana-server` | axum server, model lifecycle, embedded playground | anything but `ardana-llama` |
 | `crates/ardana-playground` | Leptos CSR playground built by trunk | `ardana-api` |
 | `xtask` | task runner | any |
@@ -42,24 +43,39 @@ Contracts are binding, its Requirements are the definition of done.
   parses `ticket.json`) and `jevbench` (231 public items, zero failed requests; output in `tmp/evals/jevbench/`); the browser suites
   `playground` (Playwright on the installed Chrome against the built binary copied alone into `tmp/`, plus the
   placeholder build; the W6 cases, then the builder, state modes, the 17 docs.typesafe.ai share links in
-  `e2e/playground/fixtures/jev-share-links.json`, the share round trip, the presets and the executed snippets;
+  `e2e/playground/fixtures/jev-share-links.json`, the share round trip, the presets, the executed snippets, and
+  `first_run_pull` against one more server per viewport on an empty registry (RUN pulls decider-2b offline);
   screenshots in `tmp/screens/<case>/`, reports in `tmp/playwright/`) and `design` (/impeccable context, then
   `impeccable detect` of the empty, loaded, results and 422 states at 1280x800 and 390x844, reports in
   `tmp/evals/design/`, then the finish: a `.impeccable/critique/` record, `docs/design/audit.md` with
   `P0: 0 · P1: 0`, clean scans, the hook enabled).
-- `ardana pull <ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model in
-  `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo); refs are `hf.co/<org>/<repo>[:<quant>]`
-  (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]` (read in place from
-  `$OLLAMA_MODELS`) and local GGUF paths; `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only.
-  `ardana list`, `ardana show <name>` (JSON) and `ardana rm <name>` (the entry only, never model files) manage it.
-- `ardana run <name> --request <file>` answers with a registry model; `ardana run --gguf <file> --tokenizer
-  <tokenizer.json> [--config <decider_config.json>] [--layout plain|chat] --request <file>` with explicit files; both
-  take `[--gpu-layers -1|0] [--n-ctx N]` and print one `/v1/systemone` response as JSON. `--layout chat` reads the
-  chat template next to the tokenizer, and without `--config` the model gets the stock profile.
+- `ardana pull <name|ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model
+  in `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo), printing download progress on
+  stderr. A library name `<name>[:<quant>]` (`crates/ardana-registry/src/library.toml`: `decider-2b`, `decider-4b`,
+  `qwen3.5-0.8b`, `smollm3-3b`; the default model is `decider-2b`) stands for its `hf.co/` repository and is recorded
+  under that name (`decider-2b:q8_0` for another quant, matched case-insensitively); refs are
+  `hf.co/<org>/<repo>[:<quant>]` (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]`
+  (read in place from `$OLLAMA_MODELS`) and local GGUF paths. Downloads go to the standard HF cache (`$HF_HOME/hub`);
+  `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list`, `ardana show <name>` (JSON) and
+  `ardana rm <name>` (the entry only, never model files) manage it.
+- `ardana run <name> --request <file>` answers with a registry model, pulling a library model first when it is not
+  pulled yet; `ardana run --gguf <file> --tokenizer <tokenizer.json> [--config <decider_config.json>] [--layout
+  plain|chat] --request <file>` with explicit files; both take `[--gpu-layers -1|0] [--n-ctx N]` and print one
+  `/v1/systemone` response as JSON. `--layout chat` reads the chat template next to the tokenizer, and without
+  `--config` the model gets the stock profile.
 - `ardana serve [--host 127.0.0.1] [--port 8000] [--api-key K | ARDANA_API_KEY=K] [--default-model NAME]
-  [--keep-alive 5m] [--max-loaded-models 1] [--max-queued-rows 4096]` serves the registry's models:
-  `POST /v1/systemone`, `GET /v1/models`, `GET /health`. `jev-latest` and every `jev-*` name mean the default model;
-  models load on their first request and unload after `--keep-alive` idle.
+  [--keep-alive 5m] [--max-loaded-models 1] [--max-queued-rows 4096]` serves the registry's models and the library's:
+  `POST /v1/systemone`, `GET /v1/models` (pulled models, then library models with `x_pulled: false` and `x_size`;
+  `x_default` marks the default), `GET /health`. A request naming a library model that is not pulled pulls it first
+  (concurrent requests share the pull); a request without a model, or with the compatibility alias `jev-latest` or any
+  `jev-*` name, uses the default model: `--default-model`, else the first pulled model, else `decider-2b`. The
+  playground speaks only real model names. `models.toml` is reread when it changes, so a model `ardana pull` adds while
+  `serve` runs is servable at once; models load on their first request and unload after `--keep-alive` idle.
+- Running Ardana by hand: under `cargo run` (and `cargo test`), `.cargo/config.toml` puts `ARDANA_HOME` in
+  `tmp/ardana` and `HF_HOME` in `tmp/hf`, so `cargo xtask build` then `cargo run --release -p ardana -- serve` pulls
+  decider-2b into the sandbox on the playground's first RUN (from `tmp/hf` when `cargo xtask fetch` has put it there).
+  The release binary run directly (`target/release/ardana serve`) uses `~/.ardana` and the standard HF cache
+  (`$HF_HOME`, else `~/.cache/huggingface`), like any installed tool; do not do that from an agent session.
 - Before reporting work: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo build --workspace`, `cargo test --workspace`, plus the item's Verify command.
 

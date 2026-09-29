@@ -180,7 +180,10 @@ fn list_show_rm() -> Result<()> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "{args:?}");
         assert!(
-            stderr.contains("no model named \"decider-2b\"; available: qwen3.5-0.8b"),
+            stderr.contains(
+                "no model named \"decider-2b\"; pulled: qwen3.5-0.8b; library, pulled on first use: decider-2b, \
+                 decider-4b, qwen3.5-0.8b, smollm3-3b"
+            ),
             "{stderr}"
         );
     }

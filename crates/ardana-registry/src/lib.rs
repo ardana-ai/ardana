@@ -1,15 +1,18 @@
-//! Model references, `models.toml`, and Hugging Face and Ollama resolution.
+//! Model references, the model library, `models.toml`, and Hugging Face and Ollama resolution.
 //!
-//! `ardana pull <ref>` resolves a reference ([`refs::Ref`]) to weights and a tokenizer in place (the hub cache, the
-//! Ollama store or a local file; nothing is copied), derives the model's profile (from `decider_config.json` when the
-//! weights come with one, else [`ModelProfile::stock`] in the chat layout) and records the result as one entry of
-//! `$ARDANA_HOME/models.toml` ([`Registry`]). The server and `ardana run <name>` [`Registry::resolve`] entries by name.
+//! `ardana pull <ref>` resolves a library name ([`library`]) or a reference ([`refs::Ref`]) to weights and a
+//! tokenizer in place (the hub cache, the Ollama store or a local file; nothing is copied), derives the model's
+//! profile (from `decider_config.json` when the weights come with one, else [`ModelProfile::stock`] in the chat
+//! layout) and records the result as one entry of `$ARDANA_HOME/models.toml` ([`Registry`]). The server and
+//! `ardana run <name>` look names up with [`Registry::named`]: a pulled entry, else a library model they pull first.
 
 pub mod hub;
+pub mod library;
 pub mod ollama;
 pub mod refs;
 
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use ardana_core::{
     ChatTemplateError, Layout, LoadOptions, LoadedModel, ModelProfile, ProfileError, Runtimes,
@@ -19,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use tokenizers::Tokenizer;
 
 use crate::hub::{Hub, Snapshot};
+use crate::library::{LibraryPick, library};
 use crate::refs::{DEFAULT_QUANT, HfFile, Ref, RefError, matches_quant};
 
 /// The registry file inside `$ARDANA_HOME`.
@@ -101,14 +105,15 @@ pub enum RegistryError {
 }
 
 fn unknown_model(name: &str, available: &[String]) -> String {
-    if available.is_empty() {
-        format!("no model named {name:?}; the registry is empty, add one with `ardana pull`")
+    let pulled = if available.is_empty() {
+        "none pulled yet".to_string()
     } else {
-        format!(
-            "no model named {name:?}; available: {}",
-            available.join(", ")
-        )
-    }
+        format!("pulled: {}", available.join(", "))
+    };
+    format!(
+        "no model named {name:?}; {pulled}; library, pulled on first use: {}",
+        library().names().join(", ")
+    )
 }
 
 /// What to do instead when weights from `source` do not load: Ollama converts some models its own way, and upstream
@@ -243,6 +248,33 @@ impl Registry {
             })
     }
 
+    /// What `name` means here: the entry of that name, else the library model it names (which may be pulled under
+    /// its canonical name, `decider-2b` for `decider-2b:Q4_K_M`), else an [`RegistryError::UnknownModel`] listing
+    /// both.
+    pub fn named(&self, name: &str) -> Result<Named<'_>, RegistryError> {
+        if let Some(model) = self.models.iter().find(|m| m.name == name) {
+            return Ok(Named::Pulled(model));
+        }
+        let Some(pick) = library().find(name) else {
+            return Err(RegistryError::UnknownModel {
+                name: name.to_string(),
+                available: self.names(),
+            });
+        };
+        let canonical = pick.name();
+        Ok(match self.models.iter().find(|m| m.name == canonical) {
+            Some(model) => Named::Pulled(model),
+            None => Named::Library(pick),
+        })
+    }
+
+    /// When `models.toml` was last written; `None` while it does not exist.
+    pub fn modified(&self) -> Option<SystemTime> {
+        std::fs::metadata(&self.path)
+            .and_then(|meta| meta.modified())
+            .ok()
+    }
+
     /// The entry named `name`, with its weights and tokenizer still in place.
     pub fn resolve(&self, name: &str) -> Result<ResolvedModel, RegistryError> {
         let model = self.entry(name)?;
@@ -301,8 +333,18 @@ impl Registry {
     }
 }
 
+/// What a model name means in a registry ([`Registry::named`]).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Named<'a> {
+    /// A pulled entry.
+    Pulled(&'a ResolvedModel),
+    /// A library model not pulled yet; [`pull`] its [`LibraryPick::name`].
+    Library(LibraryPick<'static>),
+}
+
 /// The prompt layout a model is read in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum LayoutKind {
     /// decider's plain layout, for decider-format models.
     Plain,
@@ -320,11 +362,40 @@ pub struct PullOptions {
     pub tokenizer: Option<String>,
     /// The layout (default plain with `decider_config.json`, else chat).
     pub layout: Option<LayoutKind>,
+    /// Print each download's progress to stderr (bytes so far and the file's size).
+    pub progress: bool,
 }
 
-/// Resolves `reference` to a registry entry, downloading Hugging Face files into the hub cache unless
-/// `HF_HUB_OFFLINE` is set. Nothing is written to the registry; the caller [`Registry::insert`]s the result.
+/// Resolves `reference`, a library name or a reference, to a registry entry, downloading Hugging Face files into
+/// the hub cache unless `HF_HUB_OFFLINE` is set. A library name pulls the reference it stands for under its
+/// [`LibraryPick::name`], with the library's tokenizer, layout and release date where `opts` and the weights give
+/// none. Nothing is written to the registry; the caller [`Registry::insert`]s the result.
 pub async fn pull(
+    reference: &str,
+    opts: &PullOptions,
+    runtimes: &Runtimes,
+) -> Result<ResolvedModel, RegistryError> {
+    let Some(pick) = library().find(reference) else {
+        return pull_ref(reference, opts, runtimes).await;
+    };
+    let opts = PullOptions {
+        name: Some(opts.name.clone().unwrap_or_else(|| pick.name())),
+        tokenizer: opts
+            .tokenizer
+            .clone()
+            .or_else(|| pick.model.tokenizer.clone()),
+        layout: opts.layout.or(pick.model.layout),
+        progress: opts.progress,
+    };
+    let mut model = pull_ref(&pick.reference(), &opts, runtimes).await?;
+    model
+        .profile
+        .release_date
+        .get_or_insert_with(|| pick.model.release_date.clone());
+    Ok(model)
+}
+
+async fn pull_ref(
     reference: &str,
     opts: &PullOptions,
     runtimes: &Runtimes,
@@ -340,7 +411,7 @@ pub async fn pull(
             msg: "a name is non-empty and has no whitespace".into(),
         });
     }
-    let hub = Hub::from_env()?;
+    let hub = Hub::from_env(opts.progress)?;
     let mut source = reference.to_string();
     let (weights, config, own_tokenizer) = match &parsed {
         Ref::Hf { org, repo, file } => {
@@ -663,11 +734,25 @@ mod tests {
     }
 
     #[test]
-    fn unknown_model_lists_names() {
+    fn unknown_model_lists_pulled_and_library_names() {
         let err = RegistryError::UnknownModel {
             name: "x".into(),
             available: vec!["a".into(), "b".into()],
         };
-        assert_eq!(err.to_string(), "no model named \"x\"; available: a, b");
+        assert_eq!(
+            err.to_string(),
+            "no model named \"x\"; pulled: a, b; library, pulled on first use: decider-2b, decider-4b, \
+             qwen3.5-0.8b, smollm3-3b"
+        );
+        let err = RegistryError::UnknownModel {
+            name: "x".into(),
+            available: Vec::new(),
+        };
+        assert!(
+            err.to_string().starts_with(
+                "no model named \"x\"; none pulled yet; library, pulled on first use: decider-2b,"
+            ),
+            "{err}"
+        );
     }
 }

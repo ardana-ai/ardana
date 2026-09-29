@@ -41,15 +41,32 @@ pub fn App() -> impl IntoView {
     let hash_listener = window_event_listener(ev::hashchange, move |_| load_hash());
     on_cleanup(move || hash_listener.remove());
 
-    // `?autorun=1` runs a share link once, after the model list has loaded.
+    // The model list names the default model (the picker's first pick) and which models a first run pulls.
+    // `?autorun=1` runs a share link once, after the list has loaded.
     let autorun = StoredValue::new(autorun_requested());
     Effect::new(move |_| {
-        if models.get().is_some() && autorun.get_value() {
+        let Some(listed) = models.get() else {
+            return;
+        };
+        if let Ok(list) = listed {
+            deck.set_models(list);
+        }
+        if autorun.get_value() {
             autorun.set_value(false);
             if deck.share_error.get_untracked().is_none() {
                 deck.run();
             }
         }
+    });
+    // A run may have pulled its model: list again.
+    Effect::new(move |previous: Option<usize>| {
+        let run = deck
+            .last
+            .with(|last| last.as_ref().map_or(0, |run| run.number));
+        if previous.is_some_and(|previous| previous != run) {
+            models.refetch();
+        }
+        run
     });
 
     // On a phone the answers land a screen below RUN: bring the first channel, or the fault, into view.

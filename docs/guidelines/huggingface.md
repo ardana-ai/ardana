@@ -44,6 +44,27 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 - Never pass or log a token. `hf-hub` picks up `HF_TOKEN`, `HF_TOKEN_PATH` or `$HF_HOME/token` on its own; with
   `HF_HOME=tmp/hf` no token file exists, and every Step 1 repo is ungated.
 
+### Model library
+- `crates/ardana-registry/src/library.toml` (embedded, parsed once by `library::library()`, validated by a unit test)
+  maps short names to `hf.co/` GGUF repositories: `name`, `weights`, the default `quant`, its GGUF `size` in bytes,
+  `release_date`, and the `tokenizer` repository and `layout` when the GGUF repository needs them. A new model family
+  is one `[[model]]` entry; read sizes and files from the Hub API (`/api/models/<repo>/tree/main`), never invent them.
+- `ardana_registry::pull` resolves a library name first: `<name>[:<quant>]`, both case-insensitive, pulls
+  `<weights>:<quant>` under the registry name `<name>` (or `<name>:<quant>`, lowercased, for another quant), with the
+  library's tokenizer, layout and release date wherever the flags and the weights give none. Everything else is a
+  reference (`Ref::parse`), whose error lists the library names.
+- Library repositories are read at their `main` commit like any `hf.co/` ref; `xtask/fetch.toml` pins the commits the
+  offline tests read from `tmp/hf`.
+
+### Download progress
+- `PullOptions::progress` attaches an `hf_hub::progress::ProgressHandler` per downloaded file (`hub::FileReport`,
+  through the download builder's `maybe_progress`) that prints `downloading <file>: <bytes> / <size>` to stderr at
+  most once a second while the count moves, and `<size> done` at the end. `DownloadEvent::Progress` carries per-file
+  deltas on the HTTP path, `AggregateProgress` the totals of a xet transfer; a cache hit moves no bytes and prints
+  nothing. Handlers must never block: the library calls them on the download's read path.
+- hf-hub locks a blob while it downloads it (`cache::acquire_lock`), so two processes pulling the same file (the CLI
+  and `serve`) do not write it twice. Xet keeps its own state under `$HF_HOME/xet`.
+
 ### Offline mode
 - Read `HF_HUB_OFFLINE` in `ardana-registry` yourself (`ardana_registry::hub::offline`): treat `1`, `ON`, `YES`,
   `TRUE` (case-insensitive) as true, like the Python client, and pass `.local_files_only(true)` on every download call

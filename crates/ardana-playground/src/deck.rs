@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use leptos::prelude::*;
 
-use ardana_api::{QuestionType, SystemOneRequest};
+use ardana_api::{ModelInfo, ModelsResponse, QuestionType, SystemOneRequest};
 use serde_json::Value;
 
 use crate::api::{ApiClient, Exchange};
@@ -12,8 +12,9 @@ use crate::builder::{self, KindMemory};
 use crate::request::{self, Questions, Reply};
 use crate::share::SharePayload;
 
-/// The model a request names when nothing else is picked: the server's default model, as in Jev.
-pub const DEFAULT_MODEL: &str = "jev-latest";
+/// The prefix of the model aliases share links from other playgrounds carry (`jev-latest`, `jev-1.12`); the API reads
+/// them as its default model, and so does the picker.
+const ALIAS_PREFIX: &str = "jev-";
 
 /// Every signal of the page; `Copy`, so each component takes it whole.
 #[derive(Clone, Copy)]
@@ -25,7 +26,12 @@ pub struct Deck {
     pub questions_error: RwSignal<Option<String>>,
     /// The question whose builder is open.
     pub editing: RwSignal<Option<String>>,
+    /// The picked model; empty until `/v1/models` names the default, and a request then names none.
     pub model: RwSignal<String>,
+    /// `/v1/models` as last listed: the pulled models, then the library models a first run pulls.
+    pub models: RwSignal<Vec<ModelInfo>>,
+    /// The model the last run named (none for the server's default).
+    pub run_model: RwSignal<Option<String>>,
     /// Why the URL's share link could not be loaded.
     pub share_error: RwSignal<Option<String>>,
     /// Both editors as they were before a preset load or a removed question, until the next edit.
@@ -79,7 +85,7 @@ impl Deck {
             })
         });
         let state_text = RwSignal::new(String::new());
-        let model = RwSignal::new(DEFAULT_MODEL.to_string());
+        let model = RwSignal::new(String::new());
         let questions = RwSignal::new(Questions::new());
         let inputs_changed = Memo::new(move |_| {
             sent.with(|sent| {
@@ -103,6 +109,8 @@ impl Deck {
             questions_error: RwSignal::new(None),
             editing: RwSignal::new(None),
             model,
+            models: RwSignal::new(Vec::new()),
+            run_model: RwSignal::new(None),
             share_error: RwSignal::new(None),
             previous: RwSignal::new(None),
             kinds: StoredValue::new(HashMap::new()),
@@ -241,23 +249,59 @@ impl Deck {
         self.editing.set(None);
     }
 
+    /// Loads a share link's editors and model; a link without a model, or with an alias, picks the default model.
     pub fn load_share(&self, share: Result<SharePayload, String>) {
         match share {
             Ok(payload) => {
                 self.load(payload.document_text, payload.prompts_text);
-                let model = payload.selected_models.into_iter().next();
-                self.model
-                    .set(model.unwrap_or_else(|| DEFAULT_MODEL.to_string()));
+                let model = payload
+                    .selected_models
+                    .into_iter()
+                    .next()
+                    .filter(|model| !model.starts_with(ALIAS_PREFIX))
+                    .or_else(|| self.default_model_untracked());
+                self.model.set(model.unwrap_or_default());
                 self.share_error.set(None);
             }
             Err(err) => self.share_error.set(Some(err)),
         }
     }
 
+    /// Takes a `/v1/models` list; while no model is picked, picks its default.
+    pub fn set_models(&self, list: ModelsResponse) {
+        self.models.set(list.models);
+        if self.model.with_untracked(String::is_empty)
+            && let Some(default) = self.default_model_untracked()
+        {
+            self.model.set(default);
+        }
+    }
+
+    /// The model requests without one use: the one the list marks `x_default`, else its first pulled model.
+    fn default_model_untracked(&self) -> Option<String> {
+        self.models.with_untracked(|models| {
+            models
+                .iter()
+                .find(|m| m.x_default)
+                .or_else(|| models.iter().find(|m| m.pulled()))
+                .map(|m| m.name.clone())
+        })
+    }
+
+    /// The listed model `name` when it is not pulled yet: the first run naming it pulls it.
+    pub fn unpulled(&self, name: &str) -> Option<ModelInfo> {
+        self.models.with(|models| {
+            models
+                .iter()
+                .find(|m| m.name == name && !m.pulled())
+                .cloned()
+        })
+    }
+
     /// The request RUN would send now.
     pub fn request(&self) -> SystemOneRequest {
         self.questions.with(|questions| {
-            request::request(&self.model.get(), &self.state_text.read(), questions)
+            request::request(&self.model.read(), &self.state_text.read(), questions)
         })
     }
 
@@ -271,7 +315,8 @@ impl Deck {
         if !untrack(|| self.can_run()) {
             return;
         }
-        let body = untrack(|| request::body(&self.request()));
-        self.runner.dispatch(body);
+        let request = untrack(|| self.request());
+        self.run_model.set(request.model.clone());
+        self.runner.dispatch(request::body(&request));
     }
 }

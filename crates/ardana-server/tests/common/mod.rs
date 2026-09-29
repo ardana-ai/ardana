@@ -204,41 +204,59 @@ pub fn scratch(name: &str) -> Result<PathBuf> {
     Ok(dir)
 }
 
-/// A registry in `$ARDANA_TMP/<test>` with one entry per name: decider-2b's tokenizer and `decider_config.json`
-/// profile (renamed after the entry, so responses tell the models apart) over an empty fake weights file
-/// `<name>.fake`. The first entry keeps decider-2b's release date; the others have none.
+/// A registry in `$ARDANA_TMP/<test>/home` with one entry per name, saved to its `models.toml`: decider-2b's
+/// tokenizer and `decider_config.json` profile (renamed after the entry, so responses tell the models apart) over an
+/// empty fake weights file `<name>.fake`. The first entry keeps decider-2b's release date; the others have none.
 pub fn registry(test: &str, names: &[&str]) -> Result<Registry> {
     let dir = scratch(test)?;
+    let mut registry = Registry::open(&dir.join("home"))?;
+    for name in names {
+        registry.insert(fake_entry(&dir, name)?);
+    }
+    if let Some(first) = names.first() {
+        let mut model = registry.entry(first)?.clone();
+        model.profile.release_date = Some("2026-09-24".into());
+        registry.insert(model);
+    }
+    registry.save()?;
+    Ok(registry)
+}
+
+/// A registry entry named `name` over the fake weights `<dir>/<name>.fake` (created), with decider-2b's tokenizer and
+/// `decider_config.json` profile renamed after the entry and no release date.
+pub fn fake_entry(dir: &Path, name: &str) -> Result<ResolvedModel> {
     let repo = "Mapika/decider-2b-GGUF";
     let tokenizer_path = hf_file(repo, "tokenizer.json")?;
     let config = hf_file(repo, "decider_config.json")?;
-    let tokenizer = ardana_registry::load_tokenizer(&tokenizer_path)?;
-    let mut registry = Registry::open(&dir.join("home"))?;
-    for (i, name) in names.iter().enumerate() {
-        let weights = dir.join(format!("{name}.fake"));
-        std::fs::write(&weights, b"")?;
-        let mut profile = ardana_registry::read_profile(
-            &tokenizer_path,
-            &tokenizer,
-            Some(&config),
-            LayoutKind::Plain,
-            name,
-        )?;
-        profile.name = name.to_string();
-        if i > 0 {
-            profile.release_date = None;
+    // Loading the 20 MB tokenizer takes about a second in a debug build: the profile is read once per test binary.
+    static PROFILE: std::sync::OnceLock<ardana_core::ModelProfile> = std::sync::OnceLock::new();
+    let mut profile = match PROFILE.get() {
+        Some(profile) => profile.clone(),
+        None => {
+            let tokenizer = ardana_registry::load_tokenizer(&tokenizer_path)?;
+            let profile = ardana_registry::read_profile(
+                &tokenizer_path,
+                &tokenizer,
+                Some(&config),
+                LayoutKind::Plain,
+                name,
+            )?;
+            PROFILE.get_or_init(|| profile).clone()
         }
-        registry.insert(ResolvedModel {
-            name: name.to_string(),
-            source: format!("hf.co/test/{name}-GGUF"),
-            weights,
-            tokenizer: tokenizer_path.clone(),
-            runtime: "fake".into(),
-            profile,
-            pulled_at: "2026-09-28".into(),
-        });
-    }
-    Ok(registry)
+    };
+    let weights = dir.join(format!("{name}.fake"));
+    std::fs::write(&weights, b"")?;
+    profile.name = name.to_string();
+    profile.release_date = None;
+    Ok(ResolvedModel {
+        name: name.to_string(),
+        source: format!("hf.co/test/{name}-GGUF"),
+        weights,
+        tokenizer: tokenizer_path,
+        runtime: "fake".into(),
+        profile,
+        pulled_at: "2026-09-28".into(),
+    })
 }
 
 /// [`Models`] over [`registry`] with the fake runtime.

@@ -127,11 +127,51 @@ pub struct ModelInfo {
     pub name: String,
     pub description: String,
     pub release_date: String,
+    /// Whether the model is pulled; a library model that is not is pulled on its first request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x_pulled: Option<bool>,
+    /// Whether this is the model requests without a model use.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub x_default: bool,
+    /// A library model not pulled yet: its download size in bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x_size: Option<u64>,
+}
+
+impl ModelInfo {
+    /// Whether the model is pulled; a list without `x_pulled` lists pulled models only.
+    pub fn pulled(&self) -> bool {
+        self.x_pulled != Some(false)
+    }
+}
+
+/// A byte count in decimal units, as Ollama prints model sizes (`2.0 GB`): model sizes in the CLI, in download
+/// progress and, from `x_size`, in the playground.
+pub fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
+    if bytes < 1000 {
+        return format!("{bytes} B");
+    }
+    let mut value = bytes as f64 / 1000.0;
+    let mut unit = 0;
+    while value >= 1000.0 && unit < UNITS.len() - 1 {
+        value /= 1000.0;
+        unit += 1;
+    }
+    format!("{value:.1} {}", UNITS[unit])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sizes_are_decimal() {
+        assert_eq!(human_size(999), "999 B");
+        assert_eq!(human_size(2_019_377_376), "2.0 GB");
+        assert_eq!(human_size(563_000_000), "563.0 MB");
+        assert_eq!(human_size(1_274_396_800), "1.3 GB");
+    }
 
     #[test]
     fn answers_serialise_type_first_and_skip_absent_extras() {

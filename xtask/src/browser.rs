@@ -1,6 +1,7 @@
 //! The browser suites (Q24). `playground`: the release `ardana` from `cargo xtask build`, copied alone into
-//! `tmp/e2e/playground-binary` and serving decider-2b while the playground's `dist/` is moved away, driven by the
-//! Playwright cases in `e2e/playground` on the installed Chrome; plus the placeholder build of `ardana-server`.
+//! `tmp/e2e/playground-binary` and serving decider-2b while the playground's `dist/` is moved away (plus one server
+//! per viewport on an empty registry, for `first_run_pull`), driven by the Playwright cases in `e2e/playground` on
+//! the installed Chrome; plus the placeholder build of `ardana-server`.
 //! `design`: the /impeccable context of the playground, `impeccable detect` on its four states at 1280x800 and
 //! 390x844, and the finish (critique record, audit, clean scans, hook on).
 
@@ -26,6 +27,7 @@ pub const CASES: &[&str] = &[
     "presets",
     "snippets",
     "stale_and_restore",
+    "first_run_pull",
 ];
 /// Playwright project name and viewport, as `playwright.config.ts` and `impeccable detect` use them.
 pub const VIEWPORTS: &[(&str, u32, u32)] = &[("desktop", 1280, 800), ("mobile", 390, 844)];
@@ -73,19 +75,37 @@ pub fn playground(sandbox: &Sandbox) -> Result<()> {
             &sandbox.tmp().join("e2e/playground-dist-moved"),
         )?;
         let server = Server::start(sandbox, &copy, "playground", None)?;
+        // `first_run_pull` starts on an empty registry, once per viewport: its first run pulls decider-2b.
+        let empty: Vec<(&str, Server)> = VIEWPORTS
+            .iter()
+            .map(|(project, _, _)| {
+                Server::start_empty(sandbox, &copy, &format!("playground-empty-{project}"))
+                    .map(|server| (*project, server))
+            })
+            .collect::<Result<_>>()?;
         let root = sandbox.repo_root();
-        let status = sandbox
-            .command(
-                root.join(PLAYGROUND_DIR)
-                    .join("node_modules/.bin/playwright"),
-            )
+        let mut playwright = sandbox.command(
+            root.join(PLAYGROUND_DIR)
+                .join("node_modules/.bin/playwright"),
+        );
+        playwright
             .current_dir(root.join(PLAYGROUND_DIR))
             .arg("test")
             .env("ARDANA_BASE_URL", &server.url)
-            .env("ARDANA_REPO_ROOT", root)
+            .env("ARDANA_REPO_ROOT", root);
+        for (project, server) in &empty {
+            playwright.env(
+                format!("ARDANA_EMPTY_URL_{}", project.to_uppercase()),
+                &server.url,
+            );
+        }
+        let status = playwright
             .status()
             .context("running playwright test; run `cargo xtask fetch`")?;
         server.stop()?;
+        for (_, server) in empty {
+            server.stop()?;
+        }
         status
     };
     if !status.success() {

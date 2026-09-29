@@ -13,6 +13,8 @@ pub mod py;
 pub mod runtime;
 pub mod systemone;
 
+/// For the crates that may depend on the core only (`ardana-registry`).
+pub use ardana_api::human_size;
 pub use chat::{ChatTemplateError, TemplateSpecials, chat_layout, read_template};
 pub use engine::{DecideError, Decider, Limits, Plan};
 pub use profile::{AnswerType, Layout, ModelProfile, ProfileError, from_decider_config};

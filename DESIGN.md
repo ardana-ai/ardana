@@ -378,7 +378,8 @@ The only transport key on the fascia: a chrome transport key, tactile and delibe
 - **On:** the key sits in (inset top shadow, darker aluminium) and its lamp lights amber, like the cassette's mode lamps: it says what will be sent. **Focus:** Engraving Ink outline around the key.
 
 ### Model Switch
-- **Style:** a real `select` on a chrome plate (6px), model name in the Switch role, a 2px engraved chevron at the right, the "Model" legend engraved beneath. `jev-*` names read "jev-latest (server default)" until a run sent under that alias is answered, then "jev-latest → decider-2b-v11", the model the response reported; the page never guesses the default. After a run, an "Answered by" legend shows the model the API reported, followed by "From last run · inputs changed" while stale.
+- **Style:** a real `select` on a chrome plate (6px), model name in the Switch role, a 2px engraved chevron at the right, the "Model" legend engraved beneath. It names real local models only: the pulled ones under "Pulled", then the library models a first run pulls under "Library · pulls on first run", each with its download size ("decider-4b · 2.7 GB"). It starts on the server's default model. After a run, an "Answered by" legend shows the model the API reported, followed by "From last run · inputs changed" while stale.
+- **Pulling:** while a run waits on its model's first download, the RUN legend reads "Pulling" and the note under the rail says "Downloading decider-2b (1.3 GB) on first run" in Soft Engraving (a wait, not a fault). The API reports no progress, so no bar is drawn.
 - **Focus:** Engraving Ink outline at 3px offset.
 
 ### Counters and Readouts (dot-matrix windows)
