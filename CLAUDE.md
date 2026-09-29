@@ -3,8 +3,8 @@
 Ardana is a local-first tool that pulls and runs open System 1 decision models (decider-style one-pass readouts) the
 way Ollama does, from one `ardana` Rust binary that serves them over an HTTP API (compatible with Jev and TypeSafe
 clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime` abstraction; Qwen3.5
-is the first model family. The Step 1 plan lives in `ardana-serve-prd/main.md`: its Decisions and Contracts are
-binding (as its Amendments change them), its Requirements are the definition of done.
+is the first model family. Planning documents live in gitignored `*-prd/` folders; when one is present locally, its
+Decisions and Contracts are binding (as its Amendments change them) and its Requirements are the definition of done.
 
 ## Workspace
 

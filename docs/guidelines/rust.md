@@ -67,7 +67,7 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Write `Display` messages lowercase and without trailing punctuation, except where a message must reproduce
   decider's exact text (R2.3) or contain a contract substring ("context window", "has no chat template").
 - Use `anyhow::Result` in `xtask`, in the `ardana` binary's command layer, and at the `Runtime`/`LoadedModel` trait
-  boundary exactly as the contracts in `ardana-serve-prd/main.md` define it; wrap it as `DecideError::Runtime`.
+  boundary exactly as `crates/ardana-core/src/runtime.rs` defines it; wrap it as `DecideError::Runtime`.
 - Attach context with `.context()`/`.with_context(|| ...)` naming the path, ref or model involved; use `bail!` and
   `ensure!` for early exits in xtask and the binary.
 - Convert between error types with `From` impls (`#[from]`) so `?` works; do not stringify an error just to re-wrap it.
