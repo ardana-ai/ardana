@@ -79,6 +79,11 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   helpers through `tests/common/mod.rs`, not a top-level `tests/common.rs`.
 - Keep `main.rs` thin and logic in `lib.rs` so integration tests can call it; test the CLI through
   `env!("CARGO_BIN_EXE_ardana")`.
+- The `ardana` CLI follows Ollama's shape (`serve`/`start`, `run`, `pull`, `list`/`ls`, `show`, `ps`, `rm`, `-v`):
+  a one-line imperative description per command and flag, an `Examples:` block in every command's `after_help`
+  (`crates/ardana/src/help.rs`, checked by a unit test), readable output by default with `--json` for the exact
+  data, figures through `ardana_api::format`, and errors that end with the command to type next. Every `serve` flag
+  also reads an `ARDANA_<FLAG>` variable, its value hidden in `--help`.
 - Mark every test that needs a real model, network, the Ollama store or more than a few seconds with
   `#[ignore = "e2e: <what it needs>"]`. Plain `cargo test` stays fast and offline; `cargo xtask e2e rust` runs
   `cargo test --workspace -- --include-ignored` under the home guard.

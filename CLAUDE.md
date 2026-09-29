@@ -56,15 +56,21 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   under that name (`decider-2b:q8_0` for another quant, matched case-insensitively); refs are
   `hf.co/<org>/<repo>[:<quant>]` (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]`
   (read in place from `$OLLAMA_MODELS`) and local GGUF paths. Downloads go to the standard HF cache (`$HF_HOME/hub`);
-  `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list`, `ardana show <name>` (JSON) and
-  `ardana rm <name>` (the entry only, never model files) manage it.
-- `ardana run <name> --request <file>` answers with a registry model, pulling a library model first when it is not
-  pulled yet; `ardana run --gguf <file> --tokenizer <tokenizer.json> [--config <decider_config.json>] [--layout
-  plain|chat] --request <file>` with explicit files; both take `[--gpu-layers -1|0] [--n-ctx N]` and print one
-  `/v1/systemone` response as JSON. `--layout chat` reads the chat template next to the tokenizer, and without
-  `--config` the model gets the stock profile.
-- `ardana serve [--host 127.0.0.1] [--port 8000] [--api-key K | ARDANA_API_KEY=K] [--default-model NAME]
-  [--keep-alive 5m] [--max-loaded-models 1] [--max-queued-rows 4096]` serves the registry's models and the library's:
+  `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list` (`ls`: name, size, pull date,
+  source), `ardana show <name> [--json]` (Model, Calibration and Files sections; a library model not pulled yet says
+  how to get it) and `ardana rm <name>...` (the entries only, never model files; every name is checked first) manage
+  it; `ardana ps [--host] [--port]` lists the models a running `serve` has loaded (from `/health`).
+- `ardana run <name> [STATE] [--noul Q] [--choice Q OPTION...] [--score Q LEVEL...]` asks inline questions (`q1`,
+  `q2`, ... in the order given; the state is read from stdin when left out), or `ardana run <name> --request
+  <file|->` sends a whole `/v1/systemone` body. It prints each answer under its question (the answer marked `*`,
+  figures in the playground's formats), `--json` prints the response instead and `--verbose` adds the model, tokens
+  and timings on stderr; a library model not pulled yet is pulled first. `ardana run --gguf <file> --tokenizer
+  <tokenizer.json> [--config <decider_config.json>] [--layout plain|chat] --request <file>` runs explicit files;
+  both take `[--gpu-layers -1|0] [--n-ctx N]`. `--layout chat` reads the chat template next to the tokenizer, and
+  without `--config` the model gets the stock profile.
+- `ardana serve` (alias `start`) `[--host 127.0.0.1] [--port 8000] [--api-key K] [--default-model NAME]
+  [--keep-alive 5m] [--max-loaded-models 1] [--max-queued-rows 4096]`, each flag also read from `ARDANA_<FLAG>`
+  (`ARDANA_PORT`, `ARDANA_API_KEY`, ...), serves the registry's models and the library's:
   `POST /v1/systemone`, `GET /v1/models` (pulled models, then library models with `x_pulled: false` and `x_size`;
   `x_default` marks the default), `GET /health`. A request naming a library model that is not pulled pulls it first
   (concurrent requests share the pull); a request without a model, or with the compatibility alias `jev-latest` or any

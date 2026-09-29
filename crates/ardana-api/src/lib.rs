@@ -4,9 +4,20 @@
 //! validation message instead of a deserialisation error; [`Question`] is the typed form clients build specs with.
 //! Maps keep insertion order, so answers follow the request's question order.
 
+pub mod format;
+
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/// A request's `state` from text as a person typed it: text that parses as a JSON object or array is sent as that
+/// JSON; any other text is sent as a string. The playground and `ardana run` read the state this way.
+pub fn state_value(text: &str) -> Value {
+    match serde_json::from_str::<Value>(text) {
+        Ok(value @ (Value::Object(_) | Value::Array(_))) => value,
+        _ => Value::String(text.to_string()),
+    }
+}
 
 /// `POST /v1/systemone` request body.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

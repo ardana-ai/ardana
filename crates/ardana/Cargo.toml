@@ -17,7 +17,7 @@ ardana-core.workspace = true
 ardana-llama.workspace = true
 ardana-registry.workspace = true
 ardana-server.workspace = true
-clap.workspace = true
+clap = { workspace = true, features = ["env"] }
 serde_json.workspace = true
 tokenizers.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "net", "time"] }

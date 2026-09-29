@@ -7,13 +7,7 @@ use serde_json::Value;
 /// A `questions` map: question id to its raw spec, in editor order.
 pub type Questions = IndexMap<String, Value>;
 
-/// State text that parses as a JSON object or array is sent as that JSON; any other text is sent as a string.
-pub fn state_value(text: &str) -> Value {
-    match serde_json::from_str::<Value>(text) {
-        Ok(value @ (Value::Object(_) | Value::Array(_))) => value,
-        _ => Value::String(text.to_string()),
-    }
-}
+pub use ardana_api::state_value;
 
 /// Parses the `questions` editor: a JSON object of question specs. Errors say where the text goes wrong in plain
 /// words.

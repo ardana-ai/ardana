@@ -3,7 +3,6 @@
 mod api;
 mod builder;
 mod deck;
-mod format;
 mod presets;
 mod request;
 mod share;

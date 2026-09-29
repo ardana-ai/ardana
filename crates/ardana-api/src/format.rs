@@ -1,5 +1,5 @@
-//! How API numbers are shown: probabilities as percent with one decimal, confidence, noul and score with two
-//! decimals. Rounding works on the number's shortest decimal text (the JSON the API sent), half up, so a value
+//! How API numbers are shown, in the playground and by `ardana run`: probabilities as percent with one decimal,
+//! confidence, noul and score with two decimals. Rounding works on the number's shortest decimal text (the JSON the API sent), half up, so a value
 //! displays the way its decimal digits read, never the way its binary approximation happens to fall.
 
 /// `0.97315` as `97.3%`.

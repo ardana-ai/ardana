@@ -36,27 +36,54 @@ pub const BODY_LIMIT: usize = 32 << 20;
 /// `ardana serve` options.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
 pub struct ServeArgs {
-    /// The address to bind; the default keeps the API on this machine.
-    #[arg(long, default_value = "127.0.0.1")]
+    /// The address to listen on; 0.0.0.0 opens the API to your network
+    #[arg(
+        long,
+        env = "ARDANA_HOST",
+        hide_env_values = true,
+        default_value = "127.0.0.1"
+    )]
     pub host: String,
-    #[arg(long, default_value_t = 8000)]
+    /// The port to listen on
+    #[arg(
+        long,
+        env = "ARDANA_PORT",
+        hide_env_values = true,
+        default_value_t = 8000
+    )]
     pub port: u16,
-    /// Require `Authorization: Bearer <key>` on `/v1/*`; without a key the API is open.
+    /// Require this key on /v1 (Authorization: Bearer <key>); without one the API is open
     #[arg(long, env = "ARDANA_API_KEY", hide_env_values = true)]
     pub api_key: Option<String>,
-    /// The model requests without a model (and the API's `jev-*` compatibility aliases) use: a pulled or a library
-    /// model; default the first pulled model, else the library default (decider-2b).
-    #[arg(long)]
+    /// The model for requests that name none (or Jev's jev-latest); default the first pulled model, else decider-2b
+    #[arg(
+        long,
+        value_name = "MODEL",
+        env = "ARDANA_DEFAULT_MODEL",
+        hide_env_values = true
+    )]
     pub default_model: Option<String>,
-    /// How long a model stays loaded after its last request: `300ms`, `30s`, `5m`, `1h` or plain seconds.
-    #[arg(long, default_value = "5m", value_parser = parse_duration)]
+    /// How long an idle model stays loaded, e.g. 30s, 5m, 1h
+    #[arg(long, env = "ARDANA_KEEP_ALIVE",
+        hide_env_values = true, default_value = "5m", value_parser = parse_duration)]
     pub keep_alive: Duration,
-    /// Models loaded at once; loading one more unloads the least recently used.
-    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..))]
+    /// How many models stay loaded at once; one more unloads the least recently used
+    #[arg(
+        long,
+        env = "ARDANA_MAX_LOADED_MODELS",
+        hide_env_values = true,
+        default_value_t = 1,
+        value_parser = clap::value_parser!(u32).range(1..)
+    )]
     pub max_loaded_models: u32,
-    /// Scoring rows (questions, isolated score levels expanded) admitted and not yet answered; a request beyond
-    /// it gets 503 with `Retry-After`.
-    #[arg(long, default_value_t = 4096, value_parser = clap::value_parser!(u32).range(1..))]
+    /// Scoring rows waiting at once (a question, or a score level read on its own, is a row); more gets 503
+    #[arg(
+        long,
+        env = "ARDANA_MAX_QUEUED_ROWS",
+        hide_env_values = true,
+        default_value_t = 4096,
+        value_parser = clap::value_parser!(u32).range(1..)
+    )]
     pub max_queued_rows: u32,
 }
 

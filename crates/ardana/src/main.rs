@@ -2,11 +2,13 @@
 
 use std::process::ExitCode;
 
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches};
 
 fn main() -> ExitCode {
-    let cli = ardana::Cli::parse();
-    match ardana::run(cli) {
+    // The matches stay around: `ardana run` asks its `--noul`, `--choice` and `--score` questions in the order given.
+    let matches = ardana::Cli::command().get_matches();
+    let cli = ardana::Cli::from_arg_matches(&matches).unwrap_or_else(|err| err.exit());
+    match ardana::run(cli, &matches) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("error: {err:#}");

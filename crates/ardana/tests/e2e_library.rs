@@ -104,7 +104,7 @@ fn pull_library_names() -> Result<()> {
 #[ignore = "e2e: decider-2b Q4_K_M GGUF in tmp/hf (cargo xtask fetch), loaded through llama.cpp"]
 fn run_pulls_a_library_model_first() -> Result<()> {
     let ardana = Ardana::new("e2e-library-run")?;
-    let mut cmd = ardana.command(["run", "decider-2b", "--request"]);
+    let mut cmd = ardana.command(["run", "decider-2b", "--json", "--request"]);
     cmd.arg(common::request("ticket.json"))
         .env(NO_HUB.0, NO_HUB.1);
     let out = cmd.output()?;
@@ -122,7 +122,7 @@ fn run_pulls_a_library_model_first() -> Result<()> {
     );
 
     // Pulled now: the second run pulls nothing.
-    let mut cmd = ardana.command(["run", "decider-2b", "--request"]);
+    let mut cmd = ardana.command(["run", "decider-2b", "--json", "--request"]);
     cmd.arg(common::request("ticket.json"))
         .env(NO_HUB.0, NO_HUB.1);
     let out = cmd.output()?;

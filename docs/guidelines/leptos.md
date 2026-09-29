@@ -88,7 +88,7 @@ design workflow that gates every UI change (Q23, Q27).
   `link`), `request.rs` (state mode, questions parsing, the request and its body, editor texts, reading replies into
   typed answers or raw JSON and error `detail`s), `builder.rs` (question edits on raw specs), `presets.rs` (the three
   presets, request files in `presets/` plus `tests/fixtures/requests/ticket.json`), `snippets.rs` (curl, Python and
-  TypeScript), `format.rs`, `deck.rs` (`Deck`: every signal of the page, `Copy`, passed whole to components, plus the
+  TypeScript), `deck.rs` (`Deck`: every signal of the page, `Copy`, passed whole to components, plus the
   `Action` that runs and the `Memo` of the last run) and `ui/` with one module per region: `sidebar` (the model
   select, the presets, the page's sections), `topbar` (the sidebar opener, Share and its popover, Run, the banner
   under it), `state` (the state block), `questions` (the last run's line, the fault callout, one block per question
@@ -98,8 +98,9 @@ design workflow that gates every UI change (Q23, Q27).
   state.
 - Figures: every API value on screen is a `ui::figure` element with `data-field` (a JSON pointer into the response),
   `data-value` (the raw value: a number as the shortest JSON text, a string as is) and `data-format` (`percent`,
-  `fixed2`, `verbatim`). Formatting rounds the number's decimal text half up (`format::round_decimal`), never the
-  binary value, so `0.1235` shows `12.4%` on every platform; the Playwright helpers apply the same rule with BigInt.
+  `fixed2`, `verbatim`). Formatting (`ardana_api::format`, shared with `ardana run`) rounds the number's decimal
+  text half up (`round_decimal`), never the binary value, so `0.1235` shows `12.4%` on every platform; the Playwright
+  helpers apply the same rule with BigInt.
 - The page speaks only real model names; no text on it mentions Jev. The model picker lists `/v1/models`: the pulled
   models (`x_pulled` not `false`) in an optgroup "Pulled", then the library models a first run pulls in "Library ·
   pulls on first run", labelled with their `x_size` (`decider-4b · 2.7 GB`, `ardana_api::human_size`); a share link

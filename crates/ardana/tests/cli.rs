@@ -1,11 +1,11 @@
 //! R4.4 and R4.6: the registry commands `list`, `show` and `rm`, and `ardana run` on an Ollama blob llama.cpp cannot
-//! load.
+//! load; the commands' guidance when input is missing, and `ardana run`'s inline questions on a real model.
 
 mod common;
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use common::Ardana;
 
 /// A GGUF v3 header: magic, version, tensor count, then `kv` string pairs.
@@ -104,7 +104,7 @@ fn unloadable_ollama_blob() -> Result<()> {
 fn list_show_rm() -> Result<()> {
     let ardana = Ardana::new("cli-list-show-rm")?;
     let empty = ardana.ok(["list"])?;
-    assert_eq!(empty.trim(), "NAME  SOURCE  FORMAT  SIZE  LAYOUT");
+    assert_eq!(empty.trim(), "NAME  SIZE  PULLED  SOURCE");
 
     ardana.ok(["pull", "hf.co/Mapika/decider-2b-GGUF:Q4_K_M"])?;
     ardana.ok([
@@ -129,26 +129,33 @@ fn list_show_rm() -> Result<()> {
     assert_eq!(
         rows,
         [
-            vec!["NAME", "SOURCE", "FORMAT", "SIZE", "LAYOUT"],
+            vec!["NAME", "SIZE", "PULLED", "SOURCE"],
             vec![
                 "decider-2b",
-                "hf.co/Mapika/decider-2b-GGUF:Q4_K_M",
-                "gguf",
                 "1.3 GB",
-                "plain"
+                "today",
+                "hf.co/Mapika/decider-2b-GGUF:Q4_K_M"
             ],
             vec![
                 "qwen3.5-0.8b",
-                "hf.co/ggml-org/Qwen3.5-0.8B-GGUF:Q4_0",
-                "gguf",
                 "563.0 MB",
-                "chat"
+                "today",
+                "hf.co/ggml-org/Qwen3.5-0.8B-GGUF:Q4_0"
             ],
         ],
         "{list}"
     );
 
-    let show: serde_json::Value = serde_json::from_str(&ardana.ok(["show", "decider-2b"])?)?;
+    let show: serde_json::Value =
+        serde_json::from_str(&ardana.ok(["show", "decider-2b", "--json"])?)?;
+    let shown = ardana.ok(["show", "decider-2b"])?;
+    for line in [
+        "    profile         decider-2b-v11",
+        "    layout          plain (decider format)",
+        "    choice          temperature 1.164",
+    ] {
+        assert!(shown.contains(line), "{line:?} in:\n{shown}");
+    }
     let weights = common::hf_file("Mapika/decider-2b-GGUF", "decider-2b-v11-Q4_K_M.gguf")?;
     assert_eq!(show["name"], "decider-2b");
     assert_eq!(show["source"], "hf.co/Mapika/decider-2b-GGUF:Q4_K_M");
@@ -174,18 +181,151 @@ fn list_show_rm() -> Result<()> {
         assert!(path.is_file(), "rm left {} in the HF cache", path.display());
     }
     assert!(!ardana.ok(["list"])?.contains("decider-2b"));
+    // Removed, decider-2b is a library model again: `show` says how to get it.
+    assert!(
+        ardana
+            .ok(["show", "decider-2b"])?
+            .contains("not pulled yet; `ardana pull decider-2b`")
+    );
 
-    for args in [["show", "decider-2b"], ["rm", "decider-2b"]] {
+    for (args, name) in [
+        (["show", "nope"], "nope"),
+        (["rm", "decider-2b"], "decider-2b"),
+    ] {
         let output = ardana.output(args)?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "{args:?}");
         assert!(
-            stderr.contains(
-                "no model named \"decider-2b\"; pulled: qwen3.5-0.8b; library, pulled on first use: decider-2b, \
+            stderr.contains(&format!(
+                "no model named \"{name}\"; pulled: qwen3.5-0.8b; library, pulled on first use: decider-2b, \
                  decider-4b, qwen3.5-0.8b, smollm3-3b"
-            ),
+            )),
             "{stderr}"
         );
     }
+    Ok(())
+}
+
+/// Missing input is answered with what to type, before any model loads.
+#[test]
+fn guidance_without_a_model() -> Result<()> {
+    let ardana = Ardana::new("cli-guidance")?;
+    let failure = |args: &[&str], stdin: &str| -> Result<String> {
+        let mut cmd = ardana.command(args);
+        cmd.stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let mut child = cmd.spawn()?;
+        std::io::Write::write_all(child.stdin.as_mut().context("stdin")?, stdin.as_bytes())?;
+        let output = child.wait_with_output()?;
+        assert_eq!(output.status.code(), Some(1), "{args:?} fails");
+        assert!(output.stdout.is_empty(), "{args:?} prints no answer");
+        Ok(String::from_utf8(output.stderr)?)
+    };
+    let no_question = failure(&["run", "decider-2b", "My card was charged twice."], "")?;
+    assert!(
+        no_question.contains(
+            "ask at least one question with --noul, --choice or --score, for example:\n  ardana run decider-2b"
+        ),
+        "{no_question}"
+    );
+    let no_state = failure(&["run", "decider-2b", "--noul", "Refund?"], "\n")?;
+    assert!(no_state.contains("stdin held no state"), "{no_state}");
+    // Nothing listens on the discard port.
+    let no_server = failure(&["ps", "--port", "9"], "")?;
+    assert!(
+        no_server.contains(
+            "no ardana serve answers at http://127.0.0.1:9; start one with `ardana serve`"
+        ),
+        "{no_server}"
+    );
+
+    let empty = ardana.output(["list"])?;
+    assert_eq!(
+        String::from_utf8(empty.stdout)?,
+        "NAME  SIZE  PULLED  SOURCE\n"
+    );
+    assert!(
+        String::from_utf8(empty.stderr)?
+            .contains("no models pulled yet; try `ardana pull decider-2b`")
+    );
+    let library = ardana.ok(["show", "decider-4b"])?;
+    assert!(library.contains("2.7 GB to download"), "{library}");
+    for help in [["--help"], ["run --help"], ["pull --help"]].map(|a| a[0]) {
+        let args: Vec<&str> = help.split(' ').collect();
+        assert!(ardana.ok(&args)?.contains("Examples:"), "ardana {help}");
+    }
+    Ok(())
+}
+
+/// `ardana run` with its questions on the command line and the state piped in, on decider-2b: each answer under its
+/// question, the answer marked, and `--json` the same answers as `q1`, `q2`, `q3` in the order asked.
+#[test]
+#[ignore = "e2e: decider-2b Q4_K_M GGUF and files in tmp/hf (cargo xtask fetch)"]
+fn run_inline_questions() -> Result<()> {
+    let ardana = Ardana::new("cli-run-inline")?;
+    ardana.ok(["pull", "hf.co/Mapika/decider-2b-GGUF:Q4_K_M"])?;
+    let args = [
+        "run",
+        "decider-2b",
+        "--choice",
+        "Which team should handle this?",
+        "billing",
+        "technical",
+        "sales",
+        "--noul",
+        "Does the customer ask for a refund?",
+        "--score",
+        "How upset is the customer?",
+        "calm",
+        "annoyed",
+        "furious",
+    ];
+    let ask = |extra: &[&str]| -> Result<String> {
+        let mut cmd = ardana.command(args.iter().chain(extra));
+        cmd.stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let mut child = cmd.spawn()?;
+        std::io::Write::write_all(
+            child.stdin.as_mut().context("stdin")?,
+            b"I was charged twice for order A-104 and the app crashes on login. Refund me now!\n",
+        )?;
+        let output = child.wait_with_output()?;
+        println!("{cmd:?}:\n{}", String::from_utf8_lossy(&output.stdout));
+        ensure!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(String::from_utf8(output.stdout)?)
+    };
+    let text = ask(&[])?;
+    let blocks: Vec<&str> = text.split("\n\n").collect();
+    assert_eq!(blocks.len(), 3, "{text}");
+    for (block, title) in blocks.iter().zip([
+        "Which team should handle this?",
+        "Does the customer ask for a refund?",
+        "How upset is the customer?",
+    ]) {
+        assert!(block.starts_with(title), "{block}");
+    }
+    assert_eq!(
+        blocks[0].matches("\n  * ").count(),
+        1,
+        "one answer: {}",
+        blocks[0]
+    );
+    assert!(blocks[1].contains("probability of yes"), "{}", blocks[1]);
+    assert!(blocks[2].contains("score "), "{}", blocks[2]);
+
+    let json: serde_json::Value = serde_json::from_str(&ask(&["--json"])?)?;
+    let kinds: Vec<(&str, &str)> = json["answers"]
+        .as_object()
+        .context("answers")?
+        .iter()
+        .map(|(id, a)| (id.as_str(), a["type"].as_str().unwrap_or_default()))
+        .collect();
+    assert_eq!(kinds, [("q1", "choice"), ("q2", "noul"), ("q3", "score")]);
     Ok(())
 }

@@ -40,14 +40,14 @@ pub fn request(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Runs `ardana run <args>`, prints its output and parses the response.
+/// Runs `ardana run <args> --json`, prints its output and parses the response.
 pub fn ardana_run<I, S>(args: I) -> Result<Value>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_ardana"));
-    cmd.arg("run").args(args);
+    cmd.arg("run").args(args).arg("--json");
     parse_run(&mut cmd)
 }
 
@@ -128,10 +128,10 @@ impl Ardana {
         Ok(String::from_utf8(output.stdout)?)
     }
 
-    /// `ardana run <name> --request <request> <extra>`, parsed.
+    /// `ardana run <name> --request <request> <extra> --json`, parsed.
     pub fn run_named(&self, name: &str, request: &Path, extra: &[&str]) -> Result<Value> {
         let mut cmd = self.command(["run", name, "--request"]);
-        cmd.arg(request).args(extra);
+        cmd.arg(request).args(extra).arg("--json");
         parse_run(&mut cmd)
     }
 
