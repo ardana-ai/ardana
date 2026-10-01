@@ -185,6 +185,7 @@ async fn shutdown_signal() {
             std::future::pending::<()>().await;
         }
     };
+    #[cfg(unix)]
     let terminate = async {
         match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
             Ok(mut signal) => {
@@ -193,6 +194,9 @@ async fn shutdown_signal() {
             Err(_) => std::future::pending::<()>().await,
         }
     };
+    // Windows has no SIGTERM: Ctrl-C stops the server there.
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
     tokio::select! {
         () = ctrl_c => {},
         () = terminate => {},
