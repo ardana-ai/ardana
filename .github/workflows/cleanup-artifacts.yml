@@ -1,27 +1,43 @@
-# Deletes every artifact of a finished "Release" run (published, failed, cancelled or dry-run). The artifacts only
-# carry files between that run's jobs; the GitHub Release keeps the published files, so nothing is lost.
-name: Clean up release artifacts
+# Deletes the artifacts of every finished workflow run in the repository (succeeded, failed, cancelled or dry-run),
+# keeping only those of runs still in progress, whose later jobs need them. Artifacts only carry files between the
+# jobs of one run; published files live on the GitHub Release, so nothing is lost.
+#
+# It sweeps after every run of the workflows listed under `workflow_run` (GitHub matches them by name only, so add
+# each new workflow there) and once a day, which also catches any workflow not listed.
+name: Clean up artifacts
 
 on:
   workflow_run:
-    workflows: [Release]
+    workflows: [Release, Cut release]
     types: [completed]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
 
 permissions: {}
 
+concurrency:
+  group: cleanup-artifacts
+
 jobs:
-  delete:
+  sweep:
     runs-on: ubuntu-22.04
     permissions:
       actions: write
     steps:
-      - name: Delete the run's artifacts
+      - name: Delete the artifacts of finished runs
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[] | "\(.id) \(.name)"' |
-            while read -r id name; do
-              echo "deleting $name"
-              gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired | not) | "\(.id) \(.workflow_run.id) \(.name)"' |
+            while read -r id run name; do
+              status=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" --jq .status 2>/dev/null || echo deleted)
+              case $status in
+                queued | in_progress | waiting | requested | pending)
+                  echo "keeping $name: run $run is $status" ;;
+                *)
+                  echo "deleting $name: run $run is $status"
+                  gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" ;;
+              esac
             done

@@ -137,9 +137,11 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   `MAJOR.MINOR.PATCH`. `main` must accept pushes from `github-actions[bot]`.
 - Run "Release" (`release.yml`) alone with its default tag `dry-run` to build every target without publishing. To
   retry a release whose build failed after the bump, run "Release" with the existing tag instead of cutting again.
-- Leave no artifacts behind: `release.yml`'s artifacts only carry files between its jobs, so
-  `.github/workflows/cleanup-artifacts.yml` (on `workflow_run` of "Release", `completed`) deletes every artifact of
-  each finished run, published, failed, cancelled or dry-run. The GitHub Release keeps the published files.
+- Leave no artifacts behind, for any workflow: artifacts only carry files between the jobs of one run (the GitHub
+  Release keeps the published files), so `.github/workflows/cleanup-artifacts.yml` deletes the artifacts of every
+  finished run in the repository, keeping only runs still queued or in progress. It sweeps after each run of the
+  workflows its `workflow_run` lists (GitHub matches them by name only: add every new workflow's `name` there), daily
+  as a catch-all, and on demand.
 - Check a release locally without pushing: `tmp/bin/dist plan`, then
   `tmp/bin/dist build --artifacts=local --target aarch64-apple-darwin` (binary in `target/aarch64-apple-darwin/dist/`,
   archive in `target/distrib/`) and `tmp/bin/dist build --artifacts=global` (installers).
