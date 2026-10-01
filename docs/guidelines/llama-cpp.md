@@ -26,8 +26,9 @@ llama.cpp.
   `GGML_F16C` to `ON`, so every local, CI and dist build runs on any AVX2 CPU and never on the build machine's own
   features (`GGML_NATIVE` stays `OFF`, as the build script sets it without `target-cpu=native`). ggml reads them only
   for x86 targets. They travel as env vars, not `rustflags`, because dist sets `RUSTFLAGS` on every build.
-- MSVC builds link the static C runtime (Q3): `[env]` sets `LLAMA_STATIC_CRT=1`, which matches dist's
-  `+crt-static`, so `ardana.exe` needs no `VCRUNTIME140.dll`; other targets ignore it.
+- MSVC builds link the static C runtime (Q3): `[env]` sets `LLAMA_STATIC_CRT=1` for llama.cpp and
+  `[target.'cfg(all(windows, target_env = "msvc"))'] rustflags` sets `+crt-static` for Rust, which dist's own
+  `RUSTFLAGS` repeat under dist, so `ardana.exe` needs no `VCRUNTIME140.dll`; other targets ignore both.
 - The build script registers `rerun-if-env-changed` only for the `GGML_*` variables present at its last run: after
   adding one, run `cargo clean -p llama-cpp-sys-2` (with the profile and `--target` of the build) to reconfigure.
 - Do not enable a GPU feature on macOS: llama.cpp turns Metal on by default on Apple targets and the build script only

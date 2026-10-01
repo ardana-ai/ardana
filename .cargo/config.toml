@@ -23,3 +23,8 @@ GGML_AVX2 = "ON"
 GGML_FMA = "ON"
 GGML_F16C = "ON"
 LLAMA_STATIC_CRT = "1"
+
+# MSVC builds link the static C runtime to match `LLAMA_STATIC_CRT` (Q3) in a
+# plain `cargo build` too; under dist its `RUSTFLAGS` (the same flag) apply.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-Ctarget-feature=+crt-static"]
