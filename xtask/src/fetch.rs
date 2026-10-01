@@ -4,9 +4,8 @@
 //! `cargo xtask fetch --tests` installs only the Hub files plain `cargo test`
 //! reads ([`fetch_tests`]).
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::Command;
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
@@ -122,44 +121,19 @@ pub fn fetch(sandbox: &Sandbox) -> Result<()> {
     Ok(())
 }
 
-/// Installs only what plain `cargo test` reads: every `[[hf]]` and
-/// `[[hf_local]]` file but the GGUF weights. A gated `[[hf_local]]` repository
-/// is copied from this machine's Hub cache when it holds the revision, else
-/// downloaded from the Hub, which needs `HF_TOKEN` with access to it (CI).
+/// Installs only what plain `cargo test` reads: the files of every `[[hf]]`
+/// repository (the library's models) but the GGUF weights. Gated
+/// `[[hf_local]]` repositories serve only the `#[ignore]`d real-model tests and
+/// stay with `fetch`.
 pub fn fetch_tests(sandbox: &Sandbox) -> Result<()> {
     let manifest = Manifest::load(sandbox.repo_root())?;
-    let repos = manifest.hf.iter().map(|repo| (repo, false));
-    let gated = manifest.hf_local.iter().map(|repo| (repo, true));
-    for (repo, gated) in repos.chain(gated) {
+    for repo in &manifest.hf {
         let repo = repo.without_weights();
         if repo.check(sandbox).is_ok() {
             continue;
         }
-        let local = repo
-            .local_dir(sandbox)
-            .join("snapshots")
-            .join(&repo.revision);
-        if gated && local.is_dir() {
-            println!(
-                "fetch: copying {}@{} from {}",
-                repo.repo,
-                repo.revision,
-                local.display()
-            );
-            repo.install_local(sandbox)?;
-        } else {
-            println!("fetch: downloading {}@{}", repo.repo, repo.revision);
-            repo.install(sandbox).with_context(|| {
-                if gated {
-                    format!(
-                        "{} is gated: set HF_TOKEN to a token with access to it",
-                        repo.repo
-                    )
-                } else {
-                    format!("downloading {}", repo.repo)
-                }
-            })?;
-        }
+        println!("fetch: downloading {}@{}", repo.repo, repo.revision);
+        repo.install(sandbox)?;
         repo.check(sandbox)?;
     }
     Ok(())
@@ -694,7 +668,7 @@ impl Hf {
                     "https://huggingface.co/{}/resolve/{}/{file}",
                     self.repo, self.revision
                 );
-                hub_download(sandbox, &url, &partial)?;
+                download(sandbox, &url, &partial)?;
                 verify_blob(sandbox, &partial, meta)
                     .with_context(|| format!("verifying {file} of {}", self.repo))?;
                 std::fs::rename(&partial, &blob)?;
@@ -759,9 +733,13 @@ impl Hf {
             "https://huggingface.co/api/models/{}/revision/{}?blobs=true",
             self.repo, self.revision
         );
-        let mut curl = sandbox.command("curl");
-        curl.args(["-fsSL", "--retry", "3"]).arg(&url);
-        let text = run_hub(&mut curl).with_context(|| format!("listing {url}"))?;
+        let text = run_stdout(
+            sandbox
+                .command("curl")
+                .args(["-fsSL", "--retry", "3"])
+                .arg(&url),
+        )
+        .with_context(|| format!("listing {url}"))?;
         let info: serde_json::Value = serde_json::from_str(&text)?;
         if info["sha"].as_str() != Some(self.revision.as_str()) {
             bail!("the Hub resolved {} to {}", self.revision, info["sha"]);
@@ -899,41 +877,8 @@ fn download(sandbox: &Sandbox, url: &str, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Downloads a Hub file like [`download`], authenticated by `HF_TOKEN` when it is set.
-fn hub_download(sandbox: &Sandbox, url: &str, dest: &Path) -> Result<()> {
-    let mut curl = sandbox.command("curl");
-    curl.args(["-fsSL", "--retry", "3", "-o"])
-        .arg(dest)
-        .arg(url);
-    run_hub(&mut curl).with_context(|| format!("downloading {url}"))?;
-    Ok(())
-}
-
-/// Runs a curl call to huggingface.co. With `HF_TOKEN` set, the token reaches
-/// curl as a bearer header through its config on stdin, never in its arguments.
-fn run_hub(curl: &mut Command) -> Result<String> {
-    let Ok(token) = std::env::var("HF_TOKEN") else {
-        return run_stdout(curl);
-    };
-    let mut child = curl
-        .args(["--config", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("running {:?}", curl.get_program()))?;
-    let mut stdin = child.stdin.take().context("curl has no stdin")?;
-    writeln!(stdin, "header = \"Authorization: Bearer {token}\"")?;
-    drop(stdin);
-    stdout_of(curl, child.wait_with_output()?)
-}
-
 fn run_stdout(cmd: &mut Command) -> Result<String> {
     let output = cmd.output().with_context(|| format!("running {cmd:?}"))?;
-    stdout_of(cmd, output)
-}
-
-fn stdout_of(cmd: &Command, output: Output) -> Result<String> {
     if !output.status.success() {
         bail!(
             "{:?} failed ({}): {}",

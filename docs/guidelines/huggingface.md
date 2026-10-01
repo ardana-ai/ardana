@@ -28,10 +28,10 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
   read-only into `tmp/hf/hub`: it resolves `snapshots/<revision>/<file>` to its blob, copies the blob into
   `tmp/hf/hub/.../blobs/`, verifies it against its name (git blob id, or LFS sha256 for 64-hex names), links the
   snapshot and writes `refs/main`. Ardana itself never reads or writes the user's real HF cache.
-- `cargo xtask fetch --tests` installs only the files plain `cargo test` reads: every `[[hf]]` and `[[hf_local]]`
-  file but the `.gguf` weights. A gated `[[hf_local]]` repo is copied as above when the real cache holds the
-  revision, else downloaded like an `[[hf]]` one (CI), which needs `HF_TOKEN`. xtask's Hub calls pass `HF_TOKEN` to
-  curl as a header through `--config -` on stdin, never as an argument; curl drops it on the redirect to the CDN.
+- `cargo xtask fetch --tests` installs only the files plain `cargo test` reads: every `[[hf]]` file (the library's
+  models) but the `.gguf` weights, which needs no token, so CI runs it. Plain tests use only the library's models
+  (decider-2b, Qwen3.5, SmolLM3); a test that needs the gated `[[hf_local]]` Llama 3.2 tokenizer is a real-model
+  test (`#[ignore = "e2e: ..."]`), like those on Ollama's `llama3.2`.
 - `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`. `cargo xtask fetch` lists
   the revision through `https://huggingface.co/api/models/<repo>/revision/<rev>?blobs=true`, downloads each file from
   `resolve/<rev>/<file>` with `curl` into `blobs/<LFS sha256 or git blob id>`, verifies that hash (`shasum -a 256`,

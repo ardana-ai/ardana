@@ -70,6 +70,7 @@ fn smollm3_layout() -> Result<()> {
 /// Llama 3.2's template prints `bos_token` once and takes its date from `strftime_now`, which formats the fixed
 /// template date, so the head is the same on every day.
 #[test]
+#[ignore = "e2e: the gated Llama 3.2 tokenizer, copied into tmp/hf from the local Hub cache (cargo xtask fetch)"]
 fn llama32_layout() -> Result<()> {
     let (tok, head, tail) = layout(LLAMA32)?;
     let want_head = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n";

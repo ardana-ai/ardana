@@ -1,7 +1,6 @@
 # Checks every pull request and every push to main: formatting, clippy, the project's own checks, the tests on Linux
 # and macOS, the Windows build and the playground build. It uploads no artifacts. Swatinem/rust-cache keeps the Rust
-# builds, saved from main only; the Hub files the tests read are cached per fetch.toml, so pull requests from forks,
-# which get no secrets, still find the gated ones.
+# builds, saved from main only; the Hub files the tests read (no weights, no token needed) are cached per fetch.toml.
 name: CI
 
 on:
@@ -79,8 +78,6 @@ jobs:
           path: tmp/hf
           key: hub-tests-${{ runner.os }}-${{ hashFiles('xtask/fetch.toml') }}
       - name: Fetch the Hub files the tests read
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: cargo xtask fetch --tests
       - run: cargo test --workspace --locked
 

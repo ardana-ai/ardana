@@ -125,10 +125,9 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   pull-request runs cancelled, `actions/checkout` with `persist-credentials: false`, every action pinned to a commit
   SHA with its version in a comment, and `Swatinem/rust-cache` saving only from `main`
   (`save-if: ${{ github.ref == 'refs/heads/main' }}`) so pull requests reuse `main`'s cache without churning it.
-- The tests' Hub files (`tmp/hf`, about 60 MB) are cached per OS under a key hashed from `xtask/fetch.toml`; the
-  gated Llama 3.2 tokenizer needs the `HF_TOKEN` repository secret (a read token with access to
-  `meta-llama/Llama-3.2-3B-Instruct`) only when that cache is cold, so pull requests from forks, which get no
-  secrets, run from `main`'s cache.
+- The tests' Hub files (`tmp/hf`, about 60 MB, no weights) are cached per OS under a key hashed from
+  `xtask/fetch.toml`. They are the library models' files only, so CI uses no secrets and pull requests from forks
+  run the same jobs.
 
 ## Releases
 - dist 0.32.0 owns releases: `dist-workspace.toml` (`[dist]`) holds the config, `[profile.dist]` in the root
