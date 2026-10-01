@@ -9,6 +9,7 @@ const USAGE: &str = "usage: cargo xtask <step>
   env [--claude]   print the sandbox environment as shell exports, or write it
                    into .claude/settings.local.json
   fetch [--check]  install, or verify, the xtask/fetch.toml entries into tmp/
+  fetch --tests    install only the Hub files plain `cargo test` reads (CI)
   build            build the playground dist with trunk, then the release ardana
   check-deps       check the workspace members and dependency direction
   check-docs       check CLAUDE.md, AGENTS.md and docs/guidelines
@@ -41,6 +42,7 @@ fn run() -> Result<()> {
         }
         ["fetch"] => sandbox()?.guarded("fetch", fetch::fetch)?,
         ["fetch", "--check"] => fetch::check(&sandbox()?)?,
+        ["fetch", "--tests"] => sandbox()?.guarded("fetch --tests", fetch::fetch_tests)?,
         ["build"] => sandbox()?.guarded("build", playground::build).map(drop)?,
         ["check-deps"] => deps::check_deps(&deps::metadata(root)?)?,
         ["check-docs"] => docs::check_docs(root)?,

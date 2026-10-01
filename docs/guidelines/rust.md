@@ -6,7 +6,8 @@ runner for every Ardana crate: `crates/ardana` (binary), `crates/ardana-api`, `c
 Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in their own guideline files.
 
 ## Versions
-- `rustc` 1.97.1 — the stable toolchain on the dev machine (rustup-managed); every crate must build and test on it.
+- `rustc` 1.97.1 — pinned by `rust-toolchain.toml` (with `clippy`, `rustfmt` and the `wasm32-unknown-unknown` target)
+  for local, CI and release builds alike; every crate must build and test on it. Bump it there and here together.
 - `edition` 2024 — set once in `[workspace.package]`; stabilized in Rust 1.85 and implies Cargo resolver 3.
 - `resolver` 3 — set explicitly in the virtual root `[workspace]`, since a virtual manifest has no edition to infer it.
 - `cargo-dist` 0.32.0 — the release tool (`dist`), installed into `tmp/bin` by `cargo xtask fetch`; the same version
@@ -110,6 +111,25 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   the lint no longer fires, so stale suppressions surface); never crate-wide without a note in this file.
 - `cargo fmt --all -- --check` must pass; keep rustfmt at its defaults, and add a `rustfmt.toml` only for stable options.
 
+## CI
+- `.github/workflows/ci.yml` runs on every pull request and every push to `main`, in parallel jobs: `fmt`
+  (`cargo fmt --all --check`), `clippy` (`--workspace --all-targets --locked -- -D warnings`, then
+  `cargo check -p ardana-api -p ardana-playground --target wasm32-unknown-unknown`), project checks (`check-deps`,
+  `check-docs`, `dist generate --check`, `dist plan`), `test` on `ubuntu-24.04` and `macos-15`
+  (`cargo xtask fetch --tests`, then `cargo test --workspace --locked`), a Windows build
+  (`cargo build --workspace --exclude xtask`, as xtask is Unix only) and the playground build the release runs
+  (`cargo install trunk --version 0.21.14 --locked`, `trunk build --release`).
+- The `#[ignore]`d real-model tests and the `cargo xtask e2e` suites stay local: they need the GGUF weights and the
+  Ollama store.
+- Follow the common Rust CI practice (ruff, uv, bevy): `permissions: contents: read`, `CARGO_INCREMENTAL=0`, superseded
+  pull-request runs cancelled, `actions/checkout` with `persist-credentials: false`, every action pinned to a commit
+  SHA with its version in a comment, and `Swatinem/rust-cache` saving only from `main`
+  (`save-if: ${{ github.ref == 'refs/heads/main' }}`) so pull requests reuse `main`'s cache without churning it.
+- The tests' Hub files (`tmp/hf`, about 60 MB) are cached per OS under a key hashed from `xtask/fetch.toml`; the
+  gated Llama 3.2 tokenizer needs the `HF_TOKEN` repository secret (a read token with access to
+  `meta-llama/Llama-3.2-3B-Instruct`) only when that cache is cold, so pull requests from forks, which get no
+  secrets, run from `main`'s cache.
+
 ## Releases
 - dist 0.32.0 owns releases: `dist-workspace.toml` (`[dist]`) holds the config, `[profile.dist]` in the root
   `Cargo.toml` (inherits `release`, `lto = "thin"`) the build profile, and `.github/workflows/release.yml` is
@@ -148,7 +168,7 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   archive in `target/distrib/`) and `tmp/bin/dist build --artifacts=global` (installers).
 
 ## xtask
-- `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check]`, `build`, `check-deps`,
+- `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check|--tests]`, `build`, `check-deps`,
   `check-docs`, `export-decider`, `e2e <suite>` (`smoke`, `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`,
   `design`); keep its
   dependency set small so `cargo xtask` compiles quickly: downloads and HTTP probes go through `curl` and `git` run by
