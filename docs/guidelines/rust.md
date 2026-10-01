@@ -48,7 +48,8 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   directory holding `.cargo/`, i.e. the repo root) and `force = true` (overrides the shell). Cargo applies `[env]` to
   build scripts, rustc, `cargo run` and `cargo test`, which is what keeps plain `cargo test` inside `tmp/`.
 - Set the llama.cpp build baseline in `[env]` without `force`: `GGML_AVX`, `GGML_AVX2`, `GGML_FMA`, `GGML_F16C`
-  (`ON`) and `LLAMA_STATIC_CRT` (`1`), so local and release builds configure llama.cpp alike (`llama-cpp.md`, "Build").
+  (`ON`), `LLAMA_STATIC_CRT` (`1`) and `CMAKE_MSVC_RUNTIME_LIBRARY` (the static MSVC runtime), so local and release
+  builds configure llama.cpp alike (`llama-cpp.md`, "Build").
   The matching `+crt-static` for MSVC Rust code sits in `[target.'cfg(all(windows, target_env = "msvc"))'] rustflags`.
 - Do not put `HOME`, `CARGO_HOME` or `RUSTUP_HOME` in `[env]`; Cargo's home and rustup are the allowed exceptions, and
   the full tool environment comes from `Sandbox::env` (`cargo xtask env`).
