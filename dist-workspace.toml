@@ -19,7 +19,10 @@ hosting = "github"
 install-updater = false
 # Build only the `ardana` package (`cargo build --package ardana`), never the whole workspace
 precise-builds = true
-# Pull requests run only the release plan; full builds run for release tags
-pr-run-mode = "plan"
+# Releases start only by hand: "Cut release" (.github/workflows/cut-release.yml) bumps the version and dispatches
+# this workflow with the new tag; run alone, its default `dry-run` tag builds everything and publishes nothing
+dispatch-releases = true
+# Pull requests run no release jobs
+pr-run-mode = "skip"
 # Steps inserted into every build job before "Build artifacts": the playground `ardana` embeds
 github-build-setup = "../build-setup.yml"

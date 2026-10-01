@@ -127,9 +127,19 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Every build job runs `.github/build-setup.yml` first (the playground, `leptos.md`), so the released binary embeds
   the real playground.
 - Artifacts: a `.tar.xz` per Unix target, a `.zip` for Windows, `ardana-installer.sh` and `ardana-installer.ps1`
-  (`install-path = "~/.local/bin"`, `%USERPROFILE%\.local\bin` on Windows), checksums and the source tarball. A
-  version tag (`v0.1.0`) runs the builds and publishes a GitHub Release; a pull request runs only `dist plan`
-  (`pr-run-mode = "plan"`).
+  (`install-path = "~/.local/bin"`, `%USERPROFILE%\.local\bin` on Windows), checksums and the source tarball.
+- Releases start only by hand (`dispatch-releases = true`, `pr-run-mode = "skip"`; pushes, tags and pull requests run
+  nothing). Actions → "Cut release" (`.github/workflows/cut-release.yml`) takes `patch`, `minor` or `major`, bumps
+  `[workspace.package] version` and the workspace entries of `Cargo.lock` (`cargo update --workspace`), commits
+  `Release vX.Y.Z` and the tag `vX.Y.Z` to `main`, and runs `gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z`
+  (a tag pushed with `GITHUB_TOKEN` starts no workflow; a dispatch does). dist checks that the tag equals the
+  version, builds every target and publishes the GitHub Release at the tagged commit. The version must be plain
+  `MAJOR.MINOR.PATCH`. `main` must accept pushes from `github-actions[bot]`.
+- Run "Release" (`release.yml`) alone with its default tag `dry-run` to build every target without publishing. To
+  retry a release whose build failed after the bump, run "Release" with the existing tag instead of cutting again.
+- Leave no artifacts behind: `release.yml`'s artifacts only carry files between its jobs, so
+  `.github/workflows/cleanup-artifacts.yml` (on `workflow_run` of "Release", `completed`) deletes every artifact of
+  each finished run, published, failed, cancelled or dry-run. The GitHub Release keeps the published files.
 - Check a release locally without pushing: `tmp/bin/dist plan`, then
   `tmp/bin/dist build --artifacts=local --target aarch64-apple-darwin` (binary in `target/aarch64-apple-darwin/dist/`,
   archive in `target/distrib/`) and `tmp/bin/dist build --artifacts=global` (installers).
