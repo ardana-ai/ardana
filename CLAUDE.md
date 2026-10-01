@@ -29,11 +29,29 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   (decider, jevcompat, JevBench), the jevcompat uv tool, the `tmp/py/sdk` and `tmp/py/jevbench` venvs, Hub models in
   `tmp/hf/hub`, `[[hf_local]]` copies of gated repos from the real `~/.cache/huggingface/hub`);
   `cargo xtask fetch --check` verifies them. It also runs `npm ci` in `e2e/playground` (`@playwright/test`,
-  `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it before `cargo test`: tests read the decider-2b, Qwen3.5,
-  SmolLM3 and Llama 3.2 tokenizers and chat templates from `tmp/hf`.
+  `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it before `cargo test`: plain tests read the library models' (decider-2b,
+  Qwen3.5, SmolLM3) tokenizers, configs and chat templates from `tmp/hf`. `cargo xtask fetch --tests` installs only
+  those files (every `[[hf]]` file but the GGUF weights, no token), which is what CI runs; the gated Llama 3.2
+  tokenizer serves only the `#[ignore]`d real-model tests, next to Ollama's `llama3.2`.
+- CI (`.github/workflows/ci.yml`) checks every pull request and push to `main`: `cargo fmt --check`, clippy with
+  `-D warnings` and a wasm check of `ardana-api`/`ardana-playground`, `check-deps`, `check-docs`,
+  `dist generate --check` and `dist plan`, `cargo test --workspace` on Linux and macOS (after `fetch --tests`; no
+  secrets), a Windows build and the release's trunk playground build. The real-model
+  suites stay local. `rust-toolchain.toml` pins Rust 1.97.1 for local, CI and release builds.
 - `cargo xtask build` builds the playground `dist/` with the fetched trunk, offline, then the release `ardana`, which
   embeds it (memory-serve, `force-embed`) and serves it at `/`. Building `ardana-server` without a dist (or with
   `ARDANA_PLAYGROUND_DIST` at a directory without `index.html`) warns and embeds a placeholder page.
+- Releases: dist 0.32.0 (`tmp/bin/dist`, from `cargo xtask fetch`) generates `.github/workflows/release.yml` from
+  `dist-workspace.toml` and `.github/build-setup.yml` (the playground build each runner does first); after changing
+  either run `tmp/bin/dist generate` (`generate --check` fails on drift). Releases start only by hand: the
+  "Cut release" workflow (`.github/workflows/cut-release.yml`, patch/minor/major) bumps the workspace version, commits
+  and tags it on `main` and dispatches `release.yml`, which builds `ardana` alone for aarch64/x86_64 macOS,
+  aarch64/x86_64 Linux and x86_64 Windows with `ardana-installer.sh` and `ardana-installer.ps1` (into `~/.local/bin`)
+  and publishes the GitHub Release; `release.yml` run alone (tag `dry-run`) builds without publishing, pull requests
+  run nothing. `cleanup-artifacts.yml` deletes each finished Release run's artifacts; any other workflow sets
+  `retention-days: 1` on its uploads. Locally: `tmp/bin/dist plan`,
+  `tmp/bin/dist build --artifacts=local --target aarch64-apple-darwin` and `tmp/bin/dist build --artifacts=global`
+  (output in `target/distrib/`). Nothing is pushed and no workflow runs from an agent session.
 - `cargo xtask check-deps`, `cargo xtask check-docs` check the workspace shape and these documents.
 - `cargo xtask export-decider` regenerates the vendored decider prompt goldens in
   `crates/ardana-core/tests/data/decider/` by running decider@23579f7 from `tmp/src/decider`.

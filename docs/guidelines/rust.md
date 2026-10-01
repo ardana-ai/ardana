@@ -6,9 +6,12 @@ runner for every Ardana crate: `crates/ardana` (binary), `crates/ardana-api`, `c
 Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in their own guideline files.
 
 ## Versions
-- `rustc` 1.97.1 — the stable toolchain on the dev machine (rustup-managed); every crate must build and test on it.
+- `rustc` 1.97.1 — pinned by `rust-toolchain.toml` (with `clippy`, `rustfmt` and the `wasm32-unknown-unknown` target)
+  for local, CI and release builds alike; every crate must build and test on it. Bump it there and here together.
 - `edition` 2024 — set once in `[workspace.package]`; stabilized in Rust 1.85 and implies Cargo resolver 3.
 - `resolver` 3 — set explicitly in the virtual root `[workspace]`, since a virtual manifest has no edition to infer it.
+- `cargo-dist` 0.32.0 — the release tool (`dist`), installed into `tmp/bin` by `cargo xtask fetch`; the same version
+  runs in `.github/workflows/release.yml` (`cargo-dist-version`).
 
 ## Rules
 
@@ -44,6 +47,10 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Set `HF_HOME`, `ARDANA_HOME`, `ARDANA_TMP` and `TMPDIR` in `[env]` with `relative = true` (resolved against the
   directory holding `.cargo/`, i.e. the repo root) and `force = true` (overrides the shell). Cargo applies `[env]` to
   build scripts, rustc, `cargo run` and `cargo test`, which is what keeps plain `cargo test` inside `tmp/`.
+- Set the llama.cpp build baseline in `[env]` without `force`: `GGML_AVX`, `GGML_AVX2`, `GGML_FMA`, `GGML_F16C`
+  (`ON`), `LLAMA_STATIC_CRT` (`1`) and `CMAKE_MSVC_RUNTIME_LIBRARY` (the static MSVC runtime), so local and release
+  builds configure llama.cpp alike (`llama-cpp.md`, "Build").
+  The matching `+crt-static` for MSVC Rust code sits in `[target.'cfg(all(windows, target_env = "msvc"))'] rustflags`.
 - Do not put `HOME`, `CARGO_HOME` or `RUSTUP_HOME` in `[env]`; Cargo's home and rustup are the allowed exceptions, and
   the full tool environment comes from `Sandbox::env` (`cargo xtask env`).
 
@@ -105,8 +112,63 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   the lint no longer fires, so stale suppressions surface); never crate-wide without a note in this file.
 - `cargo fmt --all -- --check` must pass; keep rustfmt at its defaults, and add a `rustfmt.toml` only for stable options.
 
+## CI
+- `.github/workflows/ci.yml` runs on every pull request and every push to `main`, in parallel jobs: `fmt`
+  (`cargo fmt --all --check`), `clippy` (`--workspace --all-targets --locked -- -D warnings`, then
+  `cargo check -p ardana-api -p ardana-playground --target wasm32-unknown-unknown`), project checks (`check-deps`,
+  `check-docs`, `dist generate --check`, `dist plan`), `test` on `ubuntu-24.04` and `macos-15`
+  (`cargo xtask fetch --tests`, then `cargo test --workspace --locked`), a Windows build
+  (`cargo build --workspace --exclude xtask`, as xtask is Unix only) and the playground build the release runs
+  (`cargo install trunk --version 0.21.14 --locked`, `trunk build --release`).
+- The `#[ignore]`d real-model tests and the `cargo xtask e2e` suites stay local: they need the GGUF weights and the
+  Ollama store.
+- Follow the common Rust CI practice (ruff, uv, bevy): `permissions: contents: read`, `CARGO_INCREMENTAL=0`, superseded
+  pull-request runs cancelled, `actions/checkout` with `persist-credentials: false`, every action pinned to a commit
+  SHA with its version in a comment, and `Swatinem/rust-cache` saving only from `main`
+  (`save-if: ${{ github.ref == 'refs/heads/main' }}`) so pull requests reuse `main`'s cache without churning it.
+- The tests' Hub files (`tmp/hf`, about 60 MB, no weights) are cached per OS under a key hashed from
+  `xtask/fetch.toml`. They are the library models' files only, so CI uses no secrets and pull requests from forks
+  run the same jobs.
+
+## Releases
+- dist 0.32.0 owns releases: `dist-workspace.toml` (`[dist]`) holds the config, `[profile.dist]` in the root
+  `Cargo.toml` (inherits `release`, `lto = "thin"`) the build profile, and `.github/workflows/release.yml` is
+  generated from them. Never edit `release.yml` by hand: change the config or `.github/build-setup.yml`, run
+  `tmp/bin/dist generate`, and commit both; `tmp/bin/dist generate --check` fails on drift.
+- Only `ardana` is released: its manifest sets `[package.metadata.dist] dist = true` over the workspace's
+  `publish = false`, and takes `repository` (`https://github.com/ardana-ai/ardana`, needed for GitHub CI and the
+  installers' download URLs) from `[workspace.package]`. `precise-builds = true` makes dist run
+  `cargo build --package ardana` instead of building the whole workspace.
+- Targets and runners: `aarch64-apple-darwin` on `macos-14`, `x86_64-apple-darwin` on `macos-15-intel`,
+  `aarch64-unknown-linux-gnu` on `ubuntu-22.04-arm`, `x86_64-unknown-linux-gnu` on `ubuntu-22.04` (glibc 2.35 floor)
+  and `x86_64-pc-windows-msvc` on `windows-2022`, all standard free runners; the images ship CMake and Clang, so the
+  workflow installs no build tools. The x86_64 llama.cpp baseline and the static CRT come from `.cargo/config.toml`
+  `[env]` (`llama-cpp.md`, "Build"); dist adds `+crt-static` on MSVC through `RUSTFLAGS`.
+- Every build job runs `.github/build-setup.yml` first (the playground, `leptos.md`), so the released binary embeds
+  the real playground.
+- Artifacts: a `.tar.xz` per Unix target, a `.zip` for Windows, `ardana-installer.sh` and `ardana-installer.ps1`
+  (`install-path = "~/.local/bin"`, `%USERPROFILE%\.local\bin` on Windows), checksums and the source tarball.
+- Releases start only by hand (`dispatch-releases = true`, `pr-run-mode = "skip"`; pushes, tags and pull requests run
+  nothing). Actions → "Cut release" (`.github/workflows/cut-release.yml`) takes `patch`, `minor` or `major`, bumps
+  `[workspace.package] version` and the workspace entries of `Cargo.lock` (`cargo update --workspace`), commits
+  `Release vX.Y.Z` and the tag `vX.Y.Z` to `main`, and runs `gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z`
+  (a tag pushed with `GITHUB_TOKEN` starts no workflow; a dispatch does). dist checks that the tag equals the
+  version, builds every target and publishes the GitHub Release at the tagged commit. The version must be plain
+  `MAJOR.MINOR.PATCH`. `main` must accept pushes from `github-actions[bot]`.
+- Run "Release" (`release.yml`) alone with its default tag `dry-run` to build every target without publishing. To
+  retry a release whose build failed after the bump, run "Release" with the existing tag instead of cutting again.
+- Leave no artifacts behind: they only carry files between the jobs of one run, and the GitHub Release keeps the
+  published files. Every `actions/upload-artifact` step in a workflow we write sets `retention-days: 1`, as uv, ruff,
+  zed and typst do. `release.yml` cannot (dist's template sets no retention, and maintaining it by hand as uv and
+  ruff do with `allow-dirty = ["ci"]` gives up `dist generate`), so `.github/workflows/cleanup-artifacts.yml`
+  (`workflow_run` of "Release", `completed`) deletes every artifact of each finished Release run: published, failed,
+  cancelled or dry-run. dist's custom jobs cannot do it: they run only after the jobs before them succeed.
+- Check a release locally without pushing: `tmp/bin/dist plan`, then
+  `tmp/bin/dist build --artifacts=local --target aarch64-apple-darwin` (binary in `target/aarch64-apple-darwin/dist/`,
+  archive in `target/distrib/`) and `tmp/bin/dist build --artifacts=global` (installers).
+
 ## xtask
-- `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check]`, `build`, `check-deps`,
+- `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check|--tests]`, `build`, `check-deps`,
   `check-docs`, `export-decider`, `e2e <suite>` (`smoke`, `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`,
   `design`); keep its
   dependency set small so `cargo xtask` compiles quickly: downloads and HTTP probes go through `curl` and `git` run by
@@ -144,3 +206,4 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - https://github.com/rust-lang/rustfmt — `cargo fmt --all -- --check`, `rustfmt.toml`, `style_edition`
 - https://github.com/rust-lang/cargo/issues/8938 — nested cargo from a build script deadlocks on the target-dir lock
 - https://github.com/matklad/cargo-xtask — xtask alias, workspace member layout, keep xtask fast to compile
+- https://docs.rs/cargo-dist/0.32.0 — dist config (`dist-workspace.toml`), `precise-builds`, `github-build-setup`, `install-path`, `pr-run-mode`

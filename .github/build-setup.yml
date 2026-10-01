@@ -1,0 +1,12 @@
+# Inserted by dist (`github-build-setup` in dist-workspace.toml) into every build
+# job of release.yml after checkout, before "Build artifacts": builds the
+# playground dist/ that `ardana-server` embeds. Run `dist generate` after a
+# change here. trunk downloads its pinned wasm-bindgen and wasm-opt
+# (crates/ardana-playground/Trunk.toml). dist 0.32.0 drops a step's
+# `working-directory`, so the step changes directory itself (bash and pwsh).
+- name: Add the wasm32-unknown-unknown target
+  run: rustup target add wasm32-unknown-unknown
+- name: Install trunk
+  run: cargo install trunk --version 0.21.14 --locked
+- name: Build the playground
+  run: cd crates/ardana-playground && trunk build --release

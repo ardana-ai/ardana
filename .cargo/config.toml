@@ -13,3 +13,22 @@ TMPDIR = { value = "tmp/sys", relative = true, force = true }
 # memory-serve logs every embedded asset as a cargo warning unless quiet; only
 # `ardana-server`'s own warning (no playground dist) should show.
 MEMORY_SERVE_QUIET = "1"
+# The llama.cpp build of every `ardana` (local, CI and dist): x86_64 targets the
+# AVX2 set, never the build machine (`GGML_NATIVE` stays off), and MSVC builds
+# link the static C runtime like dist's `+crt-static` (Q1-Q3). These travel as
+# build-script env vars because dist sets `RUSTFLAGS`, which hides `rustflags`
+# here. ggml reads `GGML_AVX*` only for x86 targets.
+GGML_AVX = "ON"
+GGML_AVX2 = "ON"
+GGML_FMA = "ON"
+GGML_F16C = "ON"
+LLAMA_STATIC_CRT = "1"
+# llama.cpp's CMake policy range makes CMP0091 NEW, so MSVC takes its runtime
+# from this variable (default: the DLL runtime) and ignores the `/MT` that
+# LLAMA_STATIC_CRT adds to the flags; the build script forwards `CMAKE_*`.
+CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+
+# MSVC builds link the static C runtime to match `LLAMA_STATIC_CRT` (Q3) in a
+# plain `cargo build` too; under dist its `RUSTFLAGS` (the same flag) apply.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-Ctarget-feature=+crt-static"]

@@ -1,6 +1,8 @@
 //! `cargo xtask fetch [--check]`: installs, or verifies, every entry of
 //! `xtask/fetch.toml` inside `tmp/`: `[[tool]]` entries, `[[hf]]` model
 //! repositories and `[[hf_local]]` copies from the user's own Hub cache.
+//! `cargo xtask fetch --tests` installs only the Hub files plain `cargo test`
+//! reads ([`fetch_tests`]).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -114,6 +116,24 @@ pub fn fetch(sandbox: &Sandbox) -> Result<()> {
             repo.local_dir(sandbox).display()
         );
         repo.install_local(sandbox)?;
+        repo.check(sandbox)?;
+    }
+    Ok(())
+}
+
+/// Installs only what plain `cargo test` reads: the files of every `[[hf]]`
+/// repository (the library's models) but the GGUF weights. Gated
+/// `[[hf_local]]` repositories serve only the `#[ignore]`d real-model tests and
+/// stay with `fetch`.
+pub fn fetch_tests(sandbox: &Sandbox) -> Result<()> {
+    let manifest = Manifest::load(sandbox.repo_root())?;
+    for repo in &manifest.hf {
+        let repo = repo.without_weights();
+        if repo.check(sandbox).is_ok() {
+            continue;
+        }
+        println!("fetch: downloading {}@{}", repo.repo, repo.revision);
+        repo.install(sandbox)?;
         repo.check(sandbox)?;
     }
     Ok(())
@@ -552,6 +572,20 @@ struct HubFile {
 }
 
 impl Hf {
+    /// This repository without its GGUF weights: the files plain `cargo test` reads.
+    pub fn without_weights(&self) -> Hf {
+        Hf {
+            repo: self.repo.clone(),
+            revision: self.revision.clone(),
+            files: self
+                .files
+                .iter()
+                .filter(|file| !file.ends_with(".gguf"))
+                .cloned()
+                .collect(),
+        }
+    }
+
     fn cache_name(&self) -> String {
         format!("models--{}", self.repo.replace('/', "--"))
     }

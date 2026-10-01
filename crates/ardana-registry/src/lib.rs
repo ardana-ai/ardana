@@ -178,11 +178,11 @@ impl Registry {
         if let Some(home) = std::env::var_os(HOME_VAR) {
             return Ok(PathBuf::from(home));
         }
-        let home = std::env::var_os("HOME").ok_or_else(|| RegistryError::Invalid {
+        let home = std::env::home_dir().ok_or_else(|| RegistryError::Invalid {
             what: "the Ardana home".into(),
-            msg: format!("neither {HOME_VAR} nor HOME is set"),
+            msg: format!("{HOME_VAR} is not set and the home directory is unknown"),
         })?;
-        Ok(PathBuf::from(home).join(".ardana"))
+        Ok(home.join(".ardana"))
     }
 
     /// The registry of [`Registry::home`].

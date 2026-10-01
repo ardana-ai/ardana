@@ -38,6 +38,11 @@ version = "0.21.14"
 source = "cargo"
 
 [[tool]]
+name = "cargo-dist"
+version = "0.32.0"
+source = "cargo"
+
+[[tool]]
 name = "wasm-bindgen-cli"
 version = "cargo-lock:wasm-bindgen"
 source = "cargo"

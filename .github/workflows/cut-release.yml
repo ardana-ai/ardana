@@ -1,0 +1,65 @@
+# Cuts a release by hand: Actions → "Cut release" → patch, minor or major.
+#
+# Bumps `[workspace.package] version` (and the workspace entries of Cargo.lock), commits and tags it on main, then
+# dispatches the dist-generated release.yml for that tag, which builds every target and publishes the GitHub Release.
+# The dispatch is explicit because a tag pushed with GITHUB_TOKEN starts no workflow.
+name: Cut release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version part to bump
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions: {}
+
+concurrency:
+  group: cut-release
+
+jobs:
+  cut:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Bump the version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          current=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "ardana") | .version')
+          [[ $current =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::ardana $current is not MAJOR.MINOR.PATCH"; exit 1; }
+          major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
+          case $BUMP in
+            major) next="$((major + 1)).0.0" ;;
+            minor) next="$major.$((minor + 1)).0" ;;
+            patch) next="$major.$minor.$((patch + 1))" ;;
+          esac
+          sed -i "/^\[workspace.package\]/,/^\[/ s/^version = \"$current\"/version = \"$next\"/" Cargo.toml
+          cargo update --workspace --quiet
+          cargo metadata --locked --no-deps --format-version 1 > /dev/null
+          echo "tag=v$next" >> "$GITHUB_OUTPUT"
+      - name: Commit and tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --all --message "Release $TAG"
+          git tag "$TAG"
+          git push --atomic origin HEAD:main "$TAG"
+      - name: Start the release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh workflow run release.yml --ref "$TAG" --field tag="$TAG"

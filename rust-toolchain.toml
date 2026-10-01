@@ -1,0 +1,5 @@
+# The one Rust toolchain for local, CI and release builds (docs/guidelines/rust.md).
+[toolchain]
+channel = "1.97.1"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]

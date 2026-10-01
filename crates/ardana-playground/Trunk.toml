@@ -1,6 +1,8 @@
-# Built by `cargo xtask build` with `trunk build --release --offline`: trunk
-# takes these tool versions from tmp/bin (`cargo xtask fetch`) and never
-# downloads them.
+# Built locally by `cargo xtask build` with `trunk build --release --offline`:
+# trunk takes these tool versions from tmp/bin (`cargo xtask fetch`) and never
+# downloads them. The release workflow (.github/workflows/release.yml, steps
+# from .github/build-setup.yml) runs `trunk build --release` on each build
+# runner, where trunk downloads these pins.
 
 [build]
 target = "index.html"

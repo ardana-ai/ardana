@@ -140,11 +140,17 @@ design workflow that gates every UI change (Q23, Q27).
   `wasm_opt = "version_133"`. Trunk uses a tool from `PATH` only when its version matches, otherwise it downloads.
   Bump the pin, `xtask/fetch.toml` (`cargo-lock:wasm-bindgen`) and `cargo xtask fetch` together whenever Cargo.lock's
   wasm-bindgen changes.
-- Build only with `cargo xtask build`, which runs `trunk build --release --offline` through `Sandbox::command`
+- Build locally only with `cargo xtask build`, which runs `trunk build --release --offline` through `Sandbox::command`
   (`PATH` starts with `tmp/bin`, `HOME` under `tmp/`). `--offline` turns a missing or mismatched tool into an error
   instead of a download into `~/Library/Caches/dev.trunkrs.trunk`, which the home guard would flag.
+- Release builds run on GitHub runners, outside the `tmp/` sandbox (Q9): `.github/build-setup.yml`, which dist inserts
+  into every build job of `.github/workflows/release.yml` before "Build artifacts", runs
+  `rustup target add wasm32-unknown-unknown`, `cargo install trunk --version 0.21.14 --locked` and
+  `trunk build --release` in `crates/ardana-playground`, online, so trunk downloads the `[tools]` pins (rustls build,
+  assets for every runner platform). dist 0.32.0 drops a setup step's `working-directory`, so the step `cd`s itself.
 - Never run trunk from a `build.rs` (outer cargo lock deadlock, rust-lang/cargo#8938) and never `cargo install trunk`
-  into `~/.cargo/bin`; `trunk serve` is not part of the workflow, the playground is served by `ardana serve`.
+  into `~/.cargo/bin` on a developer machine; `trunk serve` is not part of the workflow, the playground is served by
+  `ardana serve`.
 - Keep `[build] filehash = true` (trunk's default) so hashed asset names let the server cache assets while
   `index.html` stays uncached.
 - Do not set `opt-level = "z"` on the workspace `[profile.release]`: it would also shrink-optimize the server binary.

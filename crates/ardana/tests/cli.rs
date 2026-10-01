@@ -71,7 +71,7 @@ fn unloadable_ollama_blob() -> Result<()> {
             "pull",
             reference.as_str(),
             "--tokenizer",
-            "hf.co/meta-llama/Llama-3.2-3B-Instruct",
+            "hf.co/Qwen/Qwen3.5-0.8B",
         ]);
         pull.env("OLLAMA_MODELS", &store);
         assert!(pull.status()?.success(), "{pull:?} failed");
