@@ -32,11 +32,11 @@ pub fn models_dir() -> Result<PathBuf, RegistryError> {
     if let Some(dir) = std::env::var_os(MODELS_VAR) {
         return Ok(PathBuf::from(dir));
     }
-    let home = std::env::var_os("HOME").ok_or_else(|| RegistryError::Invalid {
+    let home = std::env::home_dir().ok_or_else(|| RegistryError::Invalid {
         what: "the Ollama store".into(),
-        msg: format!("neither {MODELS_VAR} nor HOME is set"),
+        msg: format!("{MODELS_VAR} is not set and the home directory is unknown"),
     })?;
-    Ok(PathBuf::from(home).join(".ollama/models"))
+    Ok(home.join(".ollama").join("models"))
 }
 
 /// The GGUF blob of `ollama:<namespace>/<name>:<tag>` (named `source` in messages).

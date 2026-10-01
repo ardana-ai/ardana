@@ -44,6 +44,8 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Set `HF_HOME`, `ARDANA_HOME`, `ARDANA_TMP` and `TMPDIR` in `[env]` with `relative = true` (resolved against the
   directory holding `.cargo/`, i.e. the repo root) and `force = true` (overrides the shell). Cargo applies `[env]` to
   build scripts, rustc, `cargo run` and `cargo test`, which is what keeps plain `cargo test` inside `tmp/`.
+- Set the llama.cpp build baseline in `[env]` without `force`: `GGML_AVX`, `GGML_AVX2`, `GGML_FMA`, `GGML_F16C`
+  (`ON`) and `LLAMA_STATIC_CRT` (`1`), so local and release builds configure llama.cpp alike (`llama-cpp.md`, "Build").
 - Do not put `HOME`, `CARGO_HOME` or `RUSTUP_HOME` in `[env]`; Cargo's home and rustup are the allowed exceptions, and
   the full tool environment comes from `Sandbox::env` (`cargo xtask env`).
 

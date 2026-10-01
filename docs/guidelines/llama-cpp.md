@@ -22,6 +22,14 @@ llama.cpp.
   (4.4.3 on the dev machine) and a C/C++ toolchain must be on `PATH`. Build output stays under the repo's `target/`.
 - Pass llama.cpp build options through `CMAKE_*` or `GGML_*` environment variables (the build script forwards both);
   never patch the vendored sources.
+- x86_64 builds target the AVX2 set (Q1): `.cargo/config.toml` `[env]` sets `GGML_AVX`, `GGML_AVX2`, `GGML_FMA` and
+  `GGML_F16C` to `ON`, so every local, CI and dist build runs on any AVX2 CPU and never on the build machine's own
+  features (`GGML_NATIVE` stays `OFF`, as the build script sets it without `target-cpu=native`). ggml reads them only
+  for x86 targets. They travel as env vars, not `rustflags`, because dist sets `RUSTFLAGS` on every build.
+- MSVC builds link the static C runtime (Q3): `[env]` sets `LLAMA_STATIC_CRT=1`, which matches dist's
+  `+crt-static`, so `ardana.exe` needs no `VCRUNTIME140.dll`; other targets ignore it.
+- The build script registers `rerun-if-env-changed` only for the `GGML_*` variables present at its last run: after
+  adding one, run `cargo clean -p llama-cpp-sys-2` (with the profile and `--target` of the build) to reconfigure.
 - Do not enable a GPU feature on macOS: llama.cpp turns Metal on by default on Apple targets and the build script only
   switches it off for watchOS. Expose `cuda` and `vulkan` as `ardana-llama` (and `ardana`) cargo features that forward
   to `llama-cpp-2/cuda` and `llama-cpp-2/vulkan`; they pass through unverified (Q16), so never claim they work.

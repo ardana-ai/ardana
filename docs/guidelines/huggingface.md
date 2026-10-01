@@ -19,6 +19,10 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 - Build the client with `HFClient::new()` (or `HFClient::builder().build()`), which resolves the cache once at build
   time: `HF_HUB_CACHE`, then `HUGGINGFACE_HUB_CACHE`, then `$HF_HOME/hub`, then `$XDG_CACHE_HOME/huggingface/hub`,
   then `~/.cache/huggingface/hub`. Tests that need another root pass `.cache_dir(..)` explicitly under `$ARDANA_TMP`.
+- hf-hub reads only `HOME` for that last step and falls back to `/tmp` without it (as on Windows), so
+  `hub::Hub::from_env` passes `.cache_dir(<home>/.cache/huggingface/hub)` from `std::env::home_dir()` when none of
+  `HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, `HF_HOME`, `XDG_CACHE_HOME` and `HOME` is set; every variable keeps its
+  precedence. The Ardana home and the Ollama store fall back to `home_dir()` the same way.
 - `HFClient` wraps an `Arc` and is `Clone + Send + Sync`: build one per process and clone it; never rebuild per file.
 - Only `cargo xtask fetch` reads the real `~/.cache/huggingface/hub`, and only for `[[hf_local]]` entries it copies
   read-only into `tmp/hf/hub`: it resolves `snapshots/<revision>/<file>` to its blob, copies the blob into

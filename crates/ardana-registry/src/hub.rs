@@ -27,6 +27,24 @@ pub fn offline() -> bool {
     })
 }
 
+/// The variables hf-hub reads, in its order, before it falls back to `$HOME/.cache/huggingface/hub`.
+const CACHE_VARS: [&str; 5] = [
+    "HF_HUB_CACHE",
+    "HUGGINGFACE_HUB_CACHE",
+    "HF_HOME",
+    "XDG_CACHE_HOME",
+    "HOME",
+];
+
+/// `<home_dir>/.cache/huggingface/hub` when none of [`CACHE_VARS`] is set (as on Windows), where hf-hub would put the
+/// cache under `/tmp`; otherwise hf-hub's own resolution.
+fn home_cache_dir() -> Option<PathBuf> {
+    if CACHE_VARS.iter().any(|var| std::env::var(var).is_ok()) {
+        return None;
+    }
+    std::env::home_dir().map(|home| home.join(".cache").join("huggingface").join("hub"))
+}
+
 /// One Hub client for a pull.
 pub(crate) struct Hub {
     client: HFClient,
@@ -57,7 +75,11 @@ impl Snapshot {
 
 impl Hub {
     pub fn from_env(progress: bool) -> Result<Hub, RegistryError> {
-        let client = HFClient::new().map_err(|err| RegistryError::Hub {
+        let mut builder = HFClient::builder();
+        if let Some(dir) = home_cache_dir() {
+            builder = builder.cache_dir(dir);
+        }
+        let client = builder.build().map_err(|err| RegistryError::Hub {
             repo: "the Hugging Face client".into(),
             err,
         })?;
