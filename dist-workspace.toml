@@ -1,0 +1,25 @@
+[workspace]
+members = ["cargo:."]
+
+# Config for 'dist'
+[dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell", "powershell"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# Path that installers should place binaries in
+install-path = "~/.local/bin"
+# Where to host releases
+hosting = "github"
+# Whether to install an updater program
+install-updater = false
+# Build only the `ardana` package (`cargo build --package ardana`), never the whole workspace
+precise-builds = true
+# Pull requests run only the release plan; full builds run for release tags
+pr-run-mode = "plan"
+# Steps inserted into every build job before "Build artifacts": the playground `ardana` embeds
+github-build-setup = "../build-setup.yml"

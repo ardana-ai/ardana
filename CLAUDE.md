@@ -34,6 +34,13 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
 - `cargo xtask build` builds the playground `dist/` with the fetched trunk, offline, then the release `ardana`, which
   embeds it (memory-serve, `force-embed`) and serves it at `/`. Building `ardana-server` without a dist (or with
   `ARDANA_PLAYGROUND_DIST` at a directory without `index.html`) warns and embeds a placeholder page.
+- Releases: dist 0.32.0 (`tmp/bin/dist`, from `cargo xtask fetch`) generates `.github/workflows/release.yml` from
+  `dist-workspace.toml` and `.github/build-setup.yml` (the playground build each runner does first); after changing
+  either run `tmp/bin/dist generate` (`generate --check` fails on drift). A version tag builds `ardana` alone for
+  aarch64/x86_64 macOS, aarch64/x86_64 Linux and x86_64 Windows, with `ardana-installer.sh` and `ardana-installer.ps1`
+  (into `~/.local/bin`); a pull request runs only the plan. Locally: `tmp/bin/dist plan`,
+  `tmp/bin/dist build --artifacts=local --target aarch64-apple-darwin` and `tmp/bin/dist build --artifacts=global`
+  (output in `target/distrib/`). Nothing is pushed and no workflow runs from an agent session.
 - `cargo xtask check-deps`, `cargo xtask check-docs` check the workspace shape and these documents.
 - `cargo xtask export-decider` regenerates the vendored decider prompt goldens in
   `crates/ardana-core/tests/data/decider/` by running decider@23579f7 from `tmp/src/decider`.

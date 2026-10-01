@@ -4,7 +4,12 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 publish.workspace = true
+
+# The one package dist releases (`dist-workspace.toml`); the workspace stays `publish = false`.
+[package.metadata.dist]
+dist = true
 
 [features]
 cuda = ["ardana-llama/cuda"]
