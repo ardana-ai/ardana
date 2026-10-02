@@ -1,29 +1,32 @@
-/* The shell: the sidebar of pages and settings on the left, the sticky top bar with Run over the page on the right,
-   the banner under the top bar, the share popover, and the drawer the sidebar becomes on narrow screens. */
+/* The shell: a white sidebar headed by the groundhog lockup, the sticky top bar with the ink Run pill, the banner
+   under it, the share popover, and the drawer the sidebar becomes on narrow screens. The top row reads as ardana.ai's
+   nav: the logo at the top-left, the actions at the right, one hairline beneath. */
 
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar) minmax(0, 1fr);
   min-height: 100vh;
-  transition: grid-template-columns var(--normal) var(--ease);
+  transition: grid-template-columns var(--normal) var(--ease-out);
 }
 
 .shell.collapsed {
   grid-template-columns: 0 minmax(0, 1fr);
 }
 
+/* The landing's skip link: an ink pill that slides in from above the top-left corner. */
 .skip-link {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 50;
-  padding: 6px 10px;
-  border-radius: var(--radius-md);
-  background: var(--raised);
-  color: var(--ink);
-  box-shadow: var(--shadow-popover);
-  font-weight: 500;
-  transform: translateY(-200%);
+  top: 12px;
+  left: 12px;
+  z-index: 70;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--text-14);
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform var(--normal) var(--ease-out);
 }
 
 .skip-link:focus-visible {
@@ -40,10 +43,11 @@
   overflow: hidden auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-2) var(--space-2) var(--space-4);
-  background: var(--panel);
-  box-shadow: inset -1px 0 0 var(--hairline);
+  gap: var(--space-5);
+  padding-bottom: var(--space-5);
+  background: var(--bg);
+  /* The one vertical hairline; the head covers its top, so the top row stays one bar. */
+  box-shadow: inset -1px 0 0 var(--line);
   color: var(--ink);
 }
 
@@ -51,42 +55,28 @@
   visibility: hidden;
 }
 
+/* The head: the lockup where the landing's nav puts it, on the top row's hairline. */
 .workspace {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 32px;
-  padding: 0 4px 0 6px;
+  min-height: var(--topbar);
+  padding: 0 var(--space-3) 0 var(--space-5);
+  background: var(--bg);
+  box-shadow: inset 0 -1px 0 var(--line);
 }
 
-.workspace-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  background: var(--ink);
-  color: var(--page);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
+.workspace .logo {
+  margin-right: auto;
 }
 
-.workspace-name {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--text-14);
-  font-weight: 600;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The collapse control shows itself when the header is hovered or it has focus. */
+/* The collapse control shows itself when the head is hovered or the sidebar has focus. */
 .workspace .button-icon {
   opacity: 0;
-  transition: opacity var(--fast) ease-in;
+  transition:
+    opacity var(--fast) ease,
+    color var(--fast) ease,
+    background-color var(--fast) ease;
 }
 
 .workspace:hover .button-icon,
@@ -98,92 +88,92 @@
 .sidebar-section {
   display: grid;
   gap: 2px;
+  padding: 0 var(--space-3);
 }
 
 .sidebar-heading {
   display: flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  color: var(--ink-2);
-  font-size: var(--text-12);
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-13);
   font-weight: 500;
   line-height: 1;
 }
 
 .sidebar-section .select {
-  margin: 0 6px;
+  margin-top: 2px;
 }
 
-/* A row: a page in the list, with its glyph; the button rows take the hover fill like Notion's pages. */
+.sidebar-section .select-input {
+  padding-left: var(--space-3);
+}
+
+/* A row: a preset or a section of the page, as the landing's nav sets a link: gray, ink on hover and when current. */
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  min-height: 28px;
-  padding: 0 8px;
+  min-height: 34px;
+  padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-inner);
   background: transparent;
-  color: var(--ink);
-  font-size: var(--text-14);
-  font-weight: 500;
+  color: var(--muted);
+  font-size: var(--text-15);
+  font-weight: 400;
   line-height: 1.2;
   text-align: left;
   cursor: pointer;
-  transition: background var(--fast) ease-in;
+  transition: color var(--fast) ease;
 }
 
-.row:hover {
-  background: var(--hover);
-}
-
+.row:hover,
 .row:active {
-  background: var(--pressed);
-}
-
-/* The section in view, in the "On this page" list. */
-.row[aria-current="true"] {
-  background: var(--hover);
   color: var(--ink);
 }
 
-.row .icon {
-  color: var(--ink-2);
+/* The section in view, in the "On this page" list: ink, as the landing marks its current page. */
+.row[aria-current="true"] {
+  color: var(--ink);
 }
 
+/* A label wraps rather than cut when text is enlarged. */
 .row-label {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding-block: 6px;
+  overflow-wrap: anywhere;
 }
 
-.row-undo {
-  color: var(--ink-2);
+/* The landing's back arrow leads "Restore previous", and nudges back on hover. */
+.row .icon-back {
+  stroke-width: 1.6;
+  transform: scaleX(-1);
+  transition: transform var(--normal) var(--ease-out);
 }
 
-.row-undo:hover {
-  color: var(--ink);
+.row:hover .icon-back {
+  transform: scaleX(-1) translateX(3px);
 }
 
 .sidebar-foot {
   margin-top: auto;
   display: grid;
   gap: 4px;
-  padding: 0 8px;
-  color: var(--ink-2);
-  font-size: var(--text-12);
-  line-height: 1.4;
+  padding: 0 var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-13);
+  line-height: 1.45;
 }
 
 .sidebar-foot code {
-  font-size: var(--text-12);
-  background: transparent;
   padding: 0;
-  color: var(--ink-2);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--text-12);
 }
 
 /* ---- Main column: top bar, banner, page ---- */
@@ -196,31 +186,48 @@
   overflow-x: clip;
 }
 
+/* The bar wraps its actions onto a second line rather than cutting them when text is enlarged. */
 .topbar {
   position: sticky;
   top: 0;
   z-index: 20;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2) var(--space-3);
   min-height: var(--topbar);
-  padding: 0 var(--space-3);
-  background: var(--page);
-  box-shadow: inset 0 -1px 0 var(--hairline);
+  padding: 14px var(--gutter);
+  background: var(--bg);
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+/* The lockup and the opener join the top bar only while the sidebar is collapsed or a drawer. */
+.topbar .opener,
+.topbar .topbar-logo {
+  display: none;
+}
+
+.shell.collapsed .topbar .opener,
+.shell.collapsed .topbar .topbar-logo {
+  display: inline-flex;
+}
+
+.topbar .opener {
+  margin-left: -8px;
+}
+
+.topbar-logo {
+  margin-right: var(--space-3);
 }
 
 .topbar-crumb {
   display: flex;
   align-items: center;
-  gap: 6px;
   min-width: 0;
   flex: 1 1 auto;
-  font-size: var(--text-14);
+  color: var(--ink);
+  font-size: var(--text-15);
   font-weight: 500;
-}
-
-.topbar-crumb .icon {
-  color: var(--ink-2);
 }
 
 .topbar-crumb-text {
@@ -233,7 +240,7 @@
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-3);
   min-width: 0;
   flex: 0 1 auto;
 }
@@ -243,13 +250,9 @@
   flex: none;
 }
 
-/* The sidebar's opener lives in the top bar only while the sidebar is collapsed or a drawer. */
-.topbar .opener {
+/* Share is a word; on the smallest phones a link glyph stands in for it (its name stays "Share link"). */
+.share-icon {
   display: none;
-}
-
-.shell.collapsed .topbar .opener {
-  display: inline-flex;
 }
 
 /* The stale tag in the top bar: nothing while the last run still matches. */
@@ -265,25 +268,24 @@
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 20px;
 }
 
 .changed:not(.on) .tag {
   display: none;
 }
 
-/* The banner under the top bar: why Run is held, or what a first run is downloading. A wait is grey; a fault is red. */
+/* The banner under the top bar: why Run is held, or what a first run is downloading. A wait is gray; a fault is red. */
 .banner {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 36px;
-  padding: 6px var(--space-4);
+  min-height: 40px;
+  padding: 8px var(--gutter);
   background: var(--danger-tint);
   color: var(--danger);
-  font-size: var(--text-13);
+  font-size: var(--text-14);
   font-weight: 500;
-  box-shadow: inset 0 -1px 0 var(--hairline);
+  box-shadow: inset 0 -1px 0 var(--line);
 }
 
 .banner:empty {
@@ -291,40 +293,67 @@
 }
 
 .banner.quiet {
-  background: var(--panel);
-  color: var(--ink);
+  background: var(--bg);
+  color: var(--muted);
 }
 
-/* ---- Share popover: anchored under the Share button ---- */
+/* ---- Share popover: anchored under the Share button, flat, a hairline around it ---- */
 
 .share {
   position: relative;
 }
 
+/* It opens 8px under the top bar's hairline, not across it: the 32px button sits 19px above the bar's foot. */
 .popover {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 27px);
   right: 0;
   z-index: 30;
-  width: min(420px, calc(100vw - 24px));
+  width: min(440px, calc(100vw - 32px));
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--raised);
+  gap: 10px;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
   color: var(--ink);
-  box-shadow: var(--shadow-popover);
 }
 
+/* The link sits in a command box with its copy key, as `ardana pull` does on the landing. */
 .popover-row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 4px;
+  min-height: 40px;
+  padding: 0 4px 0 14px;
+  border-radius: var(--radius);
+  background: var(--code-bg);
 }
 
+.popover-row:has(.field-input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* The link is read only, a thing to copy: the box is the landing's command box, without an input's ring. */
 .popover-row .field-input {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.popover-row .field-input:focus-visible {
+  outline: none;
+}
+
+/* The copy key's tooltip opens upwards here, over the label, so it never covers the note under the link. */
+.popover .tip-below::after {
+  top: auto;
+  bottom: 100%;
 }
 
 @media (max-width: 720px) {
@@ -333,16 +362,76 @@
     display: none;
   }
 
+  /* The lockup names the page on a phone. */
+  .topbar-crumb {
+    display: none;
+  }
+
+  .topbar-actions {
+    margin-left: auto;
+  }
+
+  /* No empty slot for the stale tag, and a narrower Run, so "Running" and its caret fit the bar at 390px. */
+  .changed {
+    display: none;
+  }
+
+  .topbar .run-key {
+    padding: 0 14px;
+  }
+
+  .topbar .logo > svg {
+    height: 22px;
+  }
+
   .popover {
     position: fixed;
-    top: calc(var(--topbar) + 6px);
-    right: 12px;
-    left: 12px;
+    top: calc(var(--topbar) + 8px);
+    right: 16px;
+    left: 16px;
     width: auto;
   }
 }
 
-/* ---- The drawer: below 960px the sidebar slides in over the page. ---- */
+/* The smallest phones: the lockup at 18px (above the kit's 80px minimum width), tighter gaps and Share as its glyph keep
+   the bar on one line from 320px, at rest and while running (WCAG 1.4.10); from 390px the bar holds its 22px lockup. */
+@media (max-width: 389px) {
+  .topbar {
+    column-gap: var(--space-2);
+  }
+
+  .topbar-logo {
+    margin-right: 0;
+  }
+
+  .topbar .logo > svg {
+    height: 18px;
+  }
+
+  .topbar-actions {
+    gap: var(--space-1);
+  }
+
+  .topbar .share .button {
+    width: 32px;
+    padding: 0;
+  }
+
+  .share-icon {
+    display: block;
+  }
+
+  .share-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* ---- The drawer: below 960px the sidebar slides in over the page, on a scrim. ---- */
 
 .scrim {
   display: none;
@@ -361,16 +450,19 @@
     width: min(var(--sidebar), 85vw);
     height: 100vh;
     height: 100dvh;
-    box-shadow: var(--shadow-drawer);
     transform: translateX(-100%);
     visibility: hidden;
-    transition: transform var(--normal) var(--ease), visibility 0s var(--normal);
+    transition:
+      transform var(--normal) var(--ease-out),
+      visibility 0s var(--normal);
   }
 
   .shell.drawer-open .sidebar {
     transform: none;
     visibility: visible;
-    transition: transform var(--normal) var(--ease), visibility 0s;
+    transition:
+      transform var(--normal) var(--ease-out),
+      visibility 0s;
   }
 
   .shell.collapsed .sidebar {
@@ -386,7 +478,9 @@
   }
 
   .shell .topbar .opener,
-  .shell.collapsed .topbar .opener {
+  .shell.collapsed .topbar .opener,
+  .shell .topbar .topbar-logo,
+  .shell.collapsed .topbar .topbar-logo {
     display: inline-flex;
   }
 
@@ -397,10 +491,10 @@
     z-index: 55;
     border: 0;
     padding: 0;
-    background: var(--overlay);
+    background: var(--scrim);
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--normal) var(--ease);
+    transition: opacity var(--normal) var(--ease-out);
   }
 
   .shell.drawer-open .scrim {
@@ -412,10 +506,17 @@
 @media (prefers-reduced-motion: reduce) {
   .shell,
   .sidebar,
+  .shell.drawer-open .sidebar,
   .scrim,
   .row,
-  .workspace .button-icon {
+  .row .icon-back,
+  .workspace .button-icon,
+  .skip-link {
     transition: none;
+  }
+
+  .row:hover .icon-back {
+    transform: scaleX(-1);
   }
 }
 
@@ -424,12 +525,13 @@
     border-right: 1px solid CanvasText;
   }
 
+  .workspace,
   .topbar,
   .banner {
     border-bottom: 1px solid CanvasText;
   }
 
-  .popover {
+  .popover-row {
     border: 1px solid CanvasText;
   }
 }

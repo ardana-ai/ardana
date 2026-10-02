@@ -1,12 +1,13 @@
-//! The workspace: a sidebar of settings and pages on the left, and on the right the sticky top bar with Run over one
-//! page of blocks: the state on the left, the questions with their answers on the right, then the raw exchange and
-//! the snippets as toggle blocks.
+//! The playground, in ardana.ai's brand: a sidebar headed by the logo on the left, and on the right the sticky top bar
+//! with Run over one page: the state on the left, the questions with their answers on the right, then the raw
+//! exchange and the snippets as toggle blocks.
 
 mod builder;
 mod controls;
 mod exchange;
 mod figure;
 mod icons;
+mod logo;
 mod questions;
 mod sidebar;
 mod snippets;
@@ -22,8 +23,6 @@ use crate::api::ApiClient;
 use crate::deck::Deck;
 use crate::request::Reply;
 use crate::share;
-
-use icons::Icon;
 
 /// The `localStorage` key that remembers a collapsed sidebar.
 const SIDEBAR_KEY: &str = "ardana.sidebar";
@@ -207,10 +206,7 @@ pub fn App() -> impl IntoView {
                 <topbar::Topbar deck=deck shell=shell />
                 <main class="page" id="content" tabindex="-1">
                     <div class="page-title">
-                        <div class="page-title-row">
-                            <Icon name="page" class="page-icon" />
-                            <h1 class="page-heading">"Ardana playground"</h1>
-                        </div>
+                        <h1 class="page-heading">"Ardana playground"</h1>
                         <p class="page-lede">
                             "Run a state and questions against a local System 1 decision model. Every figure is the "
                             "API's own, and the request is one copy away in Snippets."

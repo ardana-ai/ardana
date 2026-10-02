@@ -47,10 +47,12 @@ language: real local model names, never Jev's.
 ## Brand Commitments
 - Jev's playground structure is binding: the state on the left, questions and results on the right.
 - The product name is Ardana.
-- The playground is drawn in Notion's app design language, played straight (decided 2026-09-28): a workspace sidebar
-  beside one page of blocks, the system sans, warm neutrals with one blue, hairlines, small radii, hover-reveal
-  chrome, toggles, callouts and property rows. Linear and GitHub set the craft bar beside Notion. No instrument or
-  hardware metaphor.
+- The playground wears ardana.ai's brand, matched to the landing page (`../ardana-landing`: its DESIGN.md "The Line",
+  its logo kit and its `src/app.css` tokens), decided 2026-10-01 and replacing the Notion language of 2026-09-28: the
+  groundhog lockup, white paper, near-black ink and one gray, hairlines, Onest for words and Geist Mono for whatever a
+  terminal or the API reads (both self-hosted, nothing from another origin), ink pills, terminal-gray command boxes,
+  flat surfaces. No hue but one red, for faults only. The dark scheme is the logo kit's inverse (white on #0a0a0a).
+  The sidebar, top bar and every behaviour stay as they were; only the look follows the site.
 
 ## Evidence on Hand
 - Real requests: `tests/fixtures/requests/ticket.json`, `sentiment.json`; JevBench's 231 public items under

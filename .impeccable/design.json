@@ -1,700 +1,519 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-29T04:28:20Z",
+  "generatedAt": "2026-10-02T00:36:51Z",
   "title": "Design System: Ardana",
   "extensions": {
     "colorMeta": {
-      "page": {
-        "role": "neutral",
-        "displayName": "Page",
+      "accent": {
+        "role": "primary",
+        "displayName": "Press Ink",
+        "canonical": "#0a0a0a",
+        "dark": "#ffffff",
+        "purpose": "The Run pill, the skip link, the answer's bar and check disc, the logo. Equals ink: the decision is a filled shape and weight, not a colour.",
+        "tonalRamp": [
+          "#0a0a0a",
+          "#2b2b2b",
+          "#666666",
+          "#a1a1a1",
+          "#dedede",
+          "#ededed",
+          "#f4f4f4",
+          "#ffffff"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Soft Press",
+        "canonical": "#2b2b2b",
+        "dark": "#dedede",
+        "purpose": "Run on hover and press.",
+        "tonalRamp": [
+          "#0a0a0a",
+          "#2b2b2b",
+          "#666666",
+          "#8a8a8a",
+          "#a1a1a1",
+          "#dedede",
+          "#ececec",
+          "#ffffff"
+        ]
+      },
+      "on-accent": {
+        "role": "primary",
+        "displayName": "On Ink",
         "canonical": "#ffffff",
-        "oklch": "oklch(100.0% 0.000 89.9)",
-        "dark": "#191919",
-        "purpose": "The page and the top bar.",
+        "dark": "#0a0a0a",
+        "purpose": "The Run label, the skip link's text, the check inside the answer's disc.",
         "tonalRamp": [
-          "oklch(15% 0.000 89.9)",
-          "oklch(26% 0.000 89.9)",
-          "oklch(38% 0.000 89.9)",
-          "oklch(50% 0.000 89.9)",
-          "oklch(62% 0.000 89.9)",
-          "oklch(73% 0.000 89.9)",
-          "oklch(84% 0.000 89.9)",
-          "oklch(95% 0.000 89.9)"
+          "#0a0a0a",
+          "#171717",
+          "#2b2b2b",
+          "#666666",
+          "#a1a1a1",
+          "#dedede",
+          "#f4f4f4",
+          "#ffffff"
         ]
       },
-      "panel": {
+      "bg": {
         "role": "neutral",
-        "displayName": "Panel",
-        "canonical": "#fbfbfa",
-        "oklch": "oklch(98.8% 0.001 106.4)",
-        "dark": "#202020",
-        "purpose": "The sidebar, the drawer and the quiet banner.",
-        "tonalRamp": [
-          "oklch(15% 0.001 106.4)",
-          "oklch(26% 0.001 106.4)",
-          "oklch(38% 0.001 106.4)",
-          "oklch(50% 0.001 106.4)",
-          "oklch(62% 0.001 106.4)",
-          "oklch(73% 0.001 106.4)",
-          "oklch(84% 0.001 106.4)",
-          "oklch(95% 0.001 106.4)"
-        ]
-      },
-      "raised": {
-        "role": "neutral",
-        "displayName": "Raised",
+        "displayName": "Paper",
         "canonical": "#ffffff",
-        "oklch": "oklch(100.0% 0.000 89.9)",
-        "dark": "#252525",
-        "purpose": "Question blocks, the popover, the checked segment, the skip link.",
+        "dark": "#0a0a0a",
+        "purpose": "The only ground: page, sidebar, top bar, popover, drawer; the text on the tooltip and the toast.",
         "tonalRamp": [
-          "oklch(15% 0.000 89.9)",
-          "oklch(26% 0.000 89.9)",
-          "oklch(38% 0.000 89.9)",
-          "oklch(50% 0.000 89.9)",
-          "oklch(62% 0.000 89.9)",
-          "oklch(73% 0.000 89.9)",
-          "oklch(84% 0.000 89.9)",
-          "oklch(95% 0.000 89.9)"
-        ]
-      },
-      "code": {
-        "role": "neutral",
-        "displayName": "Code",
-        "canonical": "#f7f6f3",
-        "oklch": "oklch(97.3% 0.004 91.4)",
-        "dark": "#252525",
-        "purpose": "Code blocks, empty wire panes, the plain callout.",
-        "tonalRamp": [
-          "oklch(15% 0.004 91.4)",
-          "oklch(26% 0.004 91.4)",
-          "oklch(38% 0.004 91.4)",
-          "oklch(50% 0.004 91.4)",
-          "oklch(62% 0.004 91.4)",
-          "oklch(73% 0.004 91.4)",
-          "oklch(84% 0.004 91.4)",
-          "oklch(95% 0.004 91.4)"
+          "#0a0a0a",
+          "#171717",
+          "#262626",
+          "#666666",
+          "#a1a1a1",
+          "#ececec",
+          "#f4f4f4",
+          "#ffffff"
         ]
       },
       "ink": {
         "role": "neutral",
         "displayName": "Ink",
-        "canonical": "#37352f",
-        "oklch": "oklch(32.9% 0.011 91.7)",
-        "dark": "rgb(255 255 255 / 0.81)",
-        "purpose": "Body text, headings, values.",
+        "canonical": "#0a0a0a",
+        "dark": "#ededed",
+        "purpose": "Headings, body, values, hovered and current links, the picked segment's ring, the tooltip and toast fill.",
         "tonalRamp": [
-          "oklch(15% 0.011 91.7)",
-          "oklch(26% 0.011 91.7)",
-          "oklch(38% 0.011 91.7)",
-          "oklch(50% 0.011 91.7)",
-          "oklch(62% 0.011 91.7)",
-          "oklch(73% 0.011 91.7)",
-          "oklch(84% 0.011 91.7)",
-          "oklch(95% 0.011 91.7)"
+          "#0a0a0a",
+          "#2b2b2b",
+          "#666666",
+          "#8a8a8a",
+          "#a1a1a1",
+          "#dedede",
+          "#ededed",
+          "#f4f4f4"
         ]
       },
-      "ink-2": {
+      "muted": {
         "role": "neutral",
-        "displayName": "Ink 2",
-        "canonical": "rgb(25 23 17 / 0.65)",
-        "oklch": "oklch(20.5% 0.012 91.8)",
-        "dark": "#9b9b9b",
-        "purpose": "Captions, property names, placeholders, instructions, inactive icons.",
+        "displayName": "Pencil Gray",
+        "canonical": "#666666",
+        "dark": "#a1a1a1",
+        "purpose": "The secondary voice: lede, instructions, labels, links at rest, placeholders, fact names, notes, every option that is not the answer after a run.",
         "tonalRamp": [
-          "oklch(15% 0.012 91.8)",
-          "oklch(26% 0.012 91.8)",
-          "oklch(38% 0.012 91.8)",
-          "oklch(50% 0.012 91.8)",
-          "oklch(62% 0.012 91.8)",
-          "oklch(73% 0.012 91.8)",
-          "oklch(84% 0.012 91.8)",
-          "oklch(95% 0.012 91.8)"
+          "#0a0a0a",
+          "#262626",
+          "#666666",
+          "#7a7a7a",
+          "#8a8a8a",
+          "#a1a1a1",
+          "#ececec",
+          "#ffffff"
         ]
       },
-      "ink-3": {
-        "role": "neutral",
-        "displayName": "Ink 3",
-        "canonical": "rgb(55 53 47 / 0.45)",
-        "oklch": "oklch(32.9% 0.011 91.7)",
-        "dark": "#7f7f7f",
-        "purpose": "Disabled button labels and property glyphs only; not for live text.",
-        "tonalRamp": [
-          "oklch(15% 0.011 91.7)",
-          "oklch(26% 0.011 91.7)",
-          "oklch(38% 0.011 91.7)",
-          "oklch(50% 0.011 91.7)",
-          "oklch(62% 0.011 91.7)",
-          "oklch(73% 0.011 91.7)",
-          "oklch(84% 0.011 91.7)",
-          "oklch(95% 0.011 91.7)"
-        ]
-      },
-      "hairline": {
+      "line": {
         "role": "neutral",
         "displayName": "Hairline",
-        "canonical": "#e9e9e7",
-        "oklch": "oklch(93.3% 0.003 106.5)",
-        "dark": "#2f2f2f",
-        "purpose": "Inset 1px dividers: sidebar edge, top bar, property list, builder panel.",
+        "canonical": "#ececec",
+        "dark": "#262626",
+        "purpose": "1px rules between regions and rows; the outline of tags, the popover and a disabled field.",
         "tonalRamp": [
-          "oklch(15% 0.003 106.5)",
-          "oklch(26% 0.003 106.5)",
-          "oklch(38% 0.003 106.5)",
-          "oklch(50% 0.003 106.5)",
-          "oklch(62% 0.003 106.5)",
-          "oklch(73% 0.003 106.5)",
-          "oklch(84% 0.003 106.5)",
-          "oklch(95% 0.003 106.5)"
-        ]
-      },
-      "hairline-strong": {
-        "role": "neutral",
-        "displayName": "Hairline Strong",
-        "canonical": "rgb(55 53 47 / 0.16)",
-        "oklch": "oklch(32.9% 0.011 91.7)",
-        "dark": "rgb(255 255 255 / 0.13)",
-        "purpose": "Inset outline of fields, the select, an unchecked check box.",
-        "tonalRamp": [
-          "oklch(15% 0.011 91.7)",
-          "oklch(26% 0.011 91.7)",
-          "oklch(38% 0.011 91.7)",
-          "oklch(50% 0.011 91.7)",
-          "oklch(62% 0.011 91.7)",
-          "oklch(73% 0.011 91.7)",
-          "oklch(84% 0.011 91.7)",
-          "oklch(95% 0.011 91.7)"
-        ]
-      },
-      "edge-strong": {
-        "role": "neutral",
-        "displayName": "Edge Strong",
-        "canonical": "rgb(55 53 47 / 0.55)",
-        "oklch": "oklch(32.9% 0.011 91.7)",
-        "dark": "rgb(255 255 255 / 0.45)",
-        "purpose": "The ring of the checked segment: 3:1 on the track in both schemes, so the picked state is not colour alone.",
-        "tonalRamp": [
-          "oklch(15% 0.011 91.7)",
-          "oklch(26% 0.011 91.7)",
-          "oklch(38% 0.011 91.7)",
-          "oklch(50% 0.011 91.7)",
-          "oklch(62% 0.011 91.7)",
-          "oklch(73% 0.011 91.7)",
-          "oklch(84% 0.011 91.7)",
-          "oklch(95% 0.011 91.7)"
-        ]
-      },
-      "hover": {
-        "role": "neutral",
-        "displayName": "Hover",
-        "canonical": "rgb(55 53 47 / 0.08)",
-        "oklch": "oklch(32.9% 0.011 91.7)",
-        "dark": "rgb(255 255 255 / 0.055)",
-        "purpose": "Hover fill of buttons, rows and summaries; the segmented track; inline code.",
-        "tonalRamp": [
-          "oklch(15% 0.011 91.7)",
-          "oklch(26% 0.011 91.7)",
-          "oklch(38% 0.011 91.7)",
-          "oklch(50% 0.011 91.7)",
-          "oklch(62% 0.011 91.7)",
-          "oklch(73% 0.011 91.7)",
-          "oklch(84% 0.011 91.7)",
-          "oklch(95% 0.011 91.7)"
-        ]
-      },
-      "pressed": {
-        "role": "neutral",
-        "displayName": "Pressed",
-        "canonical": "rgb(55 53 47 / 0.16)",
-        "oklch": "oklch(32.9% 0.011 91.7)",
-        "dark": "rgb(255 255 255 / 0.11)",
-        "purpose": "Active fill; an expanded button.",
-        "tonalRamp": [
-          "oklch(15% 0.011 91.7)",
-          "oklch(26% 0.011 91.7)",
-          "oklch(38% 0.011 91.7)",
-          "oklch(50% 0.011 91.7)",
-          "oklch(62% 0.011 91.7)",
-          "oklch(73% 0.011 91.7)",
-          "oklch(84% 0.011 91.7)",
-          "oklch(95% 0.011 91.7)"
-        ]
-      },
-      "field": {
-        "role": "neutral",
-        "displayName": "Field",
-        "canonical": "rgb(242 241 238 / 0.6)",
-        "oklch": "oklch(95.8% 0.004 91.4)",
-        "dark": "rgb(255 255 255 / 0.04)",
-        "purpose": "The fill of an input.",
-        "tonalRamp": [
-          "oklch(15% 0.004 91.4)",
-          "oklch(26% 0.004 91.4)",
-          "oklch(38% 0.004 91.4)",
-          "oklch(50% 0.004 91.4)",
-          "oklch(62% 0.004 91.4)",
-          "oklch(73% 0.004 91.4)",
-          "oklch(84% 0.004 91.4)",
-          "oklch(95% 0.004 91.4)"
-        ]
-      },
-      "tag": {
-        "role": "neutral",
-        "displayName": "Tag",
-        "canonical": "rgb(227 226 224 / 0.5)",
-        "oklch": "oklch(91.3% 0.003 84.6)",
-        "dark": "rgb(255 255 255 / 0.094)",
-        "purpose": "The grey chip fill.",
-        "tonalRamp": [
-          "oklch(15% 0.003 84.6)",
-          "oklch(26% 0.003 84.6)",
-          "oklch(38% 0.003 84.6)",
-          "oklch(50% 0.003 84.6)",
-          "oklch(62% 0.003 84.6)",
-          "oklch(73% 0.003 84.6)",
-          "oklch(84% 0.003 84.6)",
-          "oklch(95% 0.003 84.6)"
-        ]
-      },
-      "tag-ink": {
-        "role": "neutral",
-        "displayName": "Tag Ink",
-        "canonical": "#32302c",
-        "oklch": "oklch(31.0% 0.008 84.6)",
-        "dark": "rgb(255 255 255 / 0.81)",
-        "purpose": "Text on a tag.",
-        "tonalRamp": [
-          "oklch(15% 0.008 84.6)",
-          "oklch(26% 0.008 84.6)",
-          "oklch(38% 0.008 84.6)",
-          "oklch(50% 0.008 84.6)",
-          "oklch(62% 0.008 84.6)",
-          "oklch(73% 0.008 84.6)",
-          "oklch(84% 0.008 84.6)",
-          "oklch(95% 0.008 84.6)"
+          "#0a0a0a",
+          "#171717",
+          "#262626",
+          "#666666",
+          "#a1a1a1",
+          "#dedede",
+          "#ececec",
+          "#ffffff"
         ]
       },
       "track": {
         "role": "neutral",
-        "displayName": "Track",
-        "canonical": "rgb(55 53 47 / 0.14)",
-        "oklch": "oklch(32.9% 0.011 91.7)",
-        "dark": "rgb(255 255 255 / 0.13)",
-        "purpose": "The empty progress bar.",
+        "displayName": "Bar Track",
+        "canonical": "#ececec",
+        "dark": "#262626",
+        "purpose": "The empty 6px bar; the hairline under its own name.",
         "tonalRamp": [
-          "oklch(15% 0.011 91.7)",
-          "oklch(26% 0.011 91.7)",
-          "oklch(38% 0.011 91.7)",
-          "oklch(50% 0.011 91.7)",
-          "oklch(62% 0.011 91.7)",
-          "oklch(73% 0.011 91.7)",
-          "oklch(84% 0.011 91.7)",
-          "oklch(95% 0.011 91.7)"
+          "#0a0a0a",
+          "#171717",
+          "#262626",
+          "#666666",
+          "#a1a1a1",
+          "#dedede",
+          "#ececec",
+          "#ffffff"
         ]
       },
-      "bar-muted": {
+      "bar": {
         "role": "neutral",
-        "displayName": "Bar Muted",
-        "canonical": "#787774",
-        "oklch": "oklch(56.9% 0.005 91.5)",
-        "dark": "#9b9b9b",
-        "purpose": "Fill of rows that did not win, and of a stale winner.",
+        "displayName": "Bar Gray",
+        "canonical": "#858585",
+        "dark": "#7a7a7a",
+        "purpose": "The fill of an option that is not the answer and of a stale answer; 3:1 on its track in both schemes.",
         "tonalRamp": [
-          "oklch(15% 0.005 91.5)",
-          "oklch(26% 0.005 91.5)",
-          "oklch(38% 0.005 91.5)",
-          "oklch(50% 0.005 91.5)",
-          "oklch(62% 0.005 91.5)",
-          "oklch(73% 0.005 91.5)",
-          "oklch(84% 0.005 91.5)",
-          "oklch(95% 0.005 91.5)"
+          "#0a0a0a",
+          "#262626",
+          "#666666",
+          "#7a7a7a",
+          "#858585",
+          "#8a8a8a",
+          "#a1a1a1",
+          "#ececec"
         ]
       },
-      "accent": {
-        "role": "primary",
-        "displayName": "Notion Blue",
-        "canonical": "#2383e2",
-        "oklch": "oklch(60.6% 0.167 252.7)",
-        "dark": "#2383e2",
-        "purpose": "The winning row, focus outlines, the focused field ring.",
+      "code-bg": {
+        "role": "neutral",
+        "displayName": "Terminal Gray",
+        "canonical": "#f4f4f4",
+        "dark": "#171717",
+        "purpose": "The ground of command boxes, fields, the model select and inline code: only what the API reads or returns.",
         "tonalRamp": [
-          "oklch(15% 0.167 252.7)",
-          "oklch(26% 0.167 252.7)",
-          "oklch(38% 0.167 252.7)",
-          "oklch(50% 0.167 252.7)",
-          "oklch(62% 0.167 252.7)",
-          "oklch(73% 0.167 252.7)",
-          "oklch(84% 0.167 252.7)",
-          "oklch(95% 0.167 252.7)"
-        ],
-        "note": "Unchanged in the dark scheme."
-      },
-      "accent-fill": {
-        "role": "primary",
-        "displayName": "Run Blue",
-        "canonical": "#0075d3",
-        "oklch": "oklch(56.0% 0.169 252.2)",
-        "dark": "#0075d3",
-        "purpose": "The primary button fill; white on it reads at 4.68:1.",
-        "tonalRamp": [
-          "oklch(15% 0.169 252.2)",
-          "oklch(26% 0.169 252.2)",
-          "oklch(38% 0.169 252.2)",
-          "oklch(50% 0.169 252.2)",
-          "oklch(62% 0.169 252.2)",
-          "oklch(73% 0.169 252.2)",
-          "oklch(84% 0.169 252.2)",
-          "oklch(95% 0.169 252.2)"
-        ],
-        "note": "Unchanged in the dark scheme."
-      },
-      "accent-fill-hover": {
-        "role": "primary",
-        "displayName": "Run Blue Hover",
-        "canonical": "#0066bd",
-        "oklch": "oklch(51.1% 0.158 253.1)",
-        "dark": "#0066bd",
-        "purpose": "The primary button on hover and active; 5.78:1 with white.",
-        "tonalRamp": [
-          "oklch(15% 0.158 253.1)",
-          "oklch(26% 0.158 253.1)",
-          "oklch(38% 0.158 253.1)",
-          "oklch(50% 0.158 253.1)",
-          "oklch(62% 0.158 253.1)",
-          "oklch(73% 0.158 253.1)",
-          "oklch(84% 0.158 253.1)",
-          "oklch(95% 0.158 253.1)"
-        ],
-        "note": "Unchanged in the dark scheme."
-      },
-      "accent-tint": {
-        "role": "primary",
-        "displayName": "Blue Tint",
-        "canonical": "rgb(35 131 226 / 0.14)",
-        "oklch": "oklch(60.6% 0.167 252.7)",
-        "dark": "rgb(35 131 226 / 0.22)",
-        "purpose": "The 2px halo outside a focused field.",
-        "tonalRamp": [
-          "oklch(15% 0.167 252.7)",
-          "oklch(26% 0.167 252.7)",
-          "oklch(38% 0.167 252.7)",
-          "oklch(50% 0.167 252.7)",
-          "oklch(62% 0.167 252.7)",
-          "oklch(73% 0.167 252.7)",
-          "oklch(84% 0.167 252.7)",
-          "oklch(95% 0.167 252.7)"
+          "#0a0a0a",
+          "#171717",
+          "#262626",
+          "#666666",
+          "#a1a1a1",
+          "#dedede",
+          "#f4f4f4",
+          "#ffffff"
         ]
       },
-      "on-accent": {
-        "role": "primary",
-        "displayName": "On Accent",
-        "canonical": "#ffffff",
-        "oklch": "oklch(100.0% 0.000 89.9)",
+      "code-ink": {
+        "role": "neutral",
+        "displayName": "Command Ink",
+        "canonical": "#0a0a0a",
+        "dark": "#ededed",
+        "purpose": "Text in command boxes and fields.",
+        "tonalRamp": [
+          "#0a0a0a",
+          "#2b2b2b",
+          "#666666",
+          "#8a8a8a",
+          "#a1a1a1",
+          "#dedede",
+          "#ededed",
+          "#f4f4f4"
+        ]
+      },
+      "code-muted": {
+        "role": "neutral",
+        "displayName": "Prompt Gray",
+        "canonical": "#8a8a8a",
+        "dark": "#7a7a7a",
+        "purpose": "The 1px ring of a box you type in, the $ prompt, icon keys and the copy key at rest, the select's chevron, the scrollbar thumb.",
+        "tonalRamp": [
+          "#0a0a0a",
+          "#262626",
+          "#666666",
+          "#7a7a7a",
+          "#8a8a8a",
+          "#a1a1a1",
+          "#ececec",
+          "#ffffff"
+        ]
+      },
+      "code-hover": {
+        "role": "neutral",
+        "displayName": "Icon Wash",
+        "canonical": "rgb(10 10 10 / 0.07)",
+        "dark": "rgb(255 255 255 / 0.08)",
+        "purpose": "The ground behind a hovered icon key or copy key, and nothing else.",
+        "tonalRamp": [
+          "rgb(0 0 0 / 0.6)",
+          "rgb(10 10 10 / 0.4)",
+          "rgb(10 10 10 / 0.12)",
+          "rgb(10 10 10 / 0.07)",
+          "rgb(255 255 255 / 0.08)",
+          "rgb(255 255 255 / 0.2)"
+        ]
+      },
+      "focus": {
+        "role": "neutral",
+        "displayName": "Focus Ink",
+        "canonical": "#0a0a0a",
         "dark": "#ffffff",
-        "purpose": "Text and the check glyph on blue.",
+        "purpose": "The 2px focus ring, 3px out.",
         "tonalRamp": [
-          "oklch(15% 0.000 89.9)",
-          "oklch(26% 0.000 89.9)",
-          "oklch(38% 0.000 89.9)",
-          "oklch(50% 0.000 89.9)",
-          "oklch(62% 0.000 89.9)",
-          "oklch(73% 0.000 89.9)",
-          "oklch(84% 0.000 89.9)",
-          "oklch(95% 0.000 89.9)"
-        ],
-        "note": "Unchanged in the dark scheme."
+          "#0a0a0a",
+          "#2b2b2b",
+          "#666666",
+          "#a1a1a1",
+          "#dedede",
+          "#ededed",
+          "#f4f4f4",
+          "#ffffff"
+        ]
       },
       "selection": {
-        "role": "primary",
-        "displayName": "Selection",
-        "canonical": "rgb(35 131 226 / 0.3)",
-        "oklch": "oklch(60.6% 0.167 252.7)",
-        "dark": "rgb(35 131 226 / 0.3)",
-        "purpose": "::selection across the page.",
+        "role": "neutral",
+        "displayName": "Selection Wash",
+        "canonical": "rgb(10 10 10 / 0.12)",
+        "dark": "rgb(255 255 255 / 0.2)",
+        "purpose": "Text selection: an ink wash, not a browser blue.",
         "tonalRamp": [
-          "oklch(15% 0.167 252.7)",
-          "oklch(26% 0.167 252.7)",
-          "oklch(38% 0.167 252.7)",
-          "oklch(50% 0.167 252.7)",
-          "oklch(62% 0.167 252.7)",
-          "oklch(73% 0.167 252.7)",
-          "oklch(84% 0.167 252.7)",
-          "oklch(95% 0.167 252.7)"
-        ],
-        "note": "Unchanged in the dark scheme."
+          "rgb(0 0 0 / 0.6)",
+          "rgb(10 10 10 / 0.4)",
+          "rgb(10 10 10 / 0.12)",
+          "rgb(10 10 10 / 0.07)",
+          "rgb(255 255 255 / 0.08)",
+          "rgb(255 255 255 / 0.2)"
+        ]
+      },
+      "scrim": {
+        "role": "neutral",
+        "displayName": "Ink Veil",
+        "canonical": "rgb(10 10 10 / 0.4)",
+        "dark": "rgb(0 0 0 / 0.6)",
+        "purpose": "The scrim behind the drawer.",
+        "tonalRamp": [
+          "rgb(0 0 0 / 0.6)",
+          "rgb(10 10 10 / 0.4)",
+          "rgb(10 10 10 / 0.12)",
+          "rgb(10 10 10 / 0.07)",
+          "rgb(255 255 255 / 0.08)",
+          "rgb(255 255 255 / 0.2)"
+        ]
       },
       "danger": {
-        "role": "secondary",
-        "displayName": "Danger",
-        "canonical": "#b3372f",
-        "oklch": "oklch(51.9% 0.162 27.8)",
-        "dark": "#f28b88",
-        "purpose": "Fault titles, icons, lines, the invalid ring, the location code, Remove question.",
+        "role": "fault",
+        "displayName": "Fault Red",
+        "canonical": "#b42318",
+        "dark": "#ff7b72",
+        "purpose": "The one hue, for faults only: fault titles and icons, the fault banner, fault lines, a refused field's ring, a 422 location code.",
         "tonalRamp": [
-          "oklch(15% 0.162 27.8)",
-          "oklch(26% 0.162 27.8)",
-          "oklch(38% 0.162 27.8)",
-          "oklch(50% 0.162 27.8)",
-          "oklch(62% 0.162 27.8)",
-          "oklch(73% 0.162 27.8)",
-          "oklch(84% 0.162 27.8)",
-          "oklch(95% 0.162 27.8)"
+          "#2a1311",
+          "#4a1d19",
+          "#b42318",
+          "#ff7b72",
+          "#f9dcd9",
+          "#fdf0ef"
         ]
       },
       "danger-tint": {
-        "role": "secondary",
-        "displayName": "Danger Tint",
-        "canonical": "#fdebec",
-        "oklch": "oklch(95.5% 0.020 13.6)",
-        "dark": "#362422",
-        "purpose": "Fill of the fault callout, the fault banner, a question fault line.",
+        "role": "fault",
+        "displayName": "Fault Wash",
+        "canonical": "#fdf0ef",
+        "dark": "#2a1311",
+        "purpose": "The fault callout, the fault banner, a question's fault line.",
         "tonalRamp": [
-          "oklch(15% 0.020 13.6)",
-          "oklch(26% 0.020 13.6)",
-          "oklch(38% 0.020 13.6)",
-          "oklch(50% 0.020 13.6)",
-          "oklch(62% 0.020 13.6)",
-          "oklch(73% 0.020 13.6)",
-          "oklch(84% 0.020 13.6)",
-          "oklch(95% 0.020 13.6)"
+          "#2a1311",
+          "#4a1d19",
+          "#b42318",
+          "#ff7b72",
+          "#f9dcd9",
+          "#fdf0ef"
         ]
       },
       "danger-tint-2": {
-        "role": "secondary",
-        "displayName": "Danger Tint 2",
-        "canonical": "rgb(212 76 71 / 0.16)",
-        "oklch": "oklch(60.2% 0.172 25.8)",
-        "dark": "rgb(0 0 0 / 0.3)",
-        "purpose": "Fill behind the location code inside a fault.",
+        "role": "fault",
+        "displayName": "Fault Chip",
+        "canonical": "#f9dcd9",
+        "dark": "#4a1d19",
+        "purpose": "The ground of a 422 issue's location code.",
         "tonalRamp": [
-          "oklch(15% 0.172 25.8)",
-          "oklch(26% 0.172 25.8)",
-          "oklch(38% 0.172 25.8)",
-          "oklch(50% 0.172 25.8)",
-          "oklch(62% 0.172 25.8)",
-          "oklch(73% 0.172 25.8)",
-          "oklch(84% 0.172 25.8)",
-          "oklch(95% 0.172 25.8)"
-        ]
-      },
-      "tooltip": {
-        "role": "neutral",
-        "displayName": "Tooltip",
-        "canonical": "#0f0f0f",
-        "oklch": "oklch(16.8% 0.000 89.9)",
-        "dark": "#ffffff",
-        "purpose": "The tooltip card and the toast; white in the dark scheme.",
-        "tonalRamp": [
-          "oklch(15% 0.000 89.9)",
-          "oklch(26% 0.000 89.9)",
-          "oklch(38% 0.000 89.9)",
-          "oklch(50% 0.000 89.9)",
-          "oklch(62% 0.000 89.9)",
-          "oklch(73% 0.000 89.9)",
-          "oklch(84% 0.000 89.9)",
-          "oklch(95% 0.000 89.9)"
-        ]
-      },
-      "tooltip-ink": {
-        "role": "neutral",
-        "displayName": "Tooltip Ink",
-        "canonical": "rgb(255 255 255 / 0.9)",
-        "oklch": "oklch(100.0% 0.000 89.9)",
-        "dark": "#191919",
-        "purpose": "Text on the tooltip and toast.",
-        "tonalRamp": [
-          "oklch(15% 0.000 89.9)",
-          "oklch(26% 0.000 89.9)",
-          "oklch(38% 0.000 89.9)",
-          "oklch(50% 0.000 89.9)",
-          "oklch(62% 0.000 89.9)",
-          "oklch(73% 0.000 89.9)",
-          "oklch(84% 0.000 89.9)",
-          "oklch(95% 0.000 89.9)"
-        ]
-      },
-      "overlay": {
-        "role": "neutral",
-        "displayName": "Overlay",
-        "canonical": "rgb(15 15 15 / 0.6)",
-        "oklch": "oklch(16.8% 0.000 89.9)",
-        "dark": "rgb(15 15 15 / 0.8)",
-        "purpose": "The scrim behind the drawer.",
-        "tonalRamp": [
-          "oklch(15% 0.000 89.9)",
-          "oklch(26% 0.000 89.9)",
-          "oklch(38% 0.000 89.9)",
-          "oklch(50% 0.000 89.9)",
-          "oklch(62% 0.000 89.9)",
-          "oklch(73% 0.000 89.9)",
-          "oklch(84% 0.000 89.9)",
-          "oklch(95% 0.000 89.9)"
-        ]
-      },
-      "scroll-thumb": {
-        "role": "neutral",
-        "displayName": "Scroll Thumb",
-        "canonical": "#d3d1cb",
-        "oklch": "oklch(86.1% 0.008 91.5)",
-        "dark": "#454545",
-        "purpose": "Thin scrollbars.",
-        "tonalRamp": [
-          "oklch(15% 0.008 91.5)",
-          "oklch(26% 0.008 91.5)",
-          "oklch(38% 0.008 91.5)",
-          "oklch(50% 0.008 91.5)",
-          "oklch(62% 0.008 91.5)",
-          "oklch(73% 0.008 91.5)",
-          "oklch(84% 0.008 91.5)",
-          "oklch(95% 0.008 91.5)"
+          "#2a1311",
+          "#4a1d19",
+          "#b42318",
+          "#ff7b72",
+          "#f9dcd9",
+          "#fdf0ef"
         ]
       }
     },
     "typographyMeta": {
-      "page-title": {
-        "displayName": "Page title",
-        "purpose": "The one Playground heading beside its 32px page glyph. The only letter-spacing on the page."
+      "headline-page": {
+        "displayName": "Headline, page",
+        "purpose": "The one page h1, \"Ardana playground\"; about 41px at 1280 wide."
       },
-      "page-title-compact": {
-        "displayName": "Page title, compact",
-        "purpose": "The same heading below 720px, beside a 24px glyph."
+      "headline-page-compact": {
+        "displayName": "Headline, page (compact)",
+        "purpose": "The page h1 below 720px."
       },
-      "block-heading": {
-        "displayName": "Block heading",
-        "purpose": "State, Questions, question ids, toggle headings."
+      "headline-notice": {
+        "displayName": "Headline, notice",
+        "purpose": "The placeholder page's one statement, balanced."
       },
-      "ui": {
-        "displayName": "UI",
-        "purpose": "Buttons, rows, the crumb; the workspace name and the winning option name at 600."
+      "title": {
+        "displayName": "Title",
+        "purpose": "The landing's catalog row title: question ids, the State and Questions headings, the Raw exchange and Snippets toggle headings (all compact below 720px)."
+      },
+      "title-compact": {
+        "displayName": "Title, compact",
+        "purpose": "Below 720px: question ids together with the State, Questions, Raw exchange and Snippets headings, so an id never outsizes its section heading."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "The sentence under the page title (60ch) and the placeholder's paragraphs, in Pencil Gray."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Lede, instructions (65ch), option names, readouts, properties, field text, callouts (56ch); tabular numerals."
+        "purpose": "Instructions (65ch), option names, fact values, captions, field text, the state editor's placeholder; tabular numerals; the crumb at 500."
+      },
+      "button": {
+        "displayName": "Button",
+        "purpose": "The Run label."
+      },
+      "link": {
+        "displayName": "Link",
+        "purpose": "Quiet buttons and sidebar rows; 0.875rem in small buttons."
       },
       "small": {
         "displayName": "Small",
-        "purpose": "Segments (line-height 1), small buttons, banner, toast, question fault lines; 400 for toggle captions and field fault lines."
+        "purpose": "The toast and the banner; a question's fault line at 400."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Field labels, sidebar headings, tags, tooltip, criteria legends, wire pane headings."
+        "purpose": "Field labels, sidebar headings, builder legends, segments, the Sent and Received captions."
       },
       "caption": {
         "displayName": "Caption",
-        "purpose": "Token count, last-run line, field notes, sidebar foot, option notes, score fit."
+        "purpose": "Notes, fact names, segmented legends, the last-run line, token count, fault lines, the sidebar foot."
       },
-      "code": {
-        "displayName": "Code",
-        "purpose": "State, questions JSON, wire panes, snippet; 1.5 in a code field; inline code at 0.85em on the hover fill."
+      "pill": {
+        "displayName": "Pill",
+        "purpose": "Tags and tooltips; a score level's fit line at 400."
+      },
+      "code-block": {
+        "displayName": "Code, block",
+        "purpose": "The state, the questions JSON (and its placeholder), the wire panes, the snippet."
+      },
+      "code-sm": {
+        "displayName": "Code, small",
+        "purpose": "The model select; typed ids, option keys and the share link in fields."
+      },
+      "code-cell": {
+        "displayName": "Code, cell",
+        "purpose": "Every returned figure: readouts (600 for an answer, noul included) and fact-row figures."
+      },
+      "code-xs": {
+        "displayName": "Code, extra small",
+        "purpose": "The model in the last-run line; the serving origin in the sidebar foot."
       }
     },
     "shadows": [
       {
-        "name": "hairline-ring",
-        "value": "rgb(15 15 15 / 0.1) 0 0 0 1px",
-        "dark": "rgb(255 255 255 / 0.094) 0 0 0 1px",
-        "purpose": "Question blocks: the ring that stands in for a border."
-      },
-      {
-        "name": "field-inset",
-        "value": "inset 0 0 0 1px var(--hairline-strong)",
-        "purpose": "Inputs, the select, an unchecked check box."
-      },
-      {
-        "name": "focus-ring",
-        "value": "inset 0 0 0 1px var(--accent), 0 0 0 2px var(--accent-tint)",
-        "purpose": "A focused field, select or code block; other controls use outline: 2px solid var(--accent) at 1px offset."
-      },
-      {
-        "name": "fault-inset",
-        "value": "inset 0 0 0 1px var(--danger)",
-        "purpose": "A field or code block with aria-invalid=\"true\"."
-      },
-      {
         "name": "divider",
-        "value": "inset -1px 0 0 var(--hairline) | inset 0 -1px 0 var(--hairline) | inset 0 1px 0 var(--hairline)",
-        "purpose": "Sidebar right edge; top bar and banner bottom; top of a property list or builder panel."
+        "value": "inset -1px 0 0 var(--line) | inset 0 -1px 0 var(--line)",
+        "purpose": "A 1px line, not a shadow: the sidebar's right edge; the bottom of the sidebar head, the top bar and the banner."
       },
       {
-        "name": "segment-lift",
-        "value": "0 0 0 1px var(--edge-strong), rgb(15 15 15 / 0.1) 0 1px 2px",
-        "purpose": "The checked segment on its raised plate."
+        "name": "type-ring",
+        "value": "inset 0 0 0 1px var(--code-muted)",
+        "purpose": "A box you type in: fields, the model select, the state and questions editors."
       },
       {
-        "name": "popover",
-        "value": "rgb(15 15 15 / 0.1) 0 0 0 1px, rgb(15 15 15 / 0.1) 0 3px 6px, rgb(15 15 15 / 0.2) 0 9px 24px",
-        "dark": "rgb(255 255 255 / 0.094) 0 0 0 1px, rgb(15 15 15 / 0.5) 0 3px 6px, rgb(15 15 15 / 0.6) 0 9px 24px",
-        "purpose": "The share popover and the skip link."
+        "name": "fault-ring",
+        "value": "inset 0 0 0 1px var(--danger)",
+        "purpose": "A field or editor whose value was refused (aria-invalid)."
       },
       {
-        "name": "drawer",
-        "value": "rgb(15 15 15 / 0.2) 0 0 0 1px, rgb(15 15 15 / 0.3) 0 12px 32px",
-        "dark": "rgb(255 255 255 / 0.094) 0 0 0 1px, rgb(15 15 15 / 0.7) 0 12px 32px",
-        "purpose": "The sidebar as a drawer below 960px."
+        "name": "rest-ring",
+        "value": "inset 0 0 0 1px var(--line)",
+        "purpose": "A field the builder cannot edit, an outline on paper."
       },
       {
-        "name": "toast",
-        "value": "rgb(15 15 15 / 0.3) 0 4px 16px",
-        "purpose": "The copy toast."
+        "name": "picked-ring",
+        "value": "inset 0 0 0 1px var(--ink)",
+        "purpose": "The checked segment."
       }
     ],
     "motion": [
       {
-        "name": "ease",
-        "value": "cubic-bezier(0.3, 0, 0.5, 1)",
-        "purpose": "The shell collapse, the drawer, the scrim, and the bar growth."
-      },
-      {
         "name": "fast",
-        "value": "100ms ease-in",
-        "purpose": "Hover fills, colours, box-shadows, the toggle marker turn, the collapse control fade; none under reduced motion."
+        "value": "150ms ease",
+        "purpose": "Colour, background, ring and opacity changes: buttons, rows, segments, fields, icon keys, the copy glyph's fade."
       },
       {
         "name": "normal",
-        "value": "200ms",
-        "purpose": "Sidebar collapse (grid columns), drawer slide (transform) and scrim (opacity); none under reduced motion."
+        "value": "200ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Sidebar collapse (grid columns), drawer slide, scrim fade, skip link slide, the disclosure chevron's turn, the back arrow's 3px nudge, the copy check's scale."
+      },
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The landing's curve, for everything that moves."
       },
       {
         "name": "bar-grow",
-        "value": "400ms cubic-bezier(0.3, 0, 0.5, 1) both",
-        "purpose": "A bar fill grows from 0 to the returned probability after each run; none under reduced motion."
+        "value": "600ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "purpose": "A bar fill grows from 0 to the returned probability after each run."
       },
       {
-        "name": "spin",
-        "value": "900ms linear infinite",
-        "purpose": "The Run button spinner arc while busy; still under reduced motion."
+        "name": "press",
+        "value": "transform: scale(0.97), 150ms ease",
+        "purpose": "Run while pressed."
       },
       {
-        "name": "scroll",
-        "value": "smooth | instant",
-        "purpose": "scrollIntoView is smooth, instant under reduced motion."
+        "name": "caret",
+        "value": "1.1s steps(1) infinite",
+        "purpose": "The landing's block caret after Run's label while a run is in flight; still in Run's unseen sizer."
       },
       {
-        "name": "toast-hold",
-        "value": "4s",
-        "purpose": "The copy toast clears after four seconds."
+        "name": "copied",
+        "value": "1.6s",
+        "purpose": "The copy key shows its check, then reverts; a clipboard refusal stays in the toast for 4s."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "Every transition and the bar growth stop, the press does not scale, the caret holds steady."
       }
     ],
     "breakpoints": [
       {
-        "name": "page-padding",
-        "value": "1200px",
-        "purpose": "Page side padding drops from 48px to 32px."
-      },
-      {
         "name": "drawer",
         "value": "960px",
-        "purpose": "Columns stack; the sidebar becomes a fixed drawer over a scrim; the page is inert while it is open."
+        "purpose": "Columns stack; the state falls to 220px; the sidebar becomes a drawer over the scrim with the page inert; fact tooltips open rightwards, the fifth and later leftwards."
       },
       {
         "name": "phone",
         "value": "720px",
-        "purpose": "Page padding 16px, title 1.5rem, bar rows restack, exchange panes stack, popover fixed under the top bar."
+        "purpose": "Page tightens; title 1.875rem, question ids and section headings 1.25rem; facts in two columns (the right column's tooltips open leftwards); the crumb and the stale-tag slot are removed; lockup 22px; Run at 14px sides fits its label; popover fixed."
+      },
+      {
+        "name": "smallest",
+        "value": "389px",
+        "purpose": "Lockup 18px and tighter top-bar gaps; Share becomes a 32px key with the link glyph, its word visually hidden and its name still \"Share link\", so Share and Run stay on the bar's one line."
+      },
+      {
+        "name": "questions-column",
+        "value": "30rem (container query on .questions)",
+        "purpose": "A questions column narrower than 30rem restacks each bar row: mark, name and figure over the bar; a score level's first line at least 40px."
+      }
+    ],
+    "focus": {
+      "value": "outline: 2px solid var(--focus); outline-offset: 3px",
+      "purpose": "The landing's ring on every control, following the control's corner; 3px corner on shapeless text (a disclosure summary, a defined term); Highlight in forced colors."
+    },
+    "layers": [
+      {
+        "name": "topbar",
+        "value": 20
+      },
+      {
+        "name": "tooltip",
+        "value": 30
+      },
+      {
+        "name": "popover",
+        "value": 30
+      },
+      {
+        "name": "toast",
+        "value": 40
+      },
+      {
+        "name": "scrim",
+        "value": 55
+      },
+      {
+        "name": "drawer",
+        "value": 60
+      },
+      {
+        "name": "skip-link",
+        "value": 70
       }
     ],
     "darkScheme": {
       "trigger": "prefers-color-scheme: dark",
-      "note": "The same tokens are redefined under the media query; the page offers no switch. accent, accent-fill, accent-fill-hover, on-accent and selection do not change. Per-token dark values sit in colorMeta.<token>.dark."
+      "note": "The logo kit's inverse: the same tokens redefined under the media query (color-scheme: light dark; theme-color #ffffff and #0a0a0a). The brand's ink (logo, Run, answer, focus) turns #ffffff, text #ededed; the page offers no switch. Per-token dark values sit in colorMeta.<token>.dark."
     }
   },
   "components": [
@@ -702,175 +521,183 @@
       "name": "Run (primary button)",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The one blue button, in the sticky top bar. Held with aria-disabled (never disabled) at 50% opacity with its reason in the banner; busy at 85% with a turning arc and the label Running or Pulling; Ctrl/Cmd+Enter presses it from anywhere.",
-      "html": "<button type=\"button\" class=\"ds-button ds-button-primary\" aria-keyshortcuts=\"Control+Enter Meta+Enter\">Run</button> <button type=\"button\" class=\"ds-button ds-button-primary\" aria-busy=\"true\"><svg class=\"ds-icon ds-icon-sm ds-spinner\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 1.5a6.5 6.5 0 0 1 6.5 6.5\"/></svg>Running</button> <button type=\"button\" class=\"ds-button ds-button-primary\" aria-disabled=\"true\">Run</button>",
-      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-primary{background:var(--accent-fill, #0075d3);color:var(--on-accent, #ffffff);padding:0 12px}.ds-button-primary:hover:not([aria-disabled=\"true\"]),.ds-button-primary:active:not([aria-disabled=\"true\"]){background:var(--accent-fill-hover, #0066bd)}.ds-button-primary[aria-disabled=\"true\"]{background:var(--accent-fill, #0075d3);color:var(--on-accent, #ffffff);opacity:.5}.ds-button-primary[aria-busy=\"true\"]{opacity:.85}.ds-button-primary .ds-icon{color:inherit}.ds-icon-sm{width:14px;height:14px}.ds-spinner{animation:ds-spin 900ms linear infinite}@keyframes ds-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.ds-button{transition:none}.ds-spinner{animation:none}}"
+      "description": "The one ink pill, in the sticky top bar. It keeps one width: its face and an unseen \"Running\" with its caret share one grid cell (dropped in a phone's top bar, where the pill narrows to 14px sides and fits its label). Held with aria-disabled at 35%, its reason in the banner; busy at full strength with the landing's blinking caret after Running or Pulling; Ctrl/Cmd+Enter presses it.",
+      "html": "<button type=\"button\" class=\"ds-run\" aria-keyshortcuts=\"Control+Enter Meta+Enter\"><span class=\"ds-run-face\">Run</span><span class=\"ds-run-sizer\" aria-hidden=\"true\">Running<span class=\"ds-caret\"></span></span></button> <button type=\"button\" class=\"ds-run\" aria-busy=\"true\"><span class=\"ds-run-face\">Running<span class=\"ds-caret\" aria-hidden=\"true\"></span></span><span class=\"ds-run-sizer\" aria-hidden=\"true\">Running<span class=\"ds-caret\"></span></span></button> <button type=\"button\" class=\"ds-run\" aria-disabled=\"true\"><span class=\"ds-run-face\">Run</span><span class=\"ds-run-sizer\" aria-hidden=\"true\">Running<span class=\"ds-caret\"></span></span></button>",
+      "css": ".ds-run{display:inline-grid;place-items:center;min-height:36px;padding:0 18px;border:0;border-radius:999px;background:var(--accent, #0a0a0a);color:var(--on-accent, #ffffff);font:600 0.9375rem/1.2 var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif);white-space:nowrap;cursor:pointer;transition:background-color 150ms ease,transform 150ms ease}.ds-run-face,.ds-run-sizer{grid-area:1 / 1;display:inline-flex;align-items:center}.ds-run-sizer{visibility:hidden}.ds-run-sizer .ds-caret{animation:none}.ds-run:hover:not([aria-disabled=\"true\"]){background:var(--accent-hover, #2b2b2b)}.ds-run:active:not([aria-disabled=\"true\"]){background:var(--accent-hover, #2b2b2b);transform:scale(0.97)}.ds-run:focus-visible{outline:2px solid var(--focus, #0a0a0a);outline-offset:3px}.ds-run[aria-disabled=\"true\"]{opacity:0.35;cursor:default}.ds-caret{display:inline-block;width:0.55em;height:1em;margin-left:0.18em;vertical-align:-0.14em;background:currentColor;animation:ds-blink 1.1s steps(1) infinite}@keyframes ds-blink{50%{opacity:0}}@media (max-width: 720px){.ds-run-sizer{display:none}.ds-run{padding:0 14px}}@media (prefers-reduced-motion: reduce){.ds-run{transition:none}.ds-run:active:not([aria-disabled=\"true\"]){transform:none}.ds-caret{animation:none}}"
     },
     {
-      "name": "Ghost button",
+      "name": "Quiet and icon buttons",
       "kind": "button",
       "refersTo": "button",
-      "description": "Every other button: transparent at rest, 8% ink on hover, 16% when pressed or expanded; the icon square (28px, 24px small) is named by its aria-label; the small size is 24px at 13px for row actions.",
-      "html": "<button type=\"button\" class=\"ds-button\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M6 6h7v7H6zM3 10V3h7\"/></svg>Share</button> <button type=\"button\" class=\"ds-button\" aria-expanded=\"true\">Edit</button> <button type=\"button\" class=\"ds-button ds-button-icon\" aria-label=\"Open sidebar\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M7 3l5 5-5 5M3 3l5 5-5 5\"/></svg></button> <button type=\"button\" class=\"ds-button ds-button-sm\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M6 6h7v7H6zM3 10V3h7\"/></svg>Copy</button> <button type=\"button\" class=\"ds-button ds-button-sm\" aria-disabled=\"true\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 3v10M3 8h10\"/></svg>Add option</button>",
-      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-icon{width:28px;min-width:28px;padding:0}.ds-button-sm{min-height:24px;font-size:0.8125rem}.ds-button-icon.ds-button-sm{width:24px;min-width:24px}@media (prefers-reduced-motion:reduce){.ds-button{transition:none}}"
+      "description": "Share, Edit and the row actions: Pencil Gray words that turn ink on hover, press or while expanded, never a fill; small at 28px and 14px. Share is its word, and at 389px and below a 32px key with the link glyph, its word visually hidden and its name still \"Share link\". The icon key (the sidebar's opener and closer, here with the panel glyph) is Prompt Gray and takes the Icon Wash on hover.",
+      "html": "<button type=\"button\" class=\"ds-btn ds-share\" aria-label=\"Share link\"><svg class=\"ds-icon ds-share-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M6.5 9.5l3-3M5 7 3.5 8.5a2.5 2.5 0 0 0 3.5 3.5L8.5 10.5M11 9l1.5-1.5a2.5 2.5 0 0 0-3.5-3.5L7.5 5.5\"/></svg><span class=\"ds-share-label\">Share</span></button> <button type=\"button\" class=\"ds-btn\" aria-expanded=\"true\">Edit</button> <button type=\"button\" class=\"ds-btn ds-btn-sm\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 3v10M3 8h10\"/></svg>Add option</button> <button type=\"button\" class=\"ds-btn ds-btn-icon\" aria-label=\"Close sidebar\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 2.75h10A1.25 1.25 0 0 1 14.25 4v8A1.25 1.25 0 0 1 13 13.25H3A1.25 1.25 0 0 1 1.75 12V4A1.25 1.25 0 0 1 3 2.75zM6.25 2.75v10.5\"/></svg></button>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--muted, #666666);font:400 0.9375rem/1.2 var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif);white-space:nowrap;cursor:pointer;transition:color 150ms ease,background-color 150ms ease}.ds-btn:hover,.ds-btn:active,.ds-btn[aria-expanded=\"true\"]{color:var(--ink, #0a0a0a)}.ds-btn:focus-visible{outline:2px solid var(--focus, #0a0a0a);outline-offset:3px}.ds-btn-sm{min-height:28px;padding:0 8px;font-size:0.875rem}.ds-btn-icon{width:32px;min-width:32px;padding:0;color:var(--code-muted, #8a8a8a)}.ds-btn-icon:hover{color:var(--code-ink, #0a0a0a);background:var(--code-hover, rgb(10 10 10 / 0.07))}.ds-btn[aria-disabled=\"true\"]{opacity:0.45;cursor:default}@media (prefers-reduced-motion: reduce){.ds-btn{transition:none}}.ds-share-icon{display:none}@media (max-width: 389px){.ds-share{width:32px;padding:0}.ds-share-icon{display:block}.ds-share-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}}"
     },
     {
       "name": "Segmented control",
-      "kind": "input",
-      "refersTo": "segmented-control",
-      "description": "A native radio group in a low track; the checked option lifts onto a raised plate. Arrow keys move the choice; the invisible radio covers its segment. Used for a question type and the snippet language.",
-      "html": "<div class=\"ds-segmented\" role=\"radiogroup\" aria-labelledby=\"ds-type\"><span class=\"ds-segmented-legend\" id=\"ds-type\">Type</span><span class=\"ds-segmented-options\"><label class=\"ds-segment\"><input type=\"radio\" name=\"ds-t\" class=\"ds-segment-input\">noul</label><label class=\"ds-segment ds-on\"><input type=\"radio\" name=\"ds-t\" class=\"ds-segment-input\" checked>choice</label><label class=\"ds-segment\"><input type=\"radio\" name=\"ds-t\" class=\"ds-segment-input\">score</label></span></div>",
-      "css": ".ds-segmented{display:inline-flex;align-items:center;gap:8px;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-segmented-legend{color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem}.ds-segmented-options{display:inline-flex;padding:2px;border-radius:6px;background:var(--hover, rgb(55 53 47 / 0.08))}.ds-segment{position:relative;display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:4px;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem;font-weight:500;line-height:1;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in,box-shadow 100ms ease-in}.ds-segment:hover:not(.ds-on){color:var(--ink, #37352f)}.ds-segment.ds-on{background:var(--raised, #ffffff);color:var(--ink, #37352f);box-shadow:0 0 0 1px var(--edge-strong, rgb(55 53 47 / 0.55)),rgb(15 15 15 / 0.1) 0 1px 2px;cursor:default}.ds-segment-input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:inherit}.ds-segment:has(.ds-segment-input:focus-visible){outline:2px solid var(--accent, #2383e2);outline-offset:1px}@media (prefers-reduced-motion:reduce){.ds-segment{transition:none}}"
+      "kind": "chip",
+      "refersTo": "segment",
+      "description": "A native radio group: a 13px regular legend 12px before its options, then gray word segments as 28px pills, the checked one ink inside a 1px ink ring. A question's type and the snippet's language.",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\" aria-labelledby=\"ds-seg-legend\"><span class=\"ds-seg-legend\" id=\"ds-seg-legend\">Type</span><span class=\"ds-seg-options\"><label class=\"ds-segment\"><input type=\"radio\" name=\"ds-type\" class=\"ds-seg-input\">noul</label><label class=\"ds-segment\"><input type=\"radio\" name=\"ds-type\" class=\"ds-seg-input\" checked>choice</label><label class=\"ds-segment\"><input type=\"radio\" name=\"ds-type\" class=\"ds-seg-input\">score</label></span></div>",
+      "css": ".ds-seg{display:inline-flex;align-items:center;gap:12px;font-family:var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif)}.ds-seg-legend{color:var(--muted, #666666);font-size:0.8125rem;font-weight:400}.ds-seg-options{display:inline-flex;gap:2px}.ds-segment{position:relative;display:inline-flex;align-items:center;min-height:28px;padding:0 12px;border-radius:999px;color:var(--muted, #666666);font-size:0.8125rem;font-weight:500;line-height:1;cursor:pointer;transition:color 150ms ease,box-shadow 150ms ease}.ds-segment:hover{color:var(--ink, #0a0a0a)}.ds-segment:has(.ds-seg-input:checked){color:var(--ink, #0a0a0a);box-shadow:inset 0 0 0 1px var(--ink, #0a0a0a);cursor:default}.ds-seg-input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:inherit}.ds-segment:has(.ds-seg-input:focus-visible){outline:2px solid var(--focus, #0a0a0a);outline-offset:3px}@media (prefers-reduced-motion: reduce){.ds-segment{transition:none}}"
     },
     {
       "name": "Field",
       "kind": "input",
       "refersTo": "field",
-      "description": "A low input on a faint fill with an inset hairline; blue ring and tint halo on focus; danger ring and a fault line beneath when aria-invalid; code fields in 13px mono.",
-      "html": "<div class=\"ds-field\"><label class=\"ds-field-label\" for=\"ds-f1\">Question id</label><input id=\"ds-f1\" class=\"ds-field-input ds-field-code\" type=\"text\" value=\"department\"></div> <div class=\"ds-field\"><label class=\"ds-field-label\" for=\"ds-f2\">Instructions</label><input id=\"ds-f2\" class=\"ds-field-input\" type=\"text\" placeholder=\"Which department should handle this?\"></div> <div class=\"ds-field\"><label class=\"ds-field-label\" for=\"ds-f3\">Option 1 name</label><input id=\"ds-f3\" class=\"ds-field-input ds-field-code\" type=\"text\" value=\"\" aria-invalid=\"true\" aria-describedby=\"ds-f3-error\"><p id=\"ds-f3-error\" class=\"ds-fault-line\">Option names must not be empty</p></div>",
-      "css": ".ds-field{display:inline-grid;gap:4px;min-width:16rem;margin:0 8px 8px 0;vertical-align:top;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-field-label{color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.75rem;font-weight:500;line-height:1.4}.ds-field-input{display:block;width:100%;min-height:28px;padding:3px 8px;border:0;border-radius:4px;background:var(--field, rgb(242 241 238 / 0.6));box-shadow:inset 0 0 0 1px var(--hairline-strong, rgb(55 53 47 / 0.16));color:var(--ink, #37352f);font:400 0.875rem/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;transition:box-shadow 100ms ease-in}.ds-field-input::placeholder{color:var(--ink-2, rgb(25 23 17 / 0.65));opacity:1}.ds-field-input:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent, #2383e2),0 0 0 2px var(--accent-tint, rgb(35 131 226 / 0.14))}.ds-field-input[aria-invalid=\"true\"]{box-shadow:inset 0 0 0 1px var(--danger, #b3372f)}.ds-field-code{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", Courier, monospace;font-size:0.8125rem}.ds-fault-line{margin:0;color:var(--danger, #b3372f);font-size:0.8125rem;line-height:1.4}@media (prefers-reduced-motion:reduce){.ds-field-input{transition:none}}"
+      "description": "A box you type in: Terminal Gray, 10px corners, the 1px Prompt Gray ring; typed ids in Geist Mono. Refused: the ring turns Fault Red. Not editable: a hairline outline on paper.",
+      "html": "<div class=\"ds-field\"><label class=\"ds-label\" for=\"ds-qid\">Question id</label><input id=\"ds-qid\" class=\"ds-input ds-input-code\" value=\"department\" spellcheck=\"false\"></div><div class=\"ds-field\"><label class=\"ds-label\" for=\"ds-ins\">Instructions</label><input id=\"ds-ins\" class=\"ds-input\" value=\"Which department should handle this?\"></div><div class=\"ds-field\"><label class=\"ds-label\" for=\"ds-desc\">Description</label><input id=\"ds-desc\" class=\"ds-input\" placeholder=\"Description (optional)\"></div>",
+      "css": ".ds-field{display:grid;gap:6px;max-width:420px;margin-bottom:12px;font-family:var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif)}.ds-label{color:var(--muted, #666666);font-size:0.8125rem;font-weight:500;line-height:1.4}.ds-input{display:block;width:100%;min-height:36px;padding:6px 12px;border:0;border-radius:10px;background:var(--code-bg, #f4f4f4);box-shadow:inset 0 0 0 1px var(--code-muted, #8a8a8a);color:var(--code-ink, #0a0a0a);font:400 0.9375rem/1.5 var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif);transition:box-shadow 150ms ease}.ds-input::placeholder{color:var(--muted, #666666);opacity:1}.ds-input:focus-visible{outline:2px solid var(--focus, #0a0a0a);outline-offset:3px}.ds-input[aria-invalid=\"true\"]{box-shadow:inset 0 0 0 1px var(--danger, #b42318)}.ds-input:disabled{background:transparent;box-shadow:inset 0 0 0 1px var(--line, #ececec);color:var(--muted, #666666)}.ds-input-code{font-family:var(--mono, \"Geist Mono Variable\", ui-monospace, \"SF Mono\", Menlo, monospace);font-size:0.8125rem}@media (prefers-reduced-motion: reduce){.ds-input{transition:none}}"
     },
     {
       "name": "Model select",
       "kind": "input",
       "refersTo": "select",
-      "description": "A real select dressed as a field in the sidebar: transparent with the inset hairline, a 14px chevron, hover fill, the blue focus ring; pulled models first, then library models with their download size.",
-      "html": "<div class=\"ds-select\"><select class=\"ds-select-input\" aria-label=\"Model\"><optgroup label=\"Pulled\"><option>decider-2b</option></optgroup><optgroup label=\"Library · pulls on first run\"><option>decider-4b · 2.7 GB</option><option>qwen3.5-0.8b · 563.0 MB</option></optgroup></select><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 6.5l4 4 4-4\"/></svg></div>",
-      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-select{position:relative;display:block;max-width:16rem;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-select-input{appearance:none;width:100%;min-height:28px;padding:3px 28px 3px 8px;border:0;border-radius:4px;background:transparent;box-shadow:inset 0 0 0 1px var(--hairline-strong, rgb(55 53 47 / 0.16));color:var(--ink, #37352f);font:400 0.875rem/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;text-overflow:ellipsis;cursor:pointer;transition:background 100ms ease-in}.ds-select-input:hover{background:var(--hover, rgb(55 53 47 / 0.08))}.ds-select-input:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent, #2383e2),0 0 0 2px var(--accent-tint, rgb(35 131 226 / 0.14))}.ds-select .ds-icon{position:absolute;top:50%;right:8px;margin-top:-7px;width:14px;height:14px;color:var(--ink-2, rgb(25 23 17 / 0.65));pointer-events:none}"
+      "description": "The landing's small command box as a real select: 40px, ringed because you pick in it, the model's name in Geist Mono, a Prompt Gray chevron.",
+      "html": "<div class=\"ds-select\"><select class=\"ds-select-input\" aria-label=\"Model\"><optgroup label=\"Pulled\"><option>decider-2b</option></optgroup><optgroup label=\"Library · pulls on first run\"><option>decider-4b</option><option>smollm3-3b</option></optgroup></select><svg class=\"ds-icon ds-select-chevron\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 6.5l4 4 4-4\"/></svg></div>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-select{position:relative;display:block;max-width:232px}.ds-select-input{appearance:none;width:100%;min-height:40px;padding:0 36px 0 14px;border:0;border-radius:10px;background:var(--code-bg, #f4f4f4);box-shadow:inset 0 0 0 1px var(--code-muted, #8a8a8a);color:var(--code-ink, #0a0a0a);font:400 0.8125rem/1.45 var(--mono, \"Geist Mono Variable\", ui-monospace, \"SF Mono\", Menlo, monospace);text-overflow:ellipsis;cursor:pointer}.ds-select-input:focus-visible{outline:2px solid var(--focus, #0a0a0a);outline-offset:3px}.ds-select-chevron{position:absolute;top:50%;right:13px;margin-top:-7px;width:14px;height:14px;color:var(--code-muted, #8a8a8a);pointer-events:none;transition:color 150ms ease}.ds-select:hover .ds-select-chevron{color:var(--code-ink, #0a0a0a)}"
     },
     {
       "name": "Tag",
       "kind": "chip",
       "refersTo": "tag",
-      "description": "A small grey chip for a state word: how the state will be sent, and that the inputs changed since the last run.",
+      "description": "The landing's \"default\" pill: a hairline outline around a 12px gray word. Static: how the state is sent, inputs changed, an answer from the last run.",
       "html": "<span class=\"ds-tag\">Sent as text</span> <span class=\"ds-tag\">Inputs changed</span> <span class=\"ds-tag\">From last run · inputs changed</span>",
-      "css": ".ds-tag{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 6px;border-radius:3px;background:var(--tag, rgb(227 226 224 / 0.5));color:var(--tag-ink, #32302c);font:500 0.75rem/1 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap}"
+      "css": ".ds-tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--line, #ececec);border-radius:999px;color:var(--muted, #666666);font:500 0.75rem/1.4 var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif);white-space:nowrap}"
     },
     {
-      "name": "Tooltip",
+      "name": "Command box with copy key",
       "kind": "custom",
-      "refersTo": "tooltip",
-      "description": "The dark card from data-tip, shown on hover or focus above, below, at the start or the end of its control, with the shortcut on a second line; a transparent 6px border bridges the gap so the pointer can cross onto it; Escape hides every tooltip until the pointer or focus moves. Shown open here.",
-      "html": "<span class=\"ds-tip ds-tip-open\" data-tip=\"Send the state and questions&#10;Ctrl+Enter or ⌘↵\"><button type=\"button\" class=\"ds-button ds-button-primary\">Run</button></span>",
-      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-primary{background:var(--accent-fill, #0075d3);color:var(--on-accent, #ffffff);padding:0 12px}.ds-tip{position:relative;display:inline-block;margin-top:56px}.ds-tip::after{content:attr(data-tip);display:none;position:absolute;left:50%;bottom:100%;transform:translateX(-50%);z-index:30;width:max-content;max-width:min(272px,60vw);padding:4px 8px;border:6px solid transparent;border-radius:10px;background:var(--tooltip, #0f0f0f);background-clip:padding-box;color:var(--tooltip-ink, rgb(255 255 255 / 0.9));font:500 0.75rem/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:pre-line;text-align:center}.ds-tip:hover::after,.ds-tip:has(:focus-visible)::after,.ds-tip-open::after{display:block}"
+      "refersTo": "command-box",
+      "description": "The landing's core object at work: a Terminal Gray box, Geist Mono 13px, no ring because you copy from it, the gray $ prompt before a curl line and the 40px copy key in its corner.",
+      "html": "<div class=\"ds-cmd\"><span class=\"ds-copy\"><button type=\"button\" class=\"ds-copy-key\" aria-label=\"Copy snippet\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M7 5.25h4.5A1.75 1.75 0 0 1 13.25 7v4.5a1.75 1.75 0 0 1-1.75 1.75H7a1.75 1.75 0 0 1-1.75-1.75V7A1.75 1.75 0 0 1 7 5.25zM10.75 2.75h-6a2 2 0 0 0-2 2v6\"/></svg></button></span><pre class=\"ds-cmd-body\" tabindex=\"0\" aria-label=\"curl snippet\">curl -sS http://127.0.0.1:8000/v1/systemone \\\n  -H 'content-type: application/json' \\\n  --data-binary @- &lt;&lt;'JSON'</pre></div>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-cmd{position:relative;max-width:560px}.ds-cmd-body{margin:0;padding:16px 56px 16px 18px;border-radius:10px;background:var(--code-bg, #f4f4f4);color:var(--code-ink, #0a0a0a);font:400 0.8125rem/1.6 var(--mono, \"Geist Mono Variable\", ui-monospace, \"SF Mono\", Menlo, monospace);white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}.ds-cmd-body::before{content:\"$ \" / \"\";color:var(--code-muted, #8a8a8a);user-select:none}.ds-cmd-body:focus-visible{outline:2px solid var(--focus, #0a0a0a);outline-offset:3px}.ds-copy{position:absolute;top:6px;right:6px}.ds-copy-key{display:grid;place-items:center;width:40px;height:40px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--code-muted, #8a8a8a);cursor:pointer;transition:color 150ms ease,background-color 150ms ease}.ds-copy-key:hover{color:var(--code-ink, #0a0a0a);background:var(--code-hover, rgb(10 10 10 / 0.07))}.ds-copy-key:focus-visible{outline:2px solid var(--focus, #0a0a0a);outline-offset:3px}@media (prefers-reduced-motion: reduce){.ds-copy-key{transition:none}}"
     },
     {
       "name": "Sidebar rows",
       "kind": "nav",
-      "refersTo": "sidebar-row",
-      "description": "A section heading over page rows on the paper-grey panel: a 16px glyph and a label, hover fill, aria-current keeping the fill on the section in view; the Add question row uses the same shape on the page.",
-      "html": "<nav class=\"ds-sidebar\" aria-label=\"Workspace\"><p class=\"ds-sidebar-heading\">Presets</p><button type=\"button\" class=\"ds-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 1.5h5.5L13 5v9.5H4zM9.5 1.5V5H13M6.5 8.5h3M6.5 11h3\"/></svg><span class=\"ds-row-label\">Ticket routing</span></button><button type=\"button\" class=\"ds-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M4 1.5h5.5L13 5v9.5H4zM9.5 1.5V5H13M6.5 8.5h3M6.5 11h3\"/></svg><span class=\"ds-row-label\">Resume screening</span></button><p class=\"ds-sidebar-heading\">On this page</p><button type=\"button\" class=\"ds-row\" aria-current=\"true\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2.5 4.5h11M2.5 8h11M2.5 11.5h7\"/></svg><span class=\"ds-row-label\">State and questions</span></button><button type=\"button\" class=\"ds-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M5.5 2.5c-1.5 0-2 .5-2 2v2c0 1-.5 1.5-1.5 1.5 1 0 1.5.5 1.5 1.5v2c0 1.5.5 2 2 2M10.5 2.5c1.5 0 2 .5 2 2v2c0 1 .5 1.5 1.5 1.5-1 0-1.5.5-1.5 1.5v2c0 1.5-.5 2-2 2\"/></svg><span class=\"ds-row-label\">Raw exchange</span></button><button type=\"button\" class=\"ds-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M5 4 1.5 8 5 12M11 4l3.5 4L11 12\"/></svg><span class=\"ds-row-label\">Snippets</span></button></nav>",
-      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-sidebar{display:grid;gap:2px;width:240px;padding:8px 8px 16px;background:var(--panel, #fbfbfa);color:var(--ink, #37352f);box-shadow:inset -1px 0 0 var(--hairline, #e9e9e7);font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-sidebar-heading{display:flex;align-items:center;min-height:24px;margin:0;padding:0 8px;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.75rem;font-weight:500;line-height:1}.ds-sidebar-heading+.ds-sidebar-heading,.ds-row+.ds-sidebar-heading{margin-top:14px}.ds-row{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;text-align:left;cursor:pointer;transition:background 100ms ease-in}.ds-row:hover,.ds-row[aria-current=\"true\"]{background:var(--hover, rgb(55 53 47 / 0.08))}.ds-row:active{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-row .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-row-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-row:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}@media (prefers-reduced-motion:reduce){.ds-row{transition:none}}"
+      "refersTo": "nav-row",
+      "description": "Presets and page sections set as the landing's nav links: 15px Pencil Gray, ink on hover and when current, no fill and no weight change; Restore previous leads with the mirrored arrow at the landing's 1.6 stroke.",
+      "html": "<nav class=\"ds-side\" aria-label=\"Workspace\"><p class=\"ds-side-heading\">Presets</p><button type=\"button\" class=\"ds-row\">Ticket routing</button><button type=\"button\" class=\"ds-row\">Resume screening</button><button type=\"button\" class=\"ds-row\"><svg class=\"ds-icon ds-back\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8h9.5M8.5 4l4 4-4 4\"/></svg>Restore previous</button><p class=\"ds-side-heading\">On this page</p><button type=\"button\" class=\"ds-row\" aria-current=\"true\">State and questions</button><button type=\"button\" class=\"ds-row\">Raw exchange</button></nav>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-side{display:grid;gap:2px;width:256px;padding:0 12px 12px;background:var(--bg, #ffffff);font-family:var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif)}.ds-side-heading{display:flex;align-items:center;min-height:28px;margin:12px 0 0;padding:0 12px;color:var(--muted, #666666);font-size:0.8125rem;font-weight:500;line-height:1}.ds-row{display:flex;align-items:center;gap:10px;width:100%;min-height:34px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:var(--muted, #666666);font:400 0.9375rem/1.2 var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif);text-align:left;cursor:pointer;transition:color 150ms ease}.ds-row:hover,.ds-row:active,.ds-row[aria-current=\"true\"]{color:var(--ink, #0a0a0a)}.ds-row:focus-visible{outline:2px solid var(--focus, #0a0a0a);outline-offset:3px}.ds-back{stroke-width:1.6;transform:scaleX(-1);transition:transform 200ms cubic-bezier(0.16, 1, 0.3, 1)}.ds-row:hover .ds-back{transform:scaleX(-1) translateX(3px)}@media (prefers-reduced-motion: reduce){.ds-row,.ds-back{transition:none}.ds-row:hover .ds-back{transform:scaleX(-1)}}"
     },
     {
-      "name": "Question block",
-      "kind": "card",
-      "refersTo": "question-block",
-      "description": "The signature block: a raised block with the hairline ring; id and Type control in the head, instructions, one bar row per option (check, name, 6px bar grown to the probability, exact figure; the winner in blue), then the property list under a hairline.",
-      "html": "<div class=\"ds-question\"><div class=\"ds-question-head\"><h4 class=\"ds-question-id\">department</h4><span class=\"ds-question-controls\"><span class=\"ds-segmented\"><span class=\"ds-segmented-legend\">Type</span><span class=\"ds-segmented-options\"><span class=\"ds-segment\">noul</span><span class=\"ds-segment ds-on\">choice</span><span class=\"ds-segment\">score</span></span></span><button type=\"button\" class=\"ds-button ds-button-sm\">Edit</button></span></div><p class=\"ds-question-instructions\">Which department should handle this?</p><ol class=\"ds-bars\"><li class=\"ds-bar-row ds-lit\"><span class=\"ds-bar-mark\" aria-hidden=\"true\"><svg class=\"ds-icon ds-check\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8.5l3 3 7-7\"/></svg></span><span class=\"ds-bar-name\">billing</span><span class=\"ds-bar\" style=\"--level:0.9346\" aria-hidden=\"true\"><span class=\"ds-bar-fill\"></span></span><span class=\"ds-readout\">93.5%</span></li><li class=\"ds-bar-row\"><span class=\"ds-bar-mark\" aria-hidden=\"true\"><svg class=\"ds-icon ds-check\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8.5l3 3 7-7\"/></svg></span><span class=\"ds-bar-name\">technical</span><span class=\"ds-bar\" style=\"--level:0.0049\" aria-hidden=\"true\"><span class=\"ds-bar-fill\"></span></span><span class=\"ds-readout\">0.5%</span></li><li class=\"ds-bar-row\"><span class=\"ds-bar-mark\" aria-hidden=\"true\"><svg class=\"ds-icon ds-check\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8.5l3 3 7-7\"/></svg></span><span class=\"ds-bar-name\">sales</span><span class=\"ds-bar\" style=\"--level:0.0605\" aria-hidden=\"true\"><span class=\"ds-bar-fill\"></span></span><span class=\"ds-readout\">6.1%</span></li></ol><dl class=\"ds-properties\"><div class=\"ds-property\"><dt><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8.5l3 3 7-7\"/></svg><dfn class=\"ds-dfn\">Answer</dfn></dt><dd class=\"ds-answer\">billing</dd></div><div class=\"ds-property\"><dt><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 14.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z\"/></svg><dfn class=\"ds-dfn\">Confidence</dfn></dt><dd>0.90</dd></div><div class=\"ds-property\"><dt><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M6 2.5 4.5 13.5M11.5 2.5 10 13.5M2.5 6h11M2.5 10h11\"/></svg><dfn class=\"ds-dfn\">P max</dfn></dt><dd>93.5%</dd></div><div class=\"ds-property\"><dt><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2.5 11.5a5.5 5.5 0 0 1 11 0M8 11.5l2.5-4\"/></svg><dfn class=\"ds-dfn\">Certainty</dfn></dt><dd>0.76</dd></div></dl></div>",
-      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-sm{min-height:24px;font-size:0.8125rem}.ds-question{display:grid;gap:12px;max-width:40rem;padding:16px;border-radius:6px;background:var(--raised, #ffffff);color:var(--ink, #37352f);box-shadow:rgb(15 15 15 / 0.1) 0 0 0 1px;font:400 0.875rem/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;font-variant-numeric:tabular-nums}.ds-question-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px}.ds-question-id{flex:1 1 12rem;margin:0;font-size:1rem;font-weight:600;line-height:1.3}.ds-question-controls{display:flex;align-items:center;gap:8px}.ds-question-instructions{margin:0;color:var(--ink-2, rgb(25 23 17 / 0.65));max-width:65ch}.ds-segmented{display:inline-flex;align-items:center;gap:8px}.ds-segmented-legend{color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem}.ds-segmented-options{display:inline-flex;padding:2px;border-radius:6px;background:var(--hover, rgb(55 53 47 / 0.08))}.ds-segment{display:inline-flex;align-items:center;min-height:24px;padding:0 10px;border-radius:4px;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem;font-weight:500;line-height:1}.ds-segment.ds-on{background:var(--raised, #ffffff);color:var(--ink, #37352f);box-shadow:0 0 0 1px var(--edge-strong, rgb(55 53 47 / 0.55)),rgb(15 15 15 / 0.1) 0 1px 2px}.ds-bars{display:grid;gap:6px;margin:0;padding:0;list-style:none}.ds-bar-row{display:grid;grid-template-columns:16px minmax(6rem,12rem) minmax(0,1fr) auto;align-items:center;gap:12px;min-height:24px}.ds-bar-mark{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:3px;color:var(--on-accent, #ffffff);box-shadow:inset 0 0 0 1px var(--hairline-strong, rgb(55 53 47 / 0.16))}.ds-lit .ds-bar-mark{background:var(--accent, #2383e2);box-shadow:none}.ds-check{width:12px;height:12px;stroke-width:2;opacity:0}.ds-lit .ds-check{opacity:1}.ds-bar-name{min-width:0;line-height:1.3}.ds-lit .ds-bar-name{font-weight:600}.ds-bar{height:6px;border-radius:3px;background:var(--track, rgb(55 53 47 / 0.14));overflow:hidden}.ds-bar-fill{display:block;height:100%;width:calc(var(--level,0) * 100%);border-radius:3px;background:var(--bar-muted, #787774);animation:ds-bar-grow 400ms cubic-bezier(0.3,0,0.5,1) both}.ds-lit .ds-bar-fill{background:var(--accent, #2383e2)}@keyframes ds-bar-grow{from{width:0}}.ds-readout{min-width:4.5rem;text-align:right}.ds-properties{display:grid;gap:2px;margin:0;padding-top:12px;box-shadow:inset 0 1px 0 var(--hairline, #e9e9e7)}.ds-property{display:grid;grid-template-columns:9rem minmax(0,1fr);align-items:center;gap:8px;min-height:28px}.ds-property dt{display:flex;align-items:center;gap:6px;color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-property dt .ds-icon{color:var(--ink-3, rgb(55 53 47 / 0.45))}.ds-property dd{margin:0}.ds-answer{font-weight:600}.ds-dfn{font-style:normal;cursor:help}@media (prefers-reduced-motion:reduce){.ds-bar-fill{animation:none}}"
+      "name": "Question row with its answer",
+      "kind": "custom",
+      "refersTo": "question-row",
+      "description": "The signature: a catalog row between hairlines (26px of air, the id at the landing's 22px row title); the answer is the one ink line (disc, name, bar, figure at 600), the other options speak in the gray; facts 48px apart with Geist Mono figures. The column is a size container: under 30rem each bar drops beneath its name and figure. Values are decider-2b's real answer to the Ticket routing preset.",
+      "html": "<div class=\"ds-questions-col\"><ol class=\"ds-questions\"><li class=\"ds-question\"><h3 class=\"ds-question-id\">department</h3><p class=\"ds-instructions\">Which department should handle this?</p><ol class=\"ds-bars\"><li class=\"ds-bar-row ds-lit\"><span class=\"ds-mark\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3.25 8.5l3 3 6.5-7\"/></svg></span><span class=\"ds-name\">billing</span><span class=\"ds-bar\"><span class=\"ds-fill\" style=\"--level:0.9346\"></span></span><span class=\"ds-readout\">93.5%</span></li><li class=\"ds-bar-row\"><span class=\"ds-mark\"></span><span class=\"ds-name\">technical</span><span class=\"ds-bar\"><span class=\"ds-fill\" style=\"--level:0.0049\"></span></span><span class=\"ds-readout\">0.5%</span></li><li class=\"ds-bar-row\"><span class=\"ds-mark\"></span><span class=\"ds-name\">sales</span><span class=\"ds-bar\"><span class=\"ds-fill\" style=\"--level:0.0605\"></span></span><span class=\"ds-readout\">6.1%</span></li></ol><dl class=\"ds-facts\"><div><dt>Answer</dt><dd class=\"ds-answer\">billing</dd></div><div><dt>Confidence</dt><dd class=\"ds-figure\">0.90</dd></div><div><dt>P max</dt><dd class=\"ds-figure\">93.5%</dd></div><div><dt>Certainty</dt><dd class=\"ds-figure\">0.76</dd></div></dl></li></ol></div>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-questions-col{max-width:640px;container-type:inline-size}.ds-questions{margin:0;padding:0;list-style:none;border-top:1px solid var(--line, #ececec);color:var(--ink, #0a0a0a);font-family:var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif)}.ds-question{display:grid;gap:14px;padding:26px 0;border-bottom:1px solid var(--line, #ececec)}.ds-question-id{margin:0;font-size:1.375rem;font-weight:600;line-height:1.2;letter-spacing:-0.02em}.ds-instructions{margin:0;max-width:65ch;color:var(--muted, #666666);font-size:0.9375rem;line-height:1.45}.ds-bars{display:grid;gap:4px;margin:0;padding:0;list-style:none}.ds-bar-row{display:grid;grid-template-columns:16px minmax(6rem, 12rem) minmax(0, 1fr) auto;grid-template-areas:\"mark name bar value\";align-items:center;gap:2px 12px;min-height:28px}.ds-mark{grid-area:mark;display:inline-grid;place-items:center;width:16px;height:16px;border-radius:999px;color:var(--on-accent, #ffffff)}.ds-mark .ds-icon{width:11px;height:11px;stroke-width:2.2}.ds-lit .ds-mark{background:var(--accent, #0a0a0a)}.ds-name{grid-area:name;color:var(--muted, #666666);font-size:0.9375rem;line-height:1.3}.ds-lit .ds-name{color:var(--ink, #0a0a0a);font-weight:600}.ds-bar{grid-area:bar;height:6px;border-radius:999px;background:var(--track, #ececec);overflow:hidden}.ds-fill{display:block;height:100%;width:calc(var(--level, 0) * 100%);border-radius:999px;background:var(--bar, #858585);animation:ds-grow 600ms cubic-bezier(0.16, 1, 0.3, 1) both}.ds-lit .ds-fill{background:var(--accent, #0a0a0a)}@keyframes ds-grow{from{width:0}}.ds-readout{grid-area:value;min-width:4.5rem;text-align:right;color:var(--muted, #666666);font:400 0.875rem var(--mono, \"Geist Mono Variable\", ui-monospace, \"SF Mono\", Menlo, monospace);font-variant-numeric:tabular-nums}.ds-lit .ds-readout{color:var(--ink, #0a0a0a);font-weight:600}.ds-facts{display:flex;flex-wrap:wrap;gap:20px 48px;margin:0;padding-top:6px}.ds-facts div{display:grid;gap:4px}.ds-facts dt{color:var(--muted, #666666);font-size:0.8125rem;line-height:1.4}.ds-facts dd{margin:0;font-size:0.9375rem;line-height:1.4}.ds-answer{font-weight:600}.ds-figure{font-family:var(--mono, \"Geist Mono Variable\", ui-monospace, \"SF Mono\", Menlo, monospace);font-size:0.875rem;font-variant-numeric:tabular-nums}@container (max-width: 30rem){.ds-bar-row{grid-template-columns:16px minmax(0, 1fr) auto;grid-template-areas:\"mark name value\" \". bar bar\";gap:4px 10px}}@media (max-width: 720px){.ds-question-id{font-size:1.25rem}}@media (prefers-reduced-motion: reduce){.ds-fill{animation:none}}"
     },
     {
       "name": "Fault callout",
-      "kind": "card",
+      "kind": "custom",
       "refersTo": "callout-danger",
-      "description": "A refused request as the API reported it: the alert glyph and title in danger on the danger tint, each 422 issue as its location code then its message in ink. The plain callout is the same block on the code fill with an ink-2 glyph.",
-      "html": "<div class=\"ds-callout ds-callout-danger\"><div class=\"ds-callout-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 14.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM8 5v3.5M8 11v.5\"/></svg><p class=\"ds-fault-title\">HTTP 422 · the request was not answered.</p></div><ul class=\"ds-fault-issues\"><li><code class=\"ds-fault-loc\">body › questions › department</code><span class=\"ds-fault-msg\">choice criteria: a map of 2..255 options</span></li></ul></div>",
-      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-callout{display:grid;gap:8px;max-width:40rem;padding:16px 16px 16px 12px;border-radius:6px;background:var(--code, #f7f6f3);color:var(--ink, #37352f);font:400 0.875rem/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-callout-row{display:flex;align-items:flex-start;gap:8px}.ds-callout-row .ds-icon{margin-top:2px;color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-callout p{margin:0;max-width:56ch}.ds-callout-danger{background:var(--danger-tint, #fdebec)}.ds-callout-danger .ds-callout-row>.ds-icon,.ds-fault-title{color:var(--danger, #b3372f)}.ds-fault-title{font-weight:600}.ds-fault-issues{display:grid;gap:6px;margin:0;padding:0;list-style:none}.ds-fault-issues li{display:flex;flex-wrap:wrap;gap:2px 12px;align-items:baseline}.ds-fault-loc{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", Courier, monospace;font-size:0.85em;padding:0.1em 0.3em;border-radius:3px;color:var(--danger, #b3372f);background:var(--danger-tint-2, rgb(212 76 71 / 0.16))}.ds-fault-msg{color:var(--ink, #37352f)}"
-    },
-    {
-      "name": "Toggle block",
-      "kind": "custom",
-      "refersTo": "toggle-block",
-      "description": "A native details block open by default: a 24px marker with the filled triangle that turns 90° when open, the heading, a caption; the summary takes the hover fill.",
-      "html": "<details class=\"ds-toggle\" open><summary><span class=\"ds-toggle-marker\"><svg class=\"ds-icon ds-icon-filled\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M5.5 3.5v9l6-4.5z\"/></svg></span><h3 class=\"ds-toggle-heading\">Raw exchange</h3><span class=\"ds-toggle-caption\">Last run, byte for byte</span></summary><p class=\"ds-wire-empty\">Nothing sent yet. Press Run to send the state and questions above.</p></details>",
-      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-icon-filled{fill:currentColor;stroke:none}.ds-toggle{display:grid;gap:12px;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;color:var(--ink, #37352f)}.ds-toggle>summary{display:flex;align-items:center;gap:4px;list-style:none;cursor:pointer;border-radius:4px;width:fit-content;padding-right:6px}.ds-toggle>summary::-webkit-details-marker{display:none}.ds-toggle>summary:hover{background:var(--hover, rgb(55 53 47 / 0.08))}.ds-toggle>summary:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-toggle-marker{display:inline-grid;place-items:center;width:24px;height:24px;color:var(--ink-2, rgb(25 23 17 / 0.65));transition:transform 100ms ease-in}.ds-toggle[open]>summary .ds-toggle-marker{transform:rotate(90deg)}.ds-toggle-heading{margin:0;font-size:1rem;font-weight:600;line-height:1.3}.ds-toggle-caption{margin-left:8px;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem}.ds-wire-empty{margin:0;max-width:40rem;padding:16px;border-radius:8px;background:var(--code, #f7f6f3);color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.8125rem;line-height:1.5}@media (prefers-reduced-motion:reduce){.ds-toggle-marker{transition:none}}"
-    },
-    {
-      "name": "Code block",
-      "kind": "input",
-      "refersTo": "code-block",
-      "description": "The state, the questions JSON, the wire panes and the snippet, all on the same paper: 8px radius, 13px mono at 1.6, 16px padding; as a textarea it takes the blue focus ring and the danger ring when invalid.",
-      "html": "<textarea class=\"ds-code-block\" rows=\"4\" spellcheck=\"false\" aria-label=\"State\">My card was charged twice for order A-104. Please refund the duplicate.</textarea><pre class=\"ds-code-block ds-wire\" tabindex=\"0\" aria-label=\"Response received\">{\"model\":\"decider-2b-v11\",\"answers\":{\"refund\":{\"type\":\"noul\",\"noul\":0.9261}},\"usage\":{\"input_tokens\":72,\"output_tokens\":0}}</pre>",
-      "css": ".ds-code-block{display:block;width:100%;max-width:40rem;margin:0 0 12px;padding:16px;border:0;border-radius:8px;background:var(--code, #f7f6f3);color:var(--ink, #37352f);font:400 0.8125rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", Courier, monospace;tab-size:2;box-sizing:border-box}textarea.ds-code-block{resize:vertical;box-shadow:inset 0 0 0 1px transparent;transition:box-shadow 100ms ease-in}textarea.ds-code-block:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent, #2383e2),0 0 0 2px var(--accent-tint, rgb(35 131 226 / 0.14))}textarea.ds-code-block[aria-invalid=\"true\"]{box-shadow:inset 0 0 0 1px var(--danger, #b3372f)}.ds-wire{white-space:pre-wrap;overflow-wrap:anywhere}.ds-wire:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}@media (prefers-reduced-motion:reduce){textarea.ds-code-block{transition:none}}"
-    },
-    {
-      "name": "Share popover",
-      "kind": "custom",
-      "refersTo": "popover",
-      "description": "Anchored under the Share button: a raised card with the popover shadow holding a label, a read-only mono field that selects itself on focus, Copy, and a note. Focus moves into the field on open; Escape returns it to the button; a click outside closes it.",
-      "html": "<div class=\"ds-popover\"><label class=\"ds-field-label\" for=\"ds-share-link\">Link to these inputs</label><div class=\"ds-popover-row\"><input id=\"ds-share-link\" class=\"ds-field-input ds-field-code\" type=\"text\" readonly value=\"http://127.0.0.1:8123/#share/N4IgdghgtgpiBcIDiA\"><button type=\"button\" class=\"ds-button ds-button-sm\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M6 6h7v7H6zM3 10V3h7\"/></svg>Copy</button></div><p class=\"ds-field-note\">Anyone with this link opens these inputs and this model on their own Ardana.</p></div>",
-      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink, #37352f);font:500 0.875rem/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;white-space:nowrap;cursor:pointer;transition:background 100ms ease-in,color 100ms ease-in}.ds-button:hover:not([aria-disabled=\"true\"]){background:var(--hover, rgb(55 53 47 / 0.08))}.ds-button:active:not([aria-disabled=\"true\"]),.ds-button[aria-expanded=\"true\"]{background:var(--pressed, rgb(55 53 47 / 0.16))}.ds-button[aria-disabled=\"true\"]{color:var(--ink-3, rgb(55 53 47 / 0.45));cursor:default}.ds-button .ds-icon{color:var(--ink-2, rgb(25 23 17 / 0.65))}.ds-button:hover:not([aria-disabled=\"true\"]) .ds-icon{color:var(--ink, #37352f)}.ds-button:focus-visible{outline:2px solid var(--accent, #2383e2);outline-offset:1px}.ds-button-sm{min-height:24px;font-size:0.8125rem}.ds-popover{display:grid;gap:8px;width:min(420px,calc(100vw - 24px));padding:12px;border-radius:6px;background:var(--raised, #ffffff);color:var(--ink, #37352f);box-shadow:rgb(15 15 15 / 0.1) 0 0 0 1px,rgb(15 15 15 / 0.1) 0 3px 6px,rgb(15 15 15 / 0.2) 0 9px 24px;font-family:ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif}.ds-popover-row{display:flex;align-items:center;gap:8px}.ds-field-label{color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.75rem;font-weight:500;line-height:1.4}.ds-field-input{flex:1;min-width:0;min-height:28px;padding:3px 8px;border:0;border-radius:4px;background:var(--field, rgb(242 241 238 / 0.6));box-shadow:inset 0 0 0 1px var(--hairline-strong, rgb(55 53 47 / 0.16));color:var(--ink, #37352f);font:400 0.8125rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", Courier, monospace}.ds-field-input:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent, #2383e2),0 0 0 2px var(--accent-tint, rgb(35 131 226 / 0.14))}.ds-field-note{margin:0;color:var(--ink-2, rgb(25 23 17 / 0.65));font-size:0.75rem;line-height:1.4}"
-    },
-    {
-      "name": "Banner",
-      "kind": "custom",
-      "refersTo": "banner",
-      "description": "The line under the top bar and the Run button's description: quiet on the panel fill for a wait or a hint (why Run is held, what a first run downloads), fault colours when the questions JSON does not parse; hidden when empty.",
-      "html": "<p class=\"ds-banner ds-banner-quiet\">Add a question to run</p><p class=\"ds-banner ds-banner-quiet\">Downloading decider-4b (2.7 GB) on first run</p><p class=\"ds-banner\">Questions JSON: expected value at line 3 column 5</p>",
-      "css": ".ds-banner{display:flex;align-items:center;gap:8px;min-height:36px;margin:0;padding:6px 16px;background:var(--danger-tint, #fdebec);color:var(--danger, #b3372f);font:500 0.8125rem/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;box-shadow:inset 0 -1px 0 var(--hairline, #e9e9e7)}.ds-banner:empty{display:none}.ds-banner-quiet{background:var(--panel, #fbfbfa);color:var(--ink, #37352f)}"
+      "description": "The one red box: Fault Wash with 10px corners, the alert glyph and title in Fault Red, each issue as its location code on Fault Chip followed by the message in ink. Copy from a real 422 the server returned.",
+      "html": "<div class=\"ds-fault\" role=\"group\"><div class=\"ds-fault-row\"><svg class=\"ds-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 14.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM8 5v3.5M8 11v.5\"/></svg><p class=\"ds-fault-title\">HTTP 422 · the request was not answered.</p></div><ul class=\"ds-fault-issues\"><li><code class=\"ds-fault-loc\">body › questions › department</code><span>choice criteria: a map of 2..255 options</span></li></ul></div>",
+      "css": ".ds-icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.ds-fault{display:grid;gap:10px;max-width:520px;padding:16px 18px;border-radius:10px;background:var(--danger-tint, #fdf0ef);color:var(--ink, #0a0a0a);font:400 0.9375rem/1.5 var(--font, \"Onest Variable\", ui-sans-serif, system-ui, sans-serif)}.ds-fault-row{display:flex;align-items:flex-start;gap:10px}.ds-fault-row .ds-icon{margin-top:3px;color:var(--danger, #b42318)}.ds-fault-title{margin:0;color:var(--danger, #b42318);font-weight:600}.ds-fault-issues{display:grid;gap:6px;margin:0;padding:0;list-style:none}.ds-fault-issues li{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}.ds-fault-loc{padding:0.1em 0.35em;border-radius:4px;background:var(--danger-tint-2, #f9dcd9);color:var(--danger, #b42318);font-family:var(--mono, \"Geist Mono Variable\", ui-monospace, \"SF Mono\", Menlo, monospace);font-size:0.9em}"
     }
   ],
   "narrative": {
-    "northStar": "The Workspace Page",
-    "overview": "The playground is a page in a workspace the developer already knows: a paper-grey sidebar of settings and pages on the left, one white page of blocks on the right, a thin sticky bar above it holding the page's name and its one blue button. Notion's app grammar is played straight, with Linear and GitHub as the craft bar: the system sans at 14px, warm ink on white, hairlines where other products draw borders, small radii, chrome that shows itself on hover, toggle blocks, callouts and property rows. The work is the blocks. The state is a code block, each question is a white block with a hairline, and every returned probability is a property with a low progress bar and its exact figure at the end of the row.\n\nDensity is product-UI density: 28px controls, 24px rows inside blocks, 12px between blocks, 32px between the sections of the page. Nothing is decorated. There is no hardware or instrument metaphor, no engraved legend, no glowing readout, no web font, no gradient. Elevation is a 1px hairline shadow or a divider; only surfaces that float (the share popover, the drawer, the toast) cast a real shadow. The page follows the system scheme and offers no switch of its own: the same tokens turn a white page into a `#191919` one.\n\nColour is spent on meaning. One blue marks the decision: the Run button, focus, text selection, and the winning row of an answer. Red marks a fault: the callout for a refused request, the fault banner and fault lines, an invalid field's hairline, and the one action that destroys a question. Everything else is ink at three strengths on white, paper-grey and code-grey.",
+    "northStar": "The Line at Work",
+    "overview": "The playground is ardana.ai put to work. The landing is a sheet of white paper with one line on it that a terminal can read; the playground keeps the paper, the ink, the one gray and the terminal-gray box, and hands the developer a task instead of a command: paste a state, ask questions, press Run, read the answers, copy the request. The groundhog lockup sits at the top-left as it does on the site, the model and the presets are quiet gray links, the state and every request sit in command boxes, the questions are catalog rows between hairlines, and each answer is the one ink line among gray ones with its exact figure in mono. Run is the one ink pill.\n\nDensity is operating density, not the landing's one calm screen: 15px words, 13px labels, 12px pills, controls 28 to 40px tall, a white 256px sidebar and a 70px top row that is the landing's nav row. The world keeps the landing's three materials (ink, one gray, the pale terminal gray) and its two voices (Onest for words, Geist Mono for whatever the API reads or returns), both self-hosted. The playground's structure and behaviour came through the rebrand unchanged; only the look follows the site.\n\nIts refusals are confirmed: the Notion workspace it replaced (warm ink, the blue accent, gray panels, hover fills) and dashboard chrome (cards, shadows, gradients). There is no hue but one red, and the red means a fault. The dark scheme is not a second theme but the logo kit's inverse, white on #0a0a0a, and it follows the system; the page offers no switch.",
     "keyCharacteristics": [
-      "A 240px workspace sidebar beside one page of blocks, under a sticky 45px top bar with the blue Run.",
-      "The system sans and system mono only; 14px UI, 13px code, 16px block headings, one 32px page title.",
-      "Warm ink `#37352f` on white, `#fbfbfa` sidebar, `#e9e9e7` hairlines, hover fills at 8% ink.",
-      "Radii of 3, 4, 6 and 8px; a 10px tooltip is the roundest thing on the page.",
-      "Answers as property rows: a 16px check, the option name, a 6px progress bar, the exact figure.",
-      "Blue for the decision, red for the fault, grey for everything else; light and dark from one token set."
+      "The landing's tokens by name and value; the playground adds only tokens derived from them (a bar track, a bar gray, a scrim) and one red for faults.",
+      "A white 256px sidebar headed by the 26px lockup, a sticky 70px top row with the ink Run pill, one hairline beneath.",
+      "Onest for every word; Geist Mono for code, model names, typed ids and every returned figure.",
+      "Terminal gray only behind what the API reads or returns; a box you type in wears a 1px gray ring, a box you copy from has none.",
+      "Questions as hairline catalog rows; the answer is the one ink line: ink bar, ink disc with a paper check, name and figure at 600.",
+      "Flat: no shadow, no gradient, no card; separation is a 1px hairline or more space.",
+      "Light and dark from one token set; dark is the kit's inverse and follows the system."
     ],
     "rules": [
       {
-        "name": "The Blue Is a Decision Rule",
-        "body": "Blue appears where something was decided or is about to be: the Run fill, the focus outline, text selection, and the bar and check of the winning row. It is never a heading, a link colour, a border or a background.",
+        "name": "The One Red Rule",
+        "body": "The palette has no hue but one red, and the red means a fault: something the API, the JSON parser or a share link refused. No blue, no success green, no warning amber; never red for emphasis, decoration or a destructive action (Remove question is a quiet gray button).",
         "section": "colors"
       },
       {
-        "name": "The Red Is a Fault Rule",
-        "body": "Red marks a refusal or a destruction, nothing else: the fault callout, the fault banner, fault lines, an invalid field's hairline, the location code of a 422 issue, and the Remove question button. Emphasis, warnings and decoration never take it.",
+        "name": "The Ink Is The Accent Rule",
+        "body": "`accent` equals ink. Run, the skip link and the answer are marked by filling a shape with ink and by weight, never by a brand colour.",
         "section": "colors"
       },
       {
-        "name": "The Hairlines, Not Borders Rule",
-        "body": "Nothing draws a CSS border in the normal schemes. An edge is a 1px shadow (`rgb(15 15 15 / 0.1) 0 0 0 1px` on blocks, an inset 16% ink line on fields) or a 1px inset divider in `hairline`; forced-colors mode is the one place borders are drawn.",
+        "name": "The Terminal Gray Rule",
+        "body": "Terminal Gray sits only behind what the API reads or returns: command boxes, fields, the model select, inline code. It is never a card, panel, sidebar or section ground, and an empty pane is a gray sentence, not an empty gray box.",
         "section": "colors"
       },
       {
-        "name": "The System Face Rule",
-        "body": "No web font is loaded and none may be added; the page renders in whatever sans and mono the platform ships. Letter-spacing is off everywhere except the -0.01em of the 32px title. Nothing is set in uppercase.",
+        "name": "The Inverse Rule",
+        "body": "The dark scheme is the logo kit's inverse and nothing else: the page #0a0a0a, the brand's ink pure white, text a soft white. It follows the system; there is no switch and no third scheme.",
+        "section": "colors"
+      },
+      {
+        "name": "The Terminal Voice Rule",
+        "body": "Whatever is shown as the API reads or returns it is Geist Mono: the state, the questions JSON, the wire panes, the snippets, a model name, the serving origin, an id or option key in its field, and every returned figure. Whatever names or explains it is Onest, including a question's id as its heading, the option names beside the bars, and the state editor's placeholder.",
         "section": "typography"
       },
       {
-        "name": "The Figures As Returned Rule",
-        "body": "Probabilities print as percent with one decimal, confidence, noul, score and extras with two decimals, counts and names verbatim; every figure carries its raw value and JSON pointer in `data-value` and `data-field`. Figures are tabular and right-aligned in a 4.5rem readout column.",
+        "name": "The One Heavy Title Rule",
+        "body": "Onest 700 appears once per page, on its h1, at -0.035em. Headings below it are 600 at -0.02em; nothing else is heavier than 600, tracked open, or set in capitals.",
         "section": "typography"
       },
       {
-        "name": "The Floating Only Rule",
-        "body": "A block on the page never casts an offset shadow; it gets the 1px hairline ring or a divider. Offset shadows belong to surfaces that float over the page: the popover, the drawer, the toast, the skip link, and the checked segment's 1px lift.",
+        "name": "The Flat Paper Rule",
+        "body": "Nothing casts a shadow. A layer that floats is set apart by inversion, a hairline or a scrim; a block on the page by a hairline or more space.",
         "section": "elevation"
+      },
+      {
+        "name": "The Three Shapes Rule",
+        "body": "A pill, a 10px box or its 6px inner key; 4px belongs to inline code and 3px to focus on shapeless text. A new component picks one of the three.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Rules are 1px. Between regions and rows they run horizontal; the sidebar's right edge is the one vertical rule, starting under the top row. Tags, the popover and a disabled field are the only closed outlines.",
+        "section": "shapes"
+      },
+      {
+        "name": "The One Ink Pill Rule",
+        "body": "Run is the only filled button on a screen, and above 720px it keeps one width while it works. The skip link is an ink pill too, but it appears only on focus.",
+        "section": "components"
+      },
+      {
+        "name": "The Ring Rule",
+        "body": "A box you type in (a field, the select, the state and questions editors) wears the 1px Prompt Gray ring; a box you copy from (the wire panes, the snippet, the share link's row) wears none. The ring says \"type here\"; the bare box says \"copy this\".",
+        "section": "components"
+      },
+      {
+        "name": "The One Ink Line Rule",
+        "body": "Once a run has answered, each question has one ink line: its answer's bar, disc, name and figure. Every other option's name, bar and figure speaks in the gray. A noul's probability is the whole answer, so its bar is ink and its figure 600; a stale answer keeps its figures and gives up its ink.",
+        "section": "components"
+      },
+      {
+        "name": "The Catalog Row Rule",
+        "body": "Questions are rows between hairlines, never cards: no fill, no frame, no radius around a question.",
+        "section": "components"
       }
     ],
     "dos": [
-      "**Do** set every control at 28px (24px inside a row), 14px at 500, transparent at rest, 8% ink on hover, 16% when pressed or expanded.",
-      "**Do** use `aria-disabled=\"true\"` on a held button, never `disabled`, so it keeps focus and its tooltip; put the reason in the banner or beside the control.",
-      "**Do** separate surfaces with hairlines: the 1px ring on blocks, the inset 16% ink line on fields, the 1px inset divider between regions.",
-      "**Do** show a returned probability as a bar row: check, name, 6px bar grown over 400ms, the exact figure tabular at the right; the winner alone in blue.",
-      "**Do** keep every figure at its stated precision with `data-field` and `data-value` attached, and grey it (not remove it) when the inputs move on.",
-      "**Do** keep hover, colour and shadow transitions at 100ms `ease-in`, the shell and drawer at 200ms, and turn every transition and animation off under `prefers-reduced-motion`.",
-      "**Do** define a token once in `:root` and redefine it under `prefers-color-scheme: dark`; the page offers no theme switch."
+      "**Do** read every colour from the `base.css` tokens, which keep the landing's names and values; derive a new token from a landing token (as `track`, `bar` and `scrim` are) and redefine it under `prefers-color-scheme: dark`.",
+      "**Do** set whatever the API reads or returns in Geist Mono on Terminal Gray, ring a box you type in with 1px Prompt Gray, and leave a box you copy from bare.",
+      "**Do** mark the answer with ink alone: the ink bar, the ink disc with its paper check, the name and figure at 600, every other option in the gray.",
+      "**Do** keep a stale answer's figures and take away only its ink.",
+      "**Do** answer hover by turning gray words ink; keep the Icon Wash for icon keys and the copy key.",
+      "**Do** keep the landing's focus ring (2px Focus Ink, 3px out) on every control, and stop every transition under reduced motion while the caret holds steady.",
+      "**Do** self-host Onest and Geist Mono from `fonts/` under fontsource's `unicode-range`s, and preload the two latin files.",
+      "**Do** draw the logo from the kit only, in `currentColor` from `accent`, 26px tall, white on #0a0a0a in the dark scheme.",
+      "**Do** keep the state on the left and the questions with their answers on the right; a restyle changes the look, never the structure or the behaviour."
     ],
     "donts": [
-      "**Don't** load a web font, add letter-spacing to UI text, or set anything in uppercase; the system sans and mono are the type.",
-      "**Don't** use blue for anything but the Run fill, focus, selection and the winning row; never as a heading, link, border or background.",
-      "**Don't** use red outside a fault or the Remove question action; no red emphasis, warning or decoration.",
-      "**Don't** draw a CSS border in the light or dark scheme; edges are hairline shadows, and borders belong to forced-colors mode only.",
-      "**Don't** give a block on the page an offset shadow, a gradient, an engraved legend, a glowing readout or any hardware metaphor.",
-      "**Don't** put a tooltip where a visible name belongs, and never name a control only by its tooltip.",
-      "**Don't** round, restyle or re-derive a returned value; show it as the API said it."
+      "**Don't** introduce a hue: no blue, no success green, no warning amber; red belongs to faults only, never to emphasis, decoration or a destructive action.",
+      "**Don't** cast a shadow, draw a gradient or put content in a card; `box-shadow` draws only 1px inset lines.",
+      "**Don't** use Terminal Gray as a card, panel, sidebar or section ground, or behind an empty pane.",
+      "**Don't** set words in Geist Mono, or code and figures in Onest.",
+      "**Don't** load a font, icon, image or script from another origin.",
+      "**Don't** add a second filled button to a screen; Run is the one ink pill.",
+      "**Don't** add ornament beyond the caret, which appears only while a run is in flight.",
+      "**Don't** open a disclosure on the landing's arrow or draw an icon with a text glyph; the arrow is for navigation, the chevron for disclosure.",
+      "**Don't** add a theme switch or a third scheme; the page follows the system."
     ]
   }
 }

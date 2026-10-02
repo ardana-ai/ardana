@@ -1,12 +1,14 @@
 //! Shared controls: the segmented control (a native radio group, so arrow keys move the selection) and the copy
-//! button with its toast.
+//! key with its status.
+
+use std::time::Duration;
 
 use leptos::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
 use super::icons::Icon;
 
-/// A segmented control: one segment per option, the checked one raised; a small legend names the group.
+/// A segmented control: one segment per option, the checked one outlined; a small legend names the group.
 #[component]
 pub fn Toggle<T>(
     legend: &'static str,
@@ -49,37 +51,64 @@ where
     }
 }
 
-/// A button that copies `text()` to the clipboard and says so in a toast.
+/// The copy key of ardana.ai's command boxes: copies `text()` to the clipboard, turns its glyph into a check for a
+/// moment and announces it; a refusal is said in a toast.
 #[component]
 pub fn CopyKey(
     /// What the button copies, for its accessible name: "Copy <what>".
     what: &'static str,
     text: impl Fn() -> String + Send + Sync + 'static,
 ) -> impl IntoView {
-    let status = RwSignal::new(None::<String>);
+    // The last attempt: whether it worked, and what the status region says about it.
+    let status = RwSignal::new(None::<(bool, String)>);
+    // Each attempt clears only its own status, so a second copy keeps its check for the whole moment.
+    let attempts = StoredValue::new(0_u32);
     let copy = move |_| {
         let text = text();
         let Some(clipboard) = web_sys::window().map(|w| w.navigator().clipboard()) else {
             return;
         };
         leptos::task::spawn_local(async move {
-            let done = JsFuture::from(clipboard.write_text(&text)).await;
-            status.set(Some(match done {
-                Ok(_) => format!("Copied the {what}"),
-                Err(_) => {
-                    "The browser refused the clipboard; select the text and copy it".to_string()
-                }
+            let worked = JsFuture::from(clipboard.write_text(&text)).await.is_ok();
+            status.set(Some(if worked {
+                (true, format!("Copied the {what}"))
+            } else {
+                (
+                    false,
+                    "The browser refused the clipboard; select the text and copy it".to_string(),
+                )
             }));
-            set_timeout(move || status.set(None), std::time::Duration::from_secs(4));
+            attempts.update_value(|n| *n += 1);
+            let attempt = attempts.get_value();
+            // The check stays as long as the landing's; a refusal stays long enough to read.
+            let shown = Duration::from_millis(if worked { 1600 } else { 4000 });
+            set_timeout(
+                move || {
+                    if attempts.get_value() == attempt {
+                        status.set(None);
+                    }
+                },
+                shown,
+            );
         });
     };
+    let copied = move || status.with(|s| matches!(s, Some((true, _))));
     view! {
         <span class="copy">
-            <button type="button" class="button button-sm" aria-label=format!("Copy {what}") on:click=copy>
-                <Icon name="copy" />
-                "Copy"
+            <button
+                type="button"
+                class="copy-key tip tip-below tip-end"
+                aria-label=format!("Copy {what}")
+                data-tip=format!("Copy {what}")
+                data-copied=move || copied().to_string()
+                on:click=copy
+            >
+                <Icon name="copy" class="icon-copy" />
+                <Icon name="check" class="icon-check" />
             </button>
-            <span class="toast" role="status">{move || status.get()}</span>
+            <span class="toast" class:quiet=copied role="status">
+                {move || status.get().map(|(_, said)| said)}
+            </span>
         </span>
     }
 }

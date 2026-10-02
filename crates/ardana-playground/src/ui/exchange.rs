@@ -24,7 +24,7 @@ pub fn Exchange(deck: Deck) -> impl IntoView {
         <details class="toggle" id="exchange" open=true>
             <summary>
                 <span class="toggle-marker">
-                    <Icon name="triangle" />
+                    <Icon name="chevron-right" />
                 </span>
                 <h2 class="toggle-heading">"Raw exchange"</h2>
                 <span class="toggle-caption">"Last run, byte for byte"</span>

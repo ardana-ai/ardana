@@ -1,51 +1,36 @@
-/* The page: its title, the two columns (the state block left, the question blocks right), the question blocks with
-   their property bars and property lists, the callouts, the toggle blocks for the raw exchange and the snippets, and
-   the code blocks. */
+/* The page, set like ardana.ai's catalog: a heavy Onest title over a gray lede, then the state on the left in a
+   terminal-gray box and the questions on the right as hairline rows, each answer an ink bar among gray ones with its
+   exact figure in Geist Mono, then the raw exchange and the snippets, which open on the landing's arrow. */
 
 .page {
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-8) 20vh;
+  padding: var(--space-7) var(--gutter) 20vh;
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-8);
 }
 
 /* ---- Title ---- */
 
 .page-title {
   display: grid;
-  gap: var(--space-2);
-}
-
-.page-title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.page-icon {
-  width: 32px;
-  height: 32px;
-  color: var(--ink);
+  gap: 14px;
 }
 
 .page-heading {
-  font-size: var(--text-32);
+  font-size: clamp(2rem, 3.2vw, 2.75rem);
   font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
+  line-height: 1;
+  letter-spacing: -0.035em;
 }
 
 .page-lede {
-  max-width: 56ch;
-  color: var(--ink-2);
-  font-size: var(--text-14);
-  line-height: 1.5;
-}
-
-.page-lede code {
-  font-size: 0.85em;
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: var(--text-17);
+  line-height: 1.45;
+  text-wrap: pretty;
 }
 
 /* ---- Columns: state left, questions right ---- */
@@ -53,7 +38,7 @@
 .columns {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: var(--space-6);
+  gap: var(--space-7);
   align-items: start;
 }
 
@@ -61,16 +46,17 @@
 .block-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-2) var(--space-3);
+  gap: var(--space-2) var(--space-4);
   min-height: 28px;
 }
 
 .block-heading {
-  font-size: var(--text-16);
+  font-size: var(--text-22);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .block-heading label {
@@ -81,7 +67,7 @@
 
 .state {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
   min-width: 0;
 }
 
@@ -91,35 +77,31 @@
   gap: var(--space-2);
 }
 
-/* Code blocks: the state, the questions JSON, the wire panes and the snippet, all on the same paper. */
+/* Code blocks: the state, the questions JSON, the wire panes and the snippet, all in the landing's command box. */
 .code-block {
   display: block;
   width: 100%;
   border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--code);
-  color: var(--ink);
-  font-family: var(--font-mono);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--mono);
   font-size: var(--text-13);
   line-height: 1.6;
   tab-size: 2;
 }
 
+/* The two editors are boxes you type in: the field's 1px code-gray ring (controls.css). */
 textarea.code-block {
-  padding: var(--space-4);
+  padding: var(--space-4) 18px;
   resize: vertical;
-  box-shadow: inset 0 0 0 1px transparent;
-  transition: box-shadow var(--fast) ease-in;
+  box-shadow: inset 0 0 0 1px var(--code-muted);
+  transition: box-shadow var(--fast) ease;
 }
 
 textarea.code-block::placeholder {
-  color: var(--ink-2);
+  color: var(--muted);
   opacity: 1;
-}
-
-textarea.code-block:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--accent-tint);
 }
 
 textarea.code-block[aria-invalid="true"] {
@@ -130,14 +112,19 @@ textarea.code-block[aria-invalid="true"] {
   min-height: clamp(280px, 52vh, 600px);
 }
 
+.state-text::placeholder {
+  font-family: var(--font);
+  font-size: var(--text-15);
+}
+
 .state-foot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2) var(--space-3);
-  color: var(--ink-2);
-  font-size: var(--text-12);
+  color: var(--muted);
+  font-size: var(--text-13);
   line-height: 1.4;
 }
 
@@ -147,10 +134,12 @@ textarea.code-block[aria-invalid="true"] {
 
 /* ---- Questions column ---- */
 
+/* The questions column is the container its answer rows measure themselves against. */
 .questions {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   min-width: 0;
+  container-type: inline-size;
 }
 
 /* The last run's line: model, latency, tokens, and the stale note. */
@@ -159,69 +148,56 @@ textarea.code-block[aria-invalid="true"] {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 6px;
-  color: var(--ink-2);
-  font-size: var(--text-12);
+  color: var(--muted);
+  font-size: var(--text-13);
   line-height: 1.4;
-}
-
-.last-run .dot {
-  color: var(--ink-2);
 }
 
 .last-run [data-field="/model"] {
   color: var(--ink);
-  font-weight: 500;
+  font-family: var(--mono);
+  font-size: var(--text-12);
   overflow-wrap: anywhere;
 }
 
+/* The questions, as the landing's catalog rows: a hairline above the list and under each row. */
 .question-list {
   display: grid;
-  gap: var(--space-3);
+  border-top: 1px solid var(--line);
 }
 
-/* Anything the page scrolls to lands under the sticky top bar, not behind it. */
-.page,
-.question,
-.callout,
-.toggle {
-  scroll-margin-top: calc(var(--topbar) + var(--space-3));
-}
-
-/* A question block: a white block with a hairline, like a callout with an outline. */
 .question {
   display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--raised);
-  box-shadow: var(--shadow-hairline);
-  transition: box-shadow var(--fast) ease-in;
+  gap: 14px;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--line);
 }
 
-/* The head: the id and the controls on one line (the controls drop under it when the block is narrow), then the
-   instructions across the whole block. */
+/* The head: the id and the controls on one line (the controls drop under it when the row is narrow), then the
+   instructions across the whole row. */
 .question-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2) var(--space-3);
+  gap: var(--space-2) var(--space-4);
 }
 
 .question-id {
   flex: 1 1 12rem;
   min-width: 0;
-  font-size: var(--text-16);
+  font-size: var(--text-22);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 
 .question-instructions {
-  color: var(--ink-2);
-  font-size: var(--text-14);
-  line-height: 1.5;
   max-width: 65ch;
+  color: var(--muted);
+  font-size: var(--text-15);
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
@@ -229,18 +205,24 @@ textarea.code-block[aria-invalid="true"] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2) var(--space-3);
 }
 
 .question > .tag {
   justify-self: start;
 }
 
-/* ---- Rows: one per option, name, bar, exact value. The winner is the checked row in blue. ---- */
+/* ---- Rows: one per option, name, bar, exact figure. The answer is the one ink line; once a run has answered, the
+   other options speak in the gray, the landing's second tone. ---- */
 
 .bars {
   display: grid;
-  gap: 6px;
+  gap: 4px;
+}
+
+/* A score level's fit figure sits tight under its own level, a clear gap before the next. */
+.bars:has(.bar-fit) {
+  gap: 10px;
 }
 
 .bar-row {
@@ -248,31 +230,30 @@ textarea.code-block[aria-invalid="true"] {
   grid-template-columns: 16px minmax(6rem, 12rem) minmax(0, 1fr) auto;
   grid-template-areas: "mark name bar value";
   align-items: center;
-  gap: var(--space-3);
-  min-height: 24px;
+  gap: 2px var(--space-3);
+  min-height: 28px;
 }
 
+/* The answer's mark: an ink disc with a paper check, the landing's check glyph. */
 .bar-mark {
   grid-area: mark;
   display: inline-grid;
   place-items: center;
   width: 16px;
   height: 16px;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   color: var(--on-accent);
   background: transparent;
-  box-shadow: inset 0 0 0 1px var(--hairline-strong);
 }
 
 .bar-row.lit .bar-mark {
   background: var(--accent);
-  box-shadow: none;
 }
 
 .bar-mark .icon {
-  width: 12px;
-  height: 12px;
-  stroke-width: 2;
+  width: 11px;
+  height: 11px;
+  stroke-width: 2.2;
   opacity: 0;
 }
 
@@ -280,7 +261,7 @@ textarea.code-block[aria-invalid="true"] {
   opacity: 1;
 }
 
-/* A noul row is a probability, not a pick: no box to read as checked or unchecked. */
+/* A noul row is a probability, not a pick: no mark. */
 .bar-row.unmarked .bar-mark {
   visibility: hidden;
 }
@@ -288,7 +269,7 @@ textarea.code-block[aria-invalid="true"] {
 .bar-name {
   grid-area: name;
   min-width: 0;
-  font-size: var(--text-14);
+  font-size: var(--text-15);
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
@@ -297,18 +278,24 @@ textarea.code-block[aria-invalid="true"] {
   font-weight: 600;
 }
 
+.bar-row:not(.lit, .unmarked):has(.readout:not(.idle)) .bar-name,
+.bar-row:not(.lit, .unmarked) .readout:not(.idle),
+.bar-row:not(.lit, .unmarked) .bar-fit .fit {
+  color: var(--muted);
+}
+
 .bar-note {
   display: block;
-  color: var(--ink-2);
-  font-size: var(--text-12);
+  color: var(--muted);
+  font-size: var(--text-13);
   font-weight: 400;
 }
 
-/* The bar: a low rounded track, the fill grown to the returned probability. */
+/* The bar: a 6px pill on the hairline gray, the fill grown to the returned probability. */
 .bar {
   grid-area: bar;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   background: var(--track);
   overflow: hidden;
 }
@@ -317,12 +304,14 @@ textarea.code-block[aria-invalid="true"] {
   display: block;
   height: 100%;
   width: calc(var(--level, 0) * 100%);
-  border-radius: 3px;
-  background: var(--bar-muted);
-  animation: bar-grow 400ms var(--ease) both;
+  border-radius: var(--radius-pill);
+  background: var(--bar);
+  animation: bar-grow 600ms var(--ease-out) both;
 }
 
-.bar-row.lit .bar-fill {
+/* The answer's bar is ink: the picked option, or a noul's probability, which is the whole answer. */
+.bar-row.lit .bar-fill,
+.bar-row.unmarked .bar-fill {
   background: var(--accent);
 }
 
@@ -332,80 +321,97 @@ textarea.code-block[aria-invalid="true"] {
   }
 }
 
-/* The exact figure, tabular, right-aligned. */
+/* The exact figure, in the terminal's voice, tabular and right-aligned. */
 .readout {
   grid-area: value;
   min-width: 4.5rem;
   text-align: right;
+  color: var(--ink);
+  font-family: var(--mono);
   font-size: var(--text-14);
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
 }
 
 .readout.idle {
-  color: var(--ink-2);
+  color: var(--muted);
+}
+
+.bar-row.lit .readout,
+.bar-row.unmarked .readout:not(.idle) {
+  font-weight: 600;
+}
+
+/* A score level's fit sits in its own figure's cell, under the figure, so it can only belong to that level. */
+.bar-row:has(.bar-fit) {
+  min-height: 44px;
+}
+
+.bar-row:has(.bar-fit) .readout {
+  align-self: start;
 }
 
 .bar-fit {
-  grid-column: 3 / -1;
+  grid-area: value;
+  align-self: end;
   justify-self: end;
-  color: var(--ink-2);
+  color: var(--muted);
   font-size: var(--text-12);
+  line-height: 1.4;
 }
 
 .bar-fit .fit {
   color: var(--ink);
+  font-family: var(--mono);
 }
 
-/* Stale: the answer came from other inputs. The figures stay; the blue and the check go grey. */
+/* Stale: the answer came from other inputs. The figures stay; the ink of the answer goes gray. */
 .question.stale .bar-row.lit .bar-fill,
+.question.stale .bar-row.unmarked .bar-fill,
 .question.stale .bar-row.lit .bar-mark {
-  background: var(--bar-muted);
+  background: var(--bar);
 }
 
 .question.stale .readout {
-  color: var(--ink-2);
+  color: var(--muted);
 }
 
-/* ---- Property list under the bars: name, value ---- */
+/* ---- The facts under the bars: the landing's fact row, gray names over values ---- */
 
 .properties {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-  padding-top: var(--space-3);
-  box-shadow: inset 0 1px 0 var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px var(--space-8);
+  padding-top: 6px;
 }
 
-/* One property per row: a fixed name column, the value beside it. */
 .property {
   display: grid;
-  grid-template-columns: 9rem minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 28px;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
 }
 
 .property dt {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink-2);
-  font-size: var(--text-14);
-}
-
-.property dt .icon {
-  color: var(--ink-3);
+  color: var(--muted);
+  font-size: var(--text-13);
+  line-height: 1.4;
 }
 
 .property dd {
-  font-size: var(--text-14);
-  font-variant-numeric: tabular-nums;
+  font-size: var(--text-15);
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .property .answer {
   font-weight: 600;
+}
+
+/* Every fact after the first opens its meaning leftwards, over the row, so the tooltip never runs off the page however
+   the row wraps (the first fact sits at the column's start and opens rightwards). */
+.property:nth-child(n + 2) .tip-start::after {
+  left: auto;
+  right: -6px;
 }
 
 .raw-answer {
@@ -414,49 +420,47 @@ textarea.code-block[aria-invalid="true"] {
 }
 
 .raw-answer p {
-  color: var(--ink-2);
-  font-size: var(--text-12);
+  color: var(--muted);
+  font-size: var(--text-13);
 }
 
 .raw-answer pre {
-  padding: var(--space-3);
+  padding: var(--space-3) 14px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-/* ---- Callouts: the fault, the empty list ---- */
+/* ---- Callouts: the empty list, a row of its own; the fault, the one red box ---- */
 
 .callout {
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--code);
-  color: var(--ink);
+  gap: 10px;
+  padding: 18px 0;
+  border-block: 1px solid var(--line);
+  color: var(--muted);
 }
 
 .callout-row {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-2);
+  gap: 10px;
 }
 
 .callout-row .icon {
-  margin-top: 2px;
-  color: var(--ink-2);
+  margin-top: 3px;
 }
 
 .callout p {
-  max-width: 56ch;
+  max-width: 60ch;
   line-height: 1.5;
 }
 
-.callout code {
-  background: var(--hover);
-}
-
 .callout-danger {
+  padding: var(--space-4) 18px;
+  border: 0;
+  border-radius: var(--radius);
   background: var(--danger-tint);
+  color: var(--ink);
 }
 
 .callout-danger .callout-row > .icon,
@@ -477,14 +481,14 @@ textarea.code-block[aria-invalid="true"] {
 .callout-danger p {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px var(--space-3);
+  gap: 4px var(--space-3);
   align-items: baseline;
 }
 
-/* Specific enough to win over `.callout code`. */
+/* Specific enough to win over `code`. */
 .callout .fault-loc {
-  color: var(--danger);
   background: var(--danger-tint-2);
+  color: var(--danger);
 }
 
 .fault-msg {
@@ -492,7 +496,7 @@ textarea.code-block[aria-invalid="true"] {
 }
 
 .fault-raw {
-  padding: var(--space-3);
+  padding: var(--space-3) 14px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -503,34 +507,33 @@ textarea.code-block[aria-invalid="true"] {
   align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-inner);
   background: var(--danger-tint);
   color: var(--ink);
-  font-size: var(--text-13);
+  font-size: var(--text-14);
 }
 
 .question-fault .icon {
-  margin-top: 1px;
+  margin-top: 2px;
   color: var(--danger);
 }
 
-/* The "+ Add question" row at the end of the list, like a database's New row. */
+/* "Add question" at the end of the list, as the landing's forward links read: ink, with its glyph. */
 .add-row {
-  justify-content: flex-start;
-  color: var(--ink-2);
-}
-
-.add-row:hover {
+  justify-self: start;
+  width: auto;
+  padding: 0;
   color: var(--ink);
+  font-weight: 500;
 }
 
-/* ---- Builder: the fields under a hairline inside the question block ---- */
+/* ---- Builder: the fields under a hairline inside the question row ---- */
 
 .program-panel {
   display: grid;
-  gap: var(--space-3);
-  padding-top: var(--space-3);
-  box-shadow: inset 0 1px 0 var(--hairline);
+  gap: var(--space-4);
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
 
 .criteria {
@@ -539,8 +542,8 @@ textarea.code-block[aria-invalid="true"] {
 }
 
 .criteria-legend {
-  color: var(--ink-2);
-  font-size: var(--text-12);
+  color: var(--muted);
+  font-size: var(--text-13);
   font-weight: 500;
 }
 
@@ -561,9 +564,9 @@ textarea.code-block[aria-invalid="true"] {
 }
 
 .level-number {
-  color: var(--ink-2);
+  color: var(--muted);
+  font-family: var(--mono);
   font-size: var(--text-13);
-  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
@@ -577,13 +580,14 @@ textarea.code-block[aria-invalid="true"] {
   justify-content: flex-start;
 }
 
+.criteria-foot .button {
+  margin-left: -8px;
+}
+
 .program-foot {
   justify-content: flex-end;
 }
 
-.program-foot .button {
-  color: var(--danger);
-}
 
 /* ---- Questions JSON ---- */
 
@@ -594,48 +598,45 @@ textarea.code-block[aria-invalid="true"] {
 
 .program-text {
   min-height: 200px;
-  padding: var(--space-4);
 }
 
-/* ---- Toggle blocks: the raw exchange and the snippets ---- */
+/* ---- Toggle blocks: the raw exchange and the snippets, opened on the landing's arrow ---- */
 
 .toggle {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   min-width: 0;
 }
 
 .toggle > summary {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px var(--space-3);
+  width: fit-content;
   list-style: none;
   cursor: pointer;
-  border-radius: var(--radius-sm);
-  width: fit-content;
-  padding-right: 6px;
+  border-radius: 3px;
 }
 
 .toggle > summary::-webkit-details-marker {
   display: none;
 }
 
-.toggle > summary:hover {
-  background: var(--hover);
-}
-
-.toggle > summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
 .toggle-marker {
   display: inline-grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  color: var(--ink-2);
-  transition: transform var(--fast) ease-in;
+  align-self: center;
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+  transition:
+    transform var(--normal) var(--ease-out),
+    color var(--fast) ease;
+}
+
+.toggle > summary:hover .toggle-marker {
+  color: var(--ink);
 }
 
 .toggle[open] > summary .toggle-marker {
@@ -643,15 +644,15 @@ textarea.code-block[aria-invalid="true"] {
 }
 
 .toggle-heading {
-  font-size: var(--text-16);
+  font-size: var(--text-22);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .toggle-caption {
-  margin-left: var(--space-2);
-  color: var(--ink-2);
-  font-size: var(--text-13);
+  color: var(--muted);
+  font-size: var(--text-15);
   font-weight: 400;
 }
 
@@ -667,50 +668,94 @@ textarea.code-block[aria-invalid="true"] {
 .exchange-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 
 .exchange-side {
   display: grid;
   align-content: start;
-  gap: var(--space-2);
+  gap: 10px;
   min-width: 0;
 }
 
 .exchange-side h3 {
-  color: var(--ink-2);
-  font-size: var(--text-12);
+  color: var(--muted);
+  font-size: var(--text-13);
   font-weight: 500;
   line-height: 1.4;
 }
 
 .wire {
-  padding: var(--space-4);
+  padding: var(--space-4) 18px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+/* An empty pane is a sentence, not a box: the terminal gray waits for bytes to copy. */
 .wire-empty {
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--code);
-  color: var(--ink-2);
-  font-size: var(--text-13);
-  line-height: 1.5;
+  color: var(--muted);
+  font-size: var(--text-15);
+  line-height: 1.45;
+}
+
+/* The snippet: one command box, its copy key in the corner as on the landing. */
+.snippet-box {
+  position: relative;
+  min-width: 0;
+}
+
+.snippet-box > .copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.snippet {
+  padding-right: 56px;
+}
+
+/* The curl snippet is a shell line: the landing's gray prompt in front of it, drawn but never copied or read out. */
+.snippet[data-language="curl"]::before {
+  content: "$ " / "";
+  color: var(--code-muted);
+  user-select: none;
 }
 
 /* ---- Responsive ---- */
 
-@media (max-width: 1200px) {
-  .page {
-    padding-inline: var(--space-6);
+/* A questions column narrower than 30rem (a phone, or a small laptop beside the sidebar) gives each bar its own line
+   under the option's name and figure, so the bar keeps a readable length. */
+@container (max-width: 30rem) {
+  .bar-row {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "mark name value"
+      ". bar bar";
+    gap: 4px 10px;
+  }
+
+  /* Room for a level's figure and its fit, one over the other, even when the level has no legend. */
+  .bar-row:has(.bar-fit) {
+    grid-template-rows: minmax(40px, auto) auto;
   }
 }
 
 @media (max-width: 960px) {
   .columns {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-5);
+    gap: var(--space-7);
+  }
+
+  /* The questions column starts at the page's edge here and runs wide: facts open rightwards, the fifth on leftwards
+     (`:nth-child(n)` matches every fact, at the specificity of the wide-screen rule it overrides). */
+  .property:nth-child(n) .tip-start::after {
+    left: -6px;
+    right: auto;
+  }
+
+  .property:nth-child(n + 5) .tip-start::after {
+    left: auto;
+    right: -6px;
   }
 
   .state-text {
@@ -720,37 +765,42 @@ textarea.code-block[aria-invalid="true"] {
 
 @media (max-width: 720px) {
   .page {
-    padding: var(--space-4) var(--space-4) 20vh;
-    gap: var(--space-5);
+    padding: var(--space-5) var(--gutter) 20vh;
+    gap: var(--space-7);
   }
 
   .page-heading {
-    font-size: 1.5rem;
+    font-size: 1.875rem;
   }
 
-  .page-icon {
-    width: 24px;
-    height: 24px;
+  .page-lede {
+    font-size: var(--text-15);
   }
 
-  .question {
-    padding: var(--space-3);
-  }
-
-  .question-head {
-    grid-template-columns: minmax(0, 1fr);
+  .block-heading,
+  .toggle-heading,
+  .question-id {
+    font-size: 1.25rem;
   }
 
   .question-controls {
     justify-content: flex-start;
   }
 
-  .bar-row {
-    grid-template-columns: 16px minmax(0, 1fr) auto;
-    grid-template-areas:
-      "mark name value"
-      ". bar bar";
-    gap: 4px var(--space-2);
+  .properties {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4) var(--space-5);
+  }
+
+  .property:nth-child(odd) .tip-start::after {
+    left: -6px;
+    right: auto;
+  }
+
+  .property:nth-child(even) .tip-start::after {
+    left: auto;
+    right: -6px;
   }
 
   .criteria-row {
@@ -769,7 +819,6 @@ textarea.code-block[aria-invalid="true"] {
   .exchange-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -778,17 +827,15 @@ textarea.code-block[aria-invalid="true"] {
   }
 
   .toggle-marker,
-  .question,
   textarea.code-block {
     transition: none;
   }
 }
 
 @media (forced-colors: active) {
-  .question,
-  .callout,
+  .callout-danger,
   .code-block,
-  .wire-empty {
+  .question-fault {
     border: 1px solid CanvasText;
   }
 

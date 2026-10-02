@@ -1,5 +1,5 @@
 //! The snippets: a toggle block with the request Run would send now, as curl, Python or TypeScript aimed at this
-//! server.
+//! server, in one command box with its copy key.
 
 use leptos::prelude::*;
 
@@ -17,7 +17,7 @@ pub fn Snippets(deck: Deck) -> impl IntoView {
         <details class="toggle" id="snippets" open=true>
             <summary>
                 <span class="toggle-marker">
-                    <Icon name="triangle" />
+                    <Icon name="chevron-right" />
                 </span>
                 <h2 class="toggle-heading">"Snippets"</h2>
                 <span class="toggle-caption">"The request as it stands"</span>
@@ -30,11 +30,14 @@ pub fn Snippets(deck: Deck) -> impl IntoView {
                     checked=move |l| language.get() == l
                     pick=move |l| language.set(l)
                 />
-                <CopyKey what="snippet" text=move || text.get() />
             </div>
-            <pre class="code-block wire snippet" tabindex="0" role="group" data-testid="snippet" aria-label=move || format!("{} snippet", language.get().name())>
-                {move || text.get()}
-            </pre>
+            // The key comes first, as it did beside the language picker: Tab reaches it before the snippet.
+            <div class="snippet-box">
+                <CopyKey what="snippet" text=move || text.get() />
+                <pre class="code-block wire snippet" tabindex="0" role="group" data-testid="snippet" data-language=move || language.get().name() aria-label=move || format!("{} snippet", language.get().name())>
+                    {move || text.get()}
+                </pre>
+            </div>
         </details>
     }
 }

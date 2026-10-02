@@ -1,5 +1,5 @@
-//! The sidebar: the workspace name, the model picker, the presets as pages, the page's sections, and the origin the
-//! snippets aim at. Below 960px it is a drawer the top bar opens.
+//! The sidebar: the logo, the model picker, the presets, the page's sections, and the origin the snippets aim at.
+//! Below 960px it is a drawer the top bar opens.
 
 use ardana_api::{ModelsResponse, human_size};
 use leptos::ev;
@@ -7,6 +7,7 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
 use super::icons::Icon;
+use super::logo::Logo;
 use super::{Shell, focus_later, scroll_to};
 use crate::deck::Deck;
 use crate::presets::PRESETS;
@@ -74,8 +75,7 @@ pub fn Sidebar(
     view! {
         <nav class="sidebar" id="sidebar" aria-label="Workspace">
             <div class="workspace">
-                <span class="workspace-mark" aria-hidden="true">"A"</span>
-                <p class="workspace-name">"Ardana"</p>
+                <Logo />
                 <button
                     type="button"
                     id="sidebar-close"
@@ -84,7 +84,7 @@ pub fn Sidebar(
                     data-tip="Close sidebar\nCtrl+\\ or ⌘\\"
                     on:click=move |_| shell.close()
                 >
-                    <Icon name="chevrons-left" />
+                    <Icon name="panel" />
                 </button>
             </div>
             <div class="sidebar-section">
@@ -108,7 +108,6 @@ pub fn Sidebar(
                                     }
                                 }
                             >
-                                <Icon name="page" />
                                 <span class="row-label">{preset.name}</span>
                             </button>
                         }
@@ -124,16 +123,16 @@ pub fn Sidebar(
                             focus_later("state".to_string());
                         }
                     >
-                        <Icon name="undo" />
+                        <Icon name="arrow" class="icon-back" />
                         <span class="row-label">"Restore previous"</span>
                     </button>
                 </Show>
             </div>
             <div class="sidebar-section" role="group" aria-labelledby="sections-heading">
                 <p class="sidebar-heading" id="sections-heading">"On this page"</p>
-                {[("content", "text", "State and questions"), ("exchange", "braces", "Raw exchange"), ("snippets", "code", "Snippets")]
+                {[("content", "State and questions"), ("exchange", "Raw exchange"), ("snippets", "Snippets")]
                     .into_iter()
-                    .map(|(id, icon, label)| {
+                    .map(|(id, label)| {
                         view! {
                             <button
                                 type="button"
@@ -141,7 +140,6 @@ pub fn Sidebar(
                                 aria-current=move || (current.get() == id).then_some("true")
                                 on:click=jump(id)
                             >
-                                <Icon name=icon />
                                 <span class="row-label">{label}</span>
                             </button>
                         }
