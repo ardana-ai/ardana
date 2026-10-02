@@ -22,6 +22,9 @@ design workflow that gates every UI change (Q23, Q27).
   state)
 - `serde_json` with `float_roundtrip` (the workspace feature, `rust.md`) — numbers read from a response keep their
   exact `f64`, so a re-serialised `data-value` equals the API's JSON text
+- Onest Variable from `@fontsource-variable/onest` 5.3.1 and Geist Mono Variable from `@fontsource-variable/geist-mono`
+  5.3.0 — ardana.ai's two faces (SIL OFL 1.1), vendored as woff2 files in `crates/ardana-playground/fonts/`, not
+  npm dependencies; the versions are the ones the landing page's `package-lock.json` resolves
 
 ## Rules
 - Depend on `leptos` with `features = ["csr"]` and nothing else from its mode set; exactly one of `csr`, `hydrate`,
@@ -49,7 +52,7 @@ design workflow that gates every UI change (Q23, Q27).
   Restore previous key until the next edit.
 - Stale results: `Deck::sent` parses the exact body the last run sent; `inputs_changed` (state or model) and `stale`
   (anything) compare it with what Run would send now; a question is stale when its answer came from a different
-  state, model or spec. Figures stay exact; only the tags change and the blue of the winning row goes grey.
+  state, model or spec. Figures stay exact; only the tags change and the ink of the winning row goes gray.
 - Focus is never dropped: Run (held while the questions JSON is invalid or names no question, with the reason in
   the `#run-note` banner from `Deck::held_reason`), Add option, Add level and every Remove button are held with
   `aria-disabled` and a guard (`Deck::run`, `ui::builder::remove_button`, `add_button`), never `disabled`; after a rename
@@ -89,13 +92,13 @@ design workflow that gates every UI change (Q23, Q27).
   typed answers or raw JSON and error `detail`s), `builder.rs` (question edits on raw specs), `presets.rs` (the three
   presets, request files in `presets/` plus `tests/fixtures/requests/ticket.json`), `snippets.rs` (curl, Python and
   TypeScript), `deck.rs` (`Deck`: every signal of the page, `Copy`, passed whole to components, plus the
-  `Action` that runs and the `Memo` of the last run) and `ui/` with one module per region: `sidebar` (the model
-  select, the presets, the page's sections), `topbar` (the sidebar opener, Share and its popover, Run, the banner
-  under it), `state` (the state block), `questions` (the last run's line, the fault callout, one block per question
-  with its type control, Edit and a bar per option, the Add question row, the questions JSON editor), `builder` (a
-  question's builder fields), `exchange` and `snippets` (toggle blocks), `controls` (the segmented control and the
-  copy button), `icons` and `figure` (the `data-value` figures). `ui::Shell` holds the sidebar's collapsed and drawer
-  state.
+  `Action` that runs and the `Memo` of the last run) and `ui/` with one module per region: `sidebar` (the logo, the
+  model select, the presets, the page's sections), `topbar` (the sidebar opener and the logo while the sidebar is
+  away, Share and its popover, Run, the banner under it), `state` (the state block), `questions` (the last run's
+  line, the fault callout, one row per question with its type control, Edit and a bar per option, the Add question
+  row, the questions JSON editor), `builder` (a question's builder fields), `exchange` and `snippets` (toggle
+  blocks), `controls` (the segmented control and the copy key), `logo` (the brand lockup), `icons` and `figure` (the
+  `data-value` figures). `ui::Shell` holds the sidebar's collapsed and drawer state.
 - Figures: every API value on screen is a `ui::figure` element with `data-field` (a JSON pointer into the response),
   `data-value` (the raw value: a number as the shortest JSON text, a string as is) and `data-format` (`percent`,
   `fixed2`, `verbatim`). Formatting (`ardana_api::format`, shared with `ardana run`) rounds the number's decimal
@@ -136,6 +139,11 @@ design workflow that gates every UI change (Q23, Q27).
 - `crates/ardana-playground/index.html` drives trunk. Every asset tag needs `data-trunk`:
   `<link data-trunk rel="rust" data-wasm-opt="z" />` for the crate and `<link data-trunk rel="css" href="styles/...css" />`
   per stylesheet. `data-wasm-opt` (`0`-`4`, `s`, `z`) only runs in `--release` builds.
+- Unhashed static files go in with `rel="copy-dir"` (`fonts/`, served at `/fonts/`) and `rel="copy-file"`
+  (`brand/favicon.svg`, `brand/favicon.ico`, served at the root); plain `<link>` tags without `data-trunk` name them
+  by absolute path (the favicons, the preload of the two latin font files), and the `embedded_binary` case fetches
+  every such path. memory-serve gives these files its default week-long cache, so a changed font or icon takes a new
+  file name.
 - `Trunk.toml` sits next to `index.html` and pins tools under `[tools]`: `wasm_bindgen = "<Cargo.lock version>"` and
   `wasm_opt = "version_133"`. Trunk uses a tool from `PATH` only when its version matches, otherwise it downloads.
   Bump the pin, `xtask/fetch.toml` (`cargo-lock:wasm-bindgen`) and `cargo xtask fetch` together whenever Cargo.lock's
@@ -157,19 +165,31 @@ design workflow that gates every UI change (Q23, Q27).
   Size work for the wasm goes through `data-wasm-opt`, dependency choices, and brotli from memory-serve.
 
 ## CSS and design
-- Styles live only in plain `.css` files under `crates/ardana-playground/styles/` (`base.css` for the light and
-  dark tokens, reset and type; `controls.css` for buttons, the segmented control, fields, tags, tooltips and the
-  toast; `shell.css` for the sidebar, the top bar, the banner, the share popover and the drawer; `page.css` for the
-  page title, the columns, the state and question blocks, bars, property lists, callouts, toggle blocks and code
-  blocks), linked with `<link data-trunk rel="css">`. No inline style strings, no CSS-in-Rust crates, no Tailwind:
-  the /impeccable design hook scans `.css`, `.html`, `.ts`, `.js`, not `.rs`.
-- Type is the system stack (`ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", ...` and `ui-monospace,
-  SFMono-Regular, Menlo, ...`), as Notion's app sets it: no web fonts, nothing loaded from another origin, no
-  `assets/` directory. Icons are inline SVG from `ui::icons::Icon` (one 16-unit grid, one stroke, `currentColor`),
-  never Unicode glyphs or emoji.
+- Styles live only in plain `.css` files under `crates/ardana-playground/styles/` (`fonts.css` for the `@font-face`
+  rules; `base.css` for the light and dark tokens, reset, type, the logo and the caret; `controls.css` for buttons,
+  the segmented control, fields, the select, tags, tooltips, the copy key and the toast; `shell.css` for the sidebar,
+  the top bar, the banner, the share popover and the drawer; `page.css` for the page title, the columns, the state
+  block, the question rows, bars, the fact row, callouts, toggle blocks and code blocks), linked with
+  `<link data-trunk rel="css">`. No inline style strings, no CSS-in-Rust crates, no Tailwind: the /impeccable design
+  hook scans `.css`, `.html`, `.ts`, `.js`, not `.rs`.
+- The look is ardana.ai's (PRODUCT.md's brand commitment): `base.css` keeps the landing's token names and values
+  (`--bg`, `--ink`, `--muted`, `--line`, `--accent`, `--code-bg`, ...) and adds only what the playground needs beyond
+  them (`--line-strong`, `--track`, `--bar`, `--scrim`, `--danger*`). When the landing's `src/app.css` changes, change
+  these with it.
+- Type is the landing's: Onest Variable for words, Geist Mono Variable for anything a terminal or the API reads
+  (code, model names, figures), self-hosted from `crates/ardana-playground/fonts/` (one woff2 per script subset with
+  fontsource's `unicode-range`s in `fonts.css`, the OFL licences beside them), the latin files preloaded; nothing is
+  loaded from another origin. Icons are inline SVG from `ui::icons::Icon` (one 16-unit grid, one round stroke,
+  `currentColor`; the copy, check and arrow glyphs are the landing's), never Unicode glyphs or emoji.
+- The logo and favicons are the Ardana logo kit's files, copied into `crates/ardana-playground/brand/` (provenance in
+  its README) and regenerated from the kit, never drawn or edited by hand: `ui::logo::Logo` inlines the lockup
+  (`include_str!`) in `currentColor`, 26px tall (22px in a phone's top bar, 18px below 390px, above the kit's
+  80px minimum width). Size it through `.logo > svg` only: the lockup nests the mark's own `svg`, whose
+  geometry must stay as drawn.
 - Light and dark follow the system through `prefers-color-scheme` (`color-scheme: light dark`, the tokens redefined
-  in one `@media` block in `base.css`); there is no theme control. `forced-colors` blocks keep the checked segment,
-  the bars, the primary button and the hairlines visible.
+  in one `@media` block in `base.css`); there is no theme control. The dark scheme is the logo kit's inverse: ink on
+  `#0a0a0a`, the Run pill white. `forced-colors` blocks keep the checked segment, the bars, the primary button and the
+  hairlines visible.
 - Dynamic visuals (bar widths) set a CSS custom property or a class from the view; the rules that use them stay in
   `.css`. Class names come from DESIGN.md's tokens and components.
 - Every UI change, from the first component on, goes through the /impeccable skill: PRODUCT.md, DESIGN.md and the
@@ -200,7 +220,7 @@ design workflow that gates every UI change (Q23, Q27).
 - https://book.leptos.dev/interlude_styling.html — plain CSS via `<link data-trunk rel="css">`
 - https://book.leptos.dev/deployment/csr.html — `trunk build --release`, `dist`, SPA fallback to `index.html`
 - https://book.leptos.dev/deployment/binary_size.html — wasm size levers, compression
-- https://github.com/trunk-rs/trunk/blob/v0.21.14/guide/src/assets/index.md — `data-trunk`, `rel="rust"`, `data-wasm-opt` release-only, `rel="css"`
+- https://github.com/trunk-rs/trunk/blob/v0.21.14/guide/src/assets/index.md — `data-trunk`, `rel="rust"`, `data-wasm-opt` release-only, `rel="css"`, `rel="copy-file"` and `rel="copy-dir"` (copied exactly, no hashing)
 - https://github.com/trunk-rs/trunk/blob/main/guide/src/configuration/index.md — config layering, `[tools]` PATH matching, offline errors
 - https://github.com/trunk-rs/trunk/blob/v0.21.14/Trunk.toml — `[build] offline`, `filehash`, `minify`, `[tools]` keys
 - https://github.com/trunk-rs/trunk/blob/main/guide/src/commands/index.md — `trunk build`, `trunk tools show`
@@ -211,3 +231,7 @@ design workflow that gates every UI change (Q23, Q27).
 - https://developer.mozilla.org/en-US/docs/Web/API/Window/hashchange_event — `hashchange`, `location.hash` with `#`
 - https://developer.mozilla.org/en-US/docs/Web/API/Performance/now — monotonic request timing
 - https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText — the copy keys, a promise that may reject
+- https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face — the self-hosted faces, a variable `font-weight` range
+- https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/unicode-range — one file per script subset, fetched on use
+- https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/font-display — `swap`, as the landing loads them
+- https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/preload — `as="font"` preloads need `crossorigin`

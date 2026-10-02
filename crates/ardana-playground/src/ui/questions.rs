@@ -383,8 +383,8 @@ fn answer_view(id: &str, answer: Option<Shown>, spec: &Value) -> AnyView {
     }
 }
 
-/// One option's row: the check mark, the name, the bar at `level` (0..1), the exact readout; the answer is checked.
-/// A noul row is `unmarked`: it is a probability, not a pick, so it carries no box.
+/// One option's row: the mark, the name, the bar at `level` (0..1), the exact readout; the answer is marked in ink.
+/// A noul row is `unmarked`: it is a probability, not a pick, so it carries no mark.
 fn bar(
     name: String,
     note: Option<String>,
@@ -415,17 +415,11 @@ fn number(field: String, value: f64, format: Format) -> AnyView {
     view! { <Number field=field value=value format=format class="readout" /> }.into_any()
 }
 
-/// A property under the bars: its glyph, its name with a one-line meaning in a tooltip, its value.
-fn property(
-    icon: &'static str,
-    name: &'static str,
-    meaning: &'static str,
-    value: AnyView,
-) -> impl IntoView {
+/// A fact under the bars: its name with a one-line meaning in a tooltip, over its value.
+fn property(name: &'static str, meaning: &'static str, value: AnyView) -> impl IntoView {
     view! {
         <div class="property">
             <dt>
-                <Icon name=icon />
                 <dfn class="dfn tip tip-start" data-tip=meaning tabindex="0">{name}</dfn>
                 <span class="visually-hidden">": " {meaning}</span>
             </dt>
@@ -453,15 +447,14 @@ fn choice(id: &str, a: ChoiceAnswer) -> impl IntoView {
         <ol class="bars">{rows}</ol>
         <dl class="properties">
             {property(
-                "check",
                 "Answer",
                 "The most probable option.",
                 view! { <Verbatim field=field(&["choice"]) value=a.choice.clone() class="answer" /> }.into_any(),
             )}
-            {property("target", "Confidence", CONFIDENCE, number(field(&["confidence"]), a.confidence, Format::Fixed2))}
-            {a.x_p_max.map(|v| property("hash", "P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent)))}
+            {property("Confidence", CONFIDENCE, number(field(&["confidence"]), a.confidence, Format::Fixed2))}
+            {a.x_p_max.map(|v| property("P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent)))}
             {a.x_certainty
-                .map(|v| property("gauge", "Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2)))}
+                .map(|v| property("Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2)))}
         </dl>
     }
 }
@@ -493,19 +486,17 @@ fn score(id: &str, a: ScoreAnswer) -> impl IntoView {
         <ol class="bars">{rows}</ol>
         <dl class="properties">
             {property(
-                "gauge",
                 "Score",
                 "The expected level: each level weighted by its probability, to two places.",
                 number(field(&["score"]), a.score, Format::Fixed2),
             )}
-            {property("target", "Confidence", "The score's confidence, as the API returned it.", number(field(&["confidence"]), a.confidence, Format::Fixed2))}
-            {a.x_p_max.map(|v| property("hash", "P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent)))}
+            {property("Confidence", "The score's confidence, as the API returned it.", number(field(&["confidence"]), a.confidence, Format::Fixed2))}
+            {a.x_p_max.map(|v| property("P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent)))}
             {a.x_certainty
-                .map(|v| property("gauge", "Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2)))}
+                .map(|v| property("Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2)))}
             {a.x_fit_mass
                 .map(|v| {
                     property(
-                        "hash",
                         "Fit mass",
                         "The sum of the level fits before normalising (isolated levels only).",
                         number(field(&["x_fit_mass"]), v, Format::Fixed2),

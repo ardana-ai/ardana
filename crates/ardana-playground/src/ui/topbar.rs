@@ -1,5 +1,6 @@
-//! The sticky top bar: the sidebar opener, the page's name, the stale tag, Share with its popover, and the blue Run.
-//! Under it, the banner that says why Run is held or what a first run is downloading.
+//! The sticky top bar: the sidebar opener and the logo (while the sidebar is away), the page's name, the stale tag,
+//! Share with its popover, and the ink Run pill. Under it, the banner that says why Run is held or what a first run
+//! is downloading.
 
 use ardana_api::human_size;
 use leptos::ev;
@@ -8,6 +9,7 @@ use wasm_bindgen::JsCast;
 
 use super::controls::CopyKey;
 use super::icons::Icon;
+use super::logo::Logo;
 use super::{Shell, focus_later};
 use crate::deck::Deck;
 use crate::share::{self, SharePayload};
@@ -39,10 +41,10 @@ pub fn Topbar(deck: Deck, shell: Shell) -> impl IntoView {
                 data-tip="Open sidebar\nCtrl+\\ or ⌘\\"
                 on:click=move |_| shell.open()
             >
-                <Icon name="chevrons-right" />
+                <Icon name="panel" />
             </button>
+            <Logo class="topbar-logo" />
             <div class="topbar-crumb">
-                <Icon name="page" />
                 <span class="topbar-crumb-text">"Playground"</span>
             </div>
             <div class="topbar-actions">
@@ -65,15 +67,24 @@ pub fn Topbar(deck: Deck, shell: Shell) -> impl IntoView {
                     data-tip="Send the state and questions\nCtrl+Enter or ⌘↵"
                     on:click=move |_| deck.run()
                 >
-                    <Show when=move || pending.get()>
-                        <Icon name="spinner" class="spinner icon-sm" />
-                    </Show>
-                    <span class="run-label" data-testid="run-label">
-                        {move || match (pending.get(), pulling().is_some()) {
-                            (true, true) => "Pulling",
-                            (true, false) => "Running",
-                            _ => "Run",
-                        }}
+                    <span class="run-face">
+                        <span class="run-label" data-testid="run-label">
+                            {move || match (pending.get(), pulling().is_some()) {
+                                (true, true) => "Pulling",
+                                (true, false) => "Running",
+                                _ => "Run",
+                            }}
+                        </span>
+                        // Busy: the landing's block caret, blinking after the label (steady under reduced motion).
+                        <Show when=move || pending.get()>
+                            <span class="caret" aria-hidden="true"></span>
+                        </Show>
+                    </span>
+                    // The widest face, unseen, in the same cell: the pill keeps one width while a run is in flight, as
+                    // the landing's Copy pill does when it turns into Copied.
+                    <span class="run-sizer" aria-hidden="true">
+                        "Running"
+                        <span class="caret"></span>
                     </span>
                 </button>
             </div>
@@ -104,7 +115,7 @@ fn Share(deck: Deck) -> impl IntoView {
         share::link(&origin, &payload)
     };
     let link = Memo::new(move |_| open.get().then(&link).unwrap_or_default());
-    // A click anywhere outside the popover and its button closes it, as Notion's popovers do.
+    // A click anywhere outside the popover and its button closes it.
     let outside = window_event_listener(ev::click, move |event| {
         if !open.get_untracked() {
             return;
@@ -147,8 +158,8 @@ fn Share(deck: Deck) -> impl IntoView {
                 aria-controls="share-panel"
                 on:click=toggle
             >
-                <Icon name="link" />
-                "Share"
+                <Icon name="link" class="share-icon" />
+                <span class="share-label">"Share"</span>
             </button>
             <Show when=move || open.get()>
                 <div class="popover" id="share-panel">

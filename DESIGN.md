@@ -1,581 +1,607 @@
 ---
 name: Ardana
-description: A Notion workspace page for running a state and questions against a local System 1 decision model, where calibrated answers read as property bars.
+description: The playground is ardana.ai at work; white paper, near-black ink, one gray, Geist Mono for whatever the API reads or returns, and each answer the one ink line.
 colors:
-  page: "#ffffff"
-  panel: "#fbfbfa"
-  raised: "#ffffff"
-  code: "#f7f6f3"
-  ink: "#37352f"
-  ink-2: "rgb(25 23 17 / 0.65)"
-  ink-3: "rgb(55 53 47 / 0.45)"
-  hairline: "#e9e9e7"
-  hairline-strong: "rgb(55 53 47 / 0.16)"
-  edge-strong: "rgb(55 53 47 / 0.55)"
-  hover: "rgb(55 53 47 / 0.08)"
-  pressed: "rgb(55 53 47 / 0.16)"
-  field: "rgb(242 241 238 / 0.6)"
-  tag: "rgb(227 226 224 / 0.5)"
-  tag-ink: "#32302c"
-  track: "rgb(55 53 47 / 0.14)"
-  bar-muted: "#787774"
-  accent: "#2383e2"
-  accent-fill: "#0075d3"
-  accent-fill-hover: "#0066bd"
-  accent-tint: "rgb(35 131 226 / 0.14)"
+  bg: "#ffffff"
+  ink: "#0a0a0a"
+  muted: "#666666"
+  line: "#ececec"
+  accent: "#0a0a0a"
+  accent-hover: "#2b2b2b"
   on-accent: "#ffffff"
-  selection: "rgb(35 131 226 / 0.3)"
-  danger: "#b3372f"
-  danger-tint: "#fdebec"
-  danger-tint-2: "rgb(212 76 71 / 0.16)"
-  tooltip: "#0f0f0f"
-  tooltip-ink: "rgb(255 255 255 / 0.9)"
-  overlay: "rgb(15 15 15 / 0.6)"
-  scroll-thumb: "#d3d1cb"
+  code-bg: "#f4f4f4"
+  code-ink: "#0a0a0a"
+  code-muted: "#8a8a8a"
+  code-hover: "rgb(10 10 10 / 0.07)"
+  focus: "#0a0a0a"
+  selection: "rgb(10 10 10 / 0.12)"
+  track: "#ececec"
+  bar: "#858585"
+  scrim: "rgb(10 10 10 / 0.4)"
+  danger: "#b42318"
+  danger-tint: "#fdf0ef"
+  danger-tint-2: "#f9dcd9"
 typography:
-  page-title:
-    fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"'
-    fontSize: "2rem"
+  headline-page:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "clamp(2rem, 3.2vw, 2.75rem)"
     fontWeight: 700
-    lineHeight: 1.2
-    letterSpacing: "-0.01em"
-  page-title-compact:
-    fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"'
-    fontSize: "1.5rem"
+    lineHeight: 1
+    letterSpacing: "-0.035em"
+  headline-page-compact:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "1.875rem"
     fontWeight: 700
-    lineHeight: 1.2
-    letterSpacing: "-0.01em"
-  block-heading:
-    fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"'
-    fontSize: "1rem"
+    lineHeight: 1
+    letterSpacing: "-0.035em"
+  headline-notice:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "clamp(1.75rem, 3vw, 2.25rem)"
+    fontWeight: 700
+    lineHeight: 1.1
+    letterSpacing: "-0.03em"
+  title:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "1.375rem"
     fontWeight: 600
-    lineHeight: 1.3
-    letterSpacing: "normal"
-  ui:
-    fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"'
-    fontSize: "0.875rem"
-    fontWeight: 500
     lineHeight: 1.2
-    letterSpacing: "normal"
+    letterSpacing: "-0.02em"
+  title-compact:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "1.25rem"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.02em"
+  lede:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "1.0625rem"
+    fontWeight: 400
+    lineHeight: 1.45
   body:
-    fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"'
-    fontSize: "0.875rem"
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "0.9375rem"
     fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "normal"
     fontFeature: "tnum"
+  button:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "0.9375rem"
+    fontWeight: 600
+    lineHeight: 1.2
+  link:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "0.9375rem"
+    fontWeight: 400
+    lineHeight: 1.2
   small:
-    fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"'
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "0.875rem"
+    fontWeight: 500
+    lineHeight: 1.4
+  label:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
     fontSize: "0.8125rem"
     fontWeight: 500
     lineHeight: 1.4
-    letterSpacing: "normal"
-  label:
-    fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"'
+  caption:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
+    fontSize: "0.8125rem"
+    fontWeight: 400
+    lineHeight: 1.4
+  pill:
+    fontFamily: '"Onest Variable", ui-sans-serif, system-ui, sans-serif'
     fontSize: "0.75rem"
     fontWeight: 500
     lineHeight: 1.4
-    letterSpacing: "normal"
-  caption:
-    fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"'
-    fontSize: "0.75rem"
-    fontWeight: 400
-    lineHeight: 1.4
-    letterSpacing: "normal"
-  code:
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", Courier, monospace'
+    letterSpacing: "0"
+  code-block:
+    fontFamily: '"Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace'
     fontSize: "0.8125rem"
     fontWeight: 400
     lineHeight: 1.6
-    letterSpacing: "normal"
+  code-sm:
+    fontFamily: '"Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace'
+    fontSize: "0.8125rem"
+    fontWeight: 400
+    lineHeight: 1.45
+  code-cell:
+    fontFamily: '"Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace'
+    fontSize: "0.875rem"
+    fontWeight: 400
+    fontFeature: "tnum"
+  code-xs:
+    fontFamily: '"Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace'
+    fontSize: "0.75rem"
+    fontWeight: 400
 rounded:
-  xs: "3px"
-  sm: "4px"
-  md: "6px"
-  lg: "8px"
-  tooltip: "10px"
+  focus: "3px"
+  code: "4px"
+  inner: "6px"
+  box: "10px"
+  tip: "12px"
+  pill: "999px"
 spacing:
   space-1: "4px"
   space-2: "8px"
   space-3: "12px"
   space-4: "16px"
   space-5: "24px"
-  space-6: "32px"
+  space-7: "40px"
   space-8: "48px"
+  row: "26px"
+  gutter: "clamp(16px, 4vw, 48px)"
 components:
   button:
     backgroundColor: "transparent"
+    textColor: "{colors.muted}"
+    typography: "{typography.link}"
+    rounded: "{rounded.inner}"
+    padding: "0 10px"
+    height: "32px"
+  button-hover:
     textColor: "{colors.ink}"
-    typography: "{typography.ui}"
-    rounded: "{rounded.md}"
+  button-sm:
     padding: "0 8px"
     height: "28px"
-  button-hover:
-    backgroundColor: "{colors.hover}"
-  button-active:
-    backgroundColor: "{colors.pressed}"
-  button-disabled:
-    textColor: "{colors.ink-3}"
   button-primary:
-    backgroundColor: "{colors.accent-fill}"
+    backgroundColor: "{colors.accent}"
     textColor: "{colors.on-accent}"
-    typography: "{typography.ui}"
-    rounded: "{rounded.md}"
-    padding: "0 12px"
-    height: "28px"
+    typography: "{typography.button}"
+    rounded: "{rounded.pill}"
+    padding: "0 18px"
+    height: "36px"
   button-primary-hover:
-    backgroundColor: "{colors.accent-fill-hover}"
-  button-primary-disabled:
-    backgroundColor: "{colors.accent-fill}"
+    backgroundColor: "{colors.accent-hover}"
     textColor: "{colors.on-accent}"
+  button-primary-compact:
+    padding: "0 14px"
   button-icon:
     backgroundColor: "transparent"
-    textColor: "{colors.ink-2}"
-    rounded: "{rounded.md}"
-    padding: "0"
-    width: "28px"
-    height: "28px"
-  button-sm:
-    typography: "{typography.small}"
-    height: "24px"
-  segmented-control:
-    backgroundColor: "{colors.hover}"
-    rounded: "{rounded.md}"
-    padding: "2px"
+    textColor: "{colors.code-muted}"
+    rounded: "{rounded.inner}"
+    size: "32px"
+  button-icon-hover:
+    backgroundColor: "{colors.code-hover}"
+    textColor: "{colors.code-ink}"
+  copy-key:
+    backgroundColor: "transparent"
+    textColor: "{colors.code-muted}"
+    rounded: "{rounded.inner}"
+    size: "40px"
+  copy-key-hover:
+    backgroundColor: "{colors.code-hover}"
+    textColor: "{colors.code-ink}"
   segment:
     backgroundColor: "transparent"
-    textColor: "{colors.ink-2}"
-    typography: "{typography.small}"
-    rounded: "{rounded.sm}"
-    padding: "0 10px"
-    height: "24px"
-  segment-on:
-    backgroundColor: "{colors.raised}"
-    textColor: "{colors.ink}"
-  field:
-    backgroundColor: "{colors.field}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.sm}"
-    padding: "3px 8px"
-    height: "28px"
-  field-label:
-    textColor: "{colors.ink-2}"
+    textColor: "{colors.muted}"
     typography: "{typography.label}"
+    rounded: "{rounded.pill}"
+    padding: "0 12px"
+    height: "28px"
+  segment-hover:
+    textColor: "{colors.ink}"
+  segment-on:
+    textColor: "{colors.ink}"
+  segmented-legend:
+    textColor: "{colors.muted}"
+    typography: "{typography.caption}"
+  tag:
+    backgroundColor: "transparent"
+    textColor: "{colors.muted}"
+    typography: "{typography.pill}"
+    rounded: "{rounded.pill}"
+    padding: "2px 8px"
+  field:
+    backgroundColor: "{colors.code-bg}"
+    textColor: "{colors.code-ink}"
+    typography: "{typography.body}"
+    rounded: "{rounded.box}"
+    padding: "6px 12px"
+    height: "36px"
+  field-label:
+    textColor: "{colors.muted}"
+    typography: "{typography.label}"
+  field-note:
+    textColor: "{colors.muted}"
+    typography: "{typography.caption}"
+  field-fault:
+    textColor: "{colors.danger}"
+    typography: "{typography.caption}"
   field-disabled:
     backgroundColor: "transparent"
-    textColor: "{colors.ink-2}"
+    textColor: "{colors.muted}"
   select:
-    backgroundColor: "transparent"
+    backgroundColor: "{colors.code-bg}"
+    textColor: "{colors.code-ink}"
+    typography: "{typography.code-sm}"
+    rounded: "{rounded.box}"
+    padding: "0 36px 0 14px"
+    height: "40px"
+  command-box:
+    backgroundColor: "{colors.code-bg}"
+    textColor: "{colors.code-ink}"
+    typography: "{typography.code-block}"
+    rounded: "{rounded.box}"
+    padding: "16px 18px"
+  command-row:
+    backgroundColor: "{colors.code-bg}"
+    textColor: "{colors.code-ink}"
+    typography: "{typography.code-sm}"
+    rounded: "{rounded.box}"
+    padding: "0 4px 0 14px"
+    height: "40px"
+  inline-code:
+    backgroundColor: "{colors.code-bg}"
+    textColor: "{colors.code-ink}"
+    rounded: "{rounded.code}"
+    padding: "0.1em 0.35em"
+  sidebar:
+    backgroundColor: "{colors.bg}"
     textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.sm}"
-    padding: "3px 28px 3px 8px"
+    width: "256px"
+  sidebar-heading:
+    textColor: "{colors.muted}"
+    typography: "{typography.label}"
+    padding: "0 12px"
     height: "28px"
-  select-hover:
-    backgroundColor: "{colors.hover}"
-  tag:
-    backgroundColor: "{colors.tag}"
-    textColor: "{colors.tag-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.xs}"
-    padding: "0 6px"
-    height: "20px"
-  tooltip:
-    backgroundColor: "{colors.tooltip}"
-    textColor: "{colors.tooltip-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.tooltip}"
-    padding: "4px 8px"
-    width: "min(272px, 60vw)"
-  toast:
-    backgroundColor: "{colors.tooltip}"
-    textColor: "{colors.tooltip-ink}"
-    typography: "{typography.small}"
-    rounded: "{rounded.md}"
-    padding: "8px 12px"
+  nav-row:
+    backgroundColor: "transparent"
+    textColor: "{colors.muted}"
+    typography: "{typography.link}"
+    rounded: "{rounded.inner}"
+    padding: "0 12px"
+    height: "34px"
+  nav-row-active:
+    textColor: "{colors.ink}"
+  topbar:
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.ink}"
+    padding: "14px clamp(16px, 4vw, 48px)"
+    height: "70px"
+  logo:
+    textColor: "{colors.accent}"
+    height: "26px"
   banner:
     backgroundColor: "{colors.danger-tint}"
     textColor: "{colors.danger}"
     typography: "{typography.small}"
-    padding: "6px 16px"
-    height: "36px"
+    padding: "8px clamp(16px, 4vw, 48px)"
+    height: "40px"
   banner-quiet:
-    backgroundColor: "{colors.panel}"
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.muted}"
+  popover:
+    backgroundColor: "{colors.bg}"
     textColor: "{colors.ink}"
-  sidebar:
-    backgroundColor: "{colors.panel}"
-    textColor: "{colors.ink}"
-    padding: "8px 8px 16px"
-    width: "240px"
-  sidebar-heading:
-    textColor: "{colors.ink-2}"
-    typography: "{typography.label}"
-    padding: "0 8px"
-    height: "24px"
-  sidebar-row:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    typography: "{typography.ui}"
-    rounded: "{rounded.sm}"
-    padding: "0 8px"
-    height: "28px"
-  sidebar-row-hover:
-    backgroundColor: "{colors.hover}"
-  sidebar-row-active:
-    backgroundColor: "{colors.pressed}"
-  sidebar-row-current:
-    backgroundColor: "{colors.hover}"
-    textColor: "{colors.ink}"
-  workspace-mark:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.page}"
-    rounded: "{rounded.sm}"
-    size: "20px"
-  topbar:
-    backgroundColor: "{colors.page}"
-    textColor: "{colors.ink}"
-    typography: "{typography.ui}"
-    padding: "0 12px"
-    height: "45px"
-  question-block:
-    backgroundColor: "{colors.raised}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.md}"
+    rounded: "{rounded.box}"
     padding: "16px"
-  question-fault:
-    backgroundColor: "{colors.danger-tint}"
-    textColor: "{colors.ink}"
-    typography: "{typography.small}"
-    rounded: "{rounded.sm}"
-    padding: "8px 12px"
-  bar-row:
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    height: "24px"
-  bar-mark:
-    backgroundColor: "transparent"
-    rounded: "{rounded.xs}"
-    size: "16px"
-  bar-mark-winner:
+    width: "min(440px, calc(100vw - 32px))"
+  drawer:
+    backgroundColor: "{colors.bg}"
+    width: "min(256px, 85vw)"
+  scrim:
+    backgroundColor: "{colors.scrim}"
+  skip-link:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.on-accent}"
+    rounded: "{rounded.pill}"
+    padding: "8px 14px"
+  tooltip:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.bg}"
+    typography: "{typography.pill}"
+    rounded: "{rounded.tip}"
+    padding: "6px 10px"
+    width: "min(272px, 60vw)"
+  toast:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.bg}"
+    typography: "{typography.small}"
+    rounded: "{rounded.pill}"
+    padding: "10px 16px"
+  question-row:
+    textColor: "{colors.ink}"
+    padding: "26px 0"
+  question-id:
+    textColor: "{colors.ink}"
+    typography: "{typography.title}"
   bar-track:
     backgroundColor: "{colors.track}"
-    rounded: "{rounded.xs}"
+    rounded: "{rounded.pill}"
     height: "6px"
   bar-fill:
-    backgroundColor: "{colors.bar-muted}"
-    rounded: "{rounded.xs}"
+    backgroundColor: "{colors.bar}"
+    rounded: "{rounded.pill}"
     height: "6px"
-  bar-fill-winner:
+  bar-fill-answer:
     backgroundColor: "{colors.accent}"
-  property-row:
+  bar-mark-answer:
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.on-accent}"
+    rounded: "{rounded.pill}"
+    size: "16px"
+  bar-name:
     textColor: "{colors.ink}"
     typography: "{typography.body}"
-    height: "28px"
-  property-name:
-    textColor: "{colors.ink-2}"
-    typography: "{typography.body}"
-  callout:
-    backgroundColor: "{colors.code}"
+  bar-name-other:
+    textColor: "{colors.muted}"
+  readout:
+    textColor: "{colors.ink}"
+    typography: "{typography.code-cell}"
+    width: "4.5rem"
+  readout-other:
+    textColor: "{colors.muted}"
+  fact-name:
+    textColor: "{colors.muted}"
+    typography: "{typography.caption}"
+  fact-value:
     textColor: "{colors.ink}"
     typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    padding: "16px 16px 16px 12px"
   callout-danger:
     backgroundColor: "{colors.danger-tint}"
     textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    padding: "16px 16px 16px 12px"
+    rounded: "{rounded.box}"
+    padding: "16px 18px"
   fault-loc:
     backgroundColor: "{colors.danger-tint-2}"
     textColor: "{colors.danger}"
-    rounded: "{rounded.xs}"
-    padding: "0.1em 0.3em"
-  toggle-block:
-    backgroundColor: "transparent"
+    rounded: "{rounded.code}"
+    padding: "0.1em 0.35em"
+  question-fault:
+    backgroundColor: "{colors.danger-tint}"
     textColor: "{colors.ink}"
-    typography: "{typography.block-heading}"
-    rounded: "{rounded.sm}"
-    padding: "0 6px 0 0"
-  toggle-block-hover:
-    backgroundColor: "{colors.hover}"
-  toggle-marker:
-    textColor: "{colors.ink-2}"
-    size: "24px"
-  code-block:
-    backgroundColor: "{colors.code}"
-    textColor: "{colors.ink}"
-    typography: "{typography.code}"
-    rounded: "{rounded.lg}"
-    padding: "16px"
-  inline-code:
-    backgroundColor: "{colors.hover}"
-    rounded: "{rounded.xs}"
-    padding: "0.1em 0.3em"
-  popover:
-    backgroundColor: "{colors.raised}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.md}"
-    padding: "12px"
-    width: "min(420px, calc(100vw - 24px))"
-  drawer:
-    backgroundColor: "{colors.panel}"
-    textColor: "{colors.ink}"
-    padding: "8px 8px 16px"
-    width: "min(240px, 85vw)"
-  scrim:
-    backgroundColor: "{colors.overlay}"
-  skip-link:
-    backgroundColor: "{colors.raised}"
-    textColor: "{colors.ink}"
-    typography: "{typography.ui}"
-    rounded: "{rounded.md}"
-    padding: "6px 10px"
+    rounded: "{rounded.inner}"
+    padding: "8px 12px"
 ---
 
 # Design System: Ardana
 
 ## Overview
 
-**Creative North Star: "The Workspace Page"**
+**Creative North Star: "The Line at Work"**
 
-The playground is a page in a workspace the developer already knows: a paper-grey sidebar of settings and pages on the left, one white page of blocks on the right, a thin sticky bar above it holding the page's name and its one blue button. Notion's app grammar is played straight, with Linear and GitHub as the craft bar: the system sans at 14px, warm ink on white, hairlines where other products draw borders, small radii, chrome that shows itself on hover, toggle blocks, callouts and property rows. The work is the blocks. The state is a code block, each question is a white block with a hairline, and every returned probability is a property with a low progress bar and its exact figure at the end of the row.
+The playground is ardana.ai put to work. The landing is a sheet of white paper with one line on it that a terminal can read; the playground keeps the paper, the ink, the one gray and the terminal-gray box, and hands the developer a task instead of a command: paste a state, ask questions, press Run, read the answers, copy the request. The groundhog lockup sits at the top-left as it does on the site, the model and the presets are quiet gray links, the state and every request sit in command boxes, the questions are catalog rows between hairlines, and each answer is the one ink line among gray ones with its exact figure in mono. Run is the one ink pill.
 
-Density is product-UI density: 28px controls, 24px rows inside blocks, 12px between blocks, 32px between the sections of the page. Nothing is decorated. There is no hardware or instrument metaphor, no engraved legend, no glowing readout, no web font, no gradient. Elevation is a 1px hairline shadow or a divider; only surfaces that float (the share popover, the drawer, the toast) cast a real shadow. The page follows the system scheme and offers no switch of its own: the same tokens turn a white page into a `#191919` one.
+Density is operating density, not the landing's one calm screen: 15px words, 13px labels, 12px pills, controls 28 to 40px tall, a white 256px sidebar and a 70px top row that is the landing's nav row. The world keeps the landing's three materials (ink, one gray, the pale terminal gray) and its two voices (Onest for words, Geist Mono for whatever the API reads or returns), both self-hosted. The playground's structure and behaviour came through the rebrand unchanged; only the look follows the site.
 
-Colour is spent on meaning. One blue marks the decision: the Run button, focus, text selection, and the winning row of an answer. Red marks a fault: the callout for a refused request, the fault banner and fault lines, an invalid field's hairline, and the one action that destroys a question. Everything else is ink at three strengths on white, paper-grey and code-grey.
+Its refusals are confirmed: the Notion workspace it replaced (warm ink, the blue accent, gray panels, hover fills) and dashboard chrome (cards, shadows, gradients). There is no hue but one red, and the red means a fault. The dark scheme is not a second theme but the logo kit's inverse, white on #0a0a0a, and it follows the system; the page offers no switch.
 
 **Key Characteristics:**
-- A 240px workspace sidebar beside one page of blocks, under a sticky 45px top bar with the blue Run.
-- The system sans and system mono only; 14px UI, 13px code, 16px block headings, one 32px page title.
-- Warm ink `#37352f` on white, `#fbfbfa` sidebar, `#e9e9e7` hairlines, hover fills at 8% ink.
-- Radii of 3, 4, 6 and 8px; a 10px tooltip is the roundest thing on the page.
-- Answers as property rows: a 16px check, the option name, a 6px progress bar, the exact figure.
-- Blue for the decision, red for the fault, grey for everything else; light and dark from one token set.
+- The landing's tokens by name and value; the playground adds only tokens derived from them (a bar track, a bar gray, a scrim) and one red for faults.
+- A white 256px sidebar headed by the 26px lockup, a sticky 70px top row with the ink Run pill, one hairline beneath.
+- Onest for every word; Geist Mono for code, model names, typed ids and every returned figure.
+- Terminal gray only behind what the API reads or returns; a box you type in wears a 1px gray ring, a box you copy from has none.
+- Questions as hairline catalog rows; the answer is the one ink line: ink bar, ink disc with a paper check, name and figure at 600.
+- Flat: no shadow, no gradient, no card; separation is a 1px hairline or more space.
+- Light and dark from one token set; dark is the kit's inverse and follows the system.
 
 ## Colors
 
-A warm, near-neutral palette with one blue and one red, each with a tint, drawn so that the same names carry a dark scheme.
+The landing's achromatic palette exactly, with one red reserved for faults and a dark scheme that inverts it.
 
 ### Primary
-- **Notion Blue** (`accent`, #2383e2): the winning row's bar and check, the focus outline on every control, the inset ring of a focused field. Not a text colour on white (3.9:1); it marks and outlines.
-- **Run Blue** (`accent-fill`, #0075d3): the fill of the one primary button. White text on it reads at 4.68:1; the hover fill (`accent-fill-hover`, #0066bd) at 5.78:1.
-- **Blue Tint** (`accent-tint`, 14% blue): the 2px halo outside a focused field's blue ring.
-- **Selection** (`selection`, 30% blue): `::selection` across the page.
-- **On Accent** (`on-accent`, #ffffff): text and the check glyph on a blue fill.
+- **Press Ink** (`accent`, #0a0a0a): the Run pill, the skip link, the answer's bar and its check disc, and the logo. It equals the ink on purpose: the decision is marked by a filled shape and by weight, not by a colour. Pure white in the dark scheme.
+- **Soft Press** (`accent-hover`, #2b2b2b): Run on hover and press; its white label reads at 14.2:1.
+- **On Ink** (`on-accent`, #ffffff): the Run label, the skip link's text and the check inside the answer's disc; 19.8:1 on Press Ink.
 
 ### Neutral
-- **Page** (`page`, #ffffff): the page and the top bar.
-- **Panel** (`panel`, #fbfbfa): the sidebar, the drawer, and the quiet banner.
-- **Raised** (`raised`, #ffffff): a block that sits on the page: question blocks, the popover, the checked segment, the skip link.
-- **Code** (`code`, #f7f6f3): code blocks, the empty wire panes, and the plain callout.
-- **Ink** (`ink`, #37352f): body text, headings, values; 12.3:1 on white.
-- **Ink 2** (`ink-2`, 65% of a near-black): captions, property names, placeholders, instructions, idle readouts and inactive icons; about 5.5:1 over white.
-- **Ink 3** (`ink-3`, 45% ink): disabled button labels and the glyphs in property names only; below text contrast by design, never for live text.
-- **Hairline** (`hairline`, #e9e9e7): the divider under the top bar, beside the sidebar, above a property list and a builder panel.
-- **Hairline Strong** (`hairline-strong`, 16% ink): the inset outline of fields, the select and an unchecked check box.
-- **Edge Strong** (`edge-strong`, 55% ink; 45% white in dark): the ring of the checked segment, 3:1 on its track in both schemes.
-- **Hover** (`hover`, 8% ink): the hover fill of buttons, rows and toggle summaries, the segmented control's track, inline code.
-- **Pressed** (`pressed`, 16% ink): the active fill of a button or row, and an expanded button (Edit while its builder is open).
-- **Field** (`field`, 60% of #f2f1ee): the fill of an input.
-- **Tag** (`tag`, 50% of #e3e2e0) with **Tag Ink** (`tag-ink`, #32302c): the grey chips "Sent as text", "Inputs changed", "From last run · inputs changed".
-- **Track** (`track`, 14% ink) and **Bar Muted** (`bar-muted`, #787774): the empty bar and the fill of every row that did not win, and of every winner whose answer has gone stale.
-- **Tooltip** (`tooltip`, #0f0f0f) with **Tooltip Ink** (`tooltip-ink`, 90% white): the dark tooltip card and the toast.
-- **Overlay** (`overlay`, 60% of #0f0f0f): the scrim behind the drawer.
-- **Scroll Thumb** (`scroll-thumb`, #d3d1cb): thin scrollbars everywhere.
+- **Paper** (`bg`, #ffffff): the only ground: page, sidebar, top bar, popover and drawer alike; also the text on the tooltip and the toast.
+- **Ink** (`ink`, #0a0a0a): headings, body text, values, hovered and current links, the outline of the picked segment, and the fill of the tooltip and the toast.
+- **Pencil Gray** (`muted`, #666666): the secondary voice: the lede, instructions, labels, sidebar links and quiet buttons at rest, placeholders, fact names, notes, and every option that is not the answer once a run has answered. 5.7:1 on Paper, 5.2:1 on Terminal Gray.
+- **Hairline** (`line`, #ececec): the 1px rules under the top row and the banner, at the sidebar's right edge, above and between question rows, around the empty-list callout and above a builder panel; the outline of tags, the popover and a disabled field.
+- **Bar Track** (`track`, #ececec): the empty 6px bar. It is the hairline under a name of its own, so the bar follows the hairline in both schemes.
+- **Bar Gray** (`bar`, #858585): the fill of an option that is not the answer, and of an answer gone stale. The landing's Prompt Gray one step darker: the nearest gray that holds 3:1 on its track (3.1:1, where #8a8a8a gives 2.9:1).
+- **Terminal Gray** (`code-bg`, #f4f4f4): the ground of every command box (the state, the questions JSON, the wire panes, the snippet, the share link's row), of the model select and the builder's fields, and of inline code.
+- **Command Ink** (`code-ink`, #0a0a0a): text in command boxes and fields.
+- **Prompt Gray** (`code-muted`, #8a8a8a): the 1px ring of a box you type in (3.5:1 on Paper, 3.1:1 on Terminal Gray), the curl `$` prompt, icon keys and the copy key at rest, the select's chevron, and the scrollbar thumb.
+- **Icon Wash** (`code-hover`, 7% ink): the ground behind a hovered icon key or copy key, and nothing else.
+- **Focus Ink** (`focus`, #0a0a0a): the 2px focus ring. Pure white in the dark scheme.
+- **Selection Wash** (`selection`, 12% ink): text selection, an ink wash rather than a browser blue.
+- **Ink Veil** (`scrim`, 40% ink): the scrim behind the drawer.
 
 ### Fault
-- **Danger** (`danger`, #b3372f): fault titles and icons, the fault banner's text, fault lines under fields, the invalid field's hairline, the location code in a 422 issue, and the Remove question button. 5.21:1 on its tint, 5.99:1 on white.
-- **Danger Tint** (`danger-tint`, #fdebec): the fill of the fault callout, the fault banner and a question's own fault line.
-- **Danger Tint 2** (`danger-tint-2`, 16% of #d44c47): the fill behind the `body › questions › id` location code inside a fault.
+- **Fault Red** (`danger`, #b42318): fault titles and icons, the fault banner's text, fault lines under fields, the ring of a refused field or editor, and the location code of a 422 issue. 6.6:1 on Paper, 5.9:1 on Fault Wash, 5.1:1 on Fault Chip.
+- **Fault Wash** (`danger-tint`, #fdf0ef): the fault callout, the fault banner and a question's own fault line.
+- **Fault Chip** (`danger-tint-2`, #f9dcd9): the ground of the `body › questions › id` location code inside a fault.
 
 ### Dark scheme
-The dark scheme follows `prefers-color-scheme` and redefines the same tokens (`color-scheme: light dark`, `theme-color` #ffffff and #191919). The blues (`accent`, `accent-fill`, `accent-fill-hover`, `on-accent`, `selection`) do not change; the tooltip inverts to a white card.
+`prefers-color-scheme: dark` redefines the same tokens (`color-scheme: light dark`; `theme-color` #ffffff and #0a0a0a). The brand's ink (the logo, Run, the answer, the focus ring) turns pure white; text turns a soft white.
 
 | Token | Light | Dark |
 |---|---|---|
-| `page` | #ffffff | #191919 |
-| `panel` | #fbfbfa | #202020 |
-| `raised` | #ffffff | #252525 |
-| `code` | #f7f6f3 | #252525 |
-| `ink` | #37352f | rgb(255 255 255 / 0.81) |
-| `ink-2` | rgb(25 23 17 / 0.65) | #9b9b9b |
-| `ink-3` | rgb(55 53 47 / 0.45) | #7f7f7f |
-| `hairline` | #e9e9e7 | #2f2f2f |
-| `hairline-strong` | rgb(55 53 47 / 0.16) | rgb(255 255 255 / 0.13) |
-| `hover` | rgb(55 53 47 / 0.08) | rgb(255 255 255 / 0.055) |
-| `pressed` | rgb(55 53 47 / 0.16) | rgb(255 255 255 / 0.11) |
-| `field` | rgb(242 241 238 / 0.6) | rgb(255 255 255 / 0.04) |
-| `tag` | rgb(227 226 224 / 0.5) | rgb(255 255 255 / 0.094) |
-| `tag-ink` | #32302c | rgb(255 255 255 / 0.81) |
-| `track` | rgb(55 53 47 / 0.14) | rgb(255 255 255 / 0.13) |
-| `bar-muted` | #787774 | #9b9b9b |
-| `accent-tint` | rgb(35 131 226 / 0.14) | rgb(35 131 226 / 0.22) |
-| `danger` | #b3372f | #f28b88 |
-| `danger-tint` | #fdebec | #362422 |
-| `danger-tint-2` | rgb(212 76 71 / 0.16) | rgb(0 0 0 / 0.3) |
-| `tooltip` | #0f0f0f | #ffffff |
-| `tooltip-ink` | rgb(255 255 255 / 0.9) | #191919 |
-| `overlay` | rgb(15 15 15 / 0.6) | rgb(15 15 15 / 0.8) |
-| `scroll-thumb` | #d3d1cb | #454545 |
+| `bg` | #ffffff | #0a0a0a |
+| `ink` | #0a0a0a | #ededed |
+| `muted` | #666666 | #a1a1a1 |
+| `line` | #ececec | #262626 |
+| `accent` | #0a0a0a | #ffffff |
+| `accent-hover` | #2b2b2b | #dedede |
+| `on-accent` | #ffffff | #0a0a0a |
+| `code-bg` | #f4f4f4 | #171717 |
+| `code-ink` | #0a0a0a | #ededed |
+| `code-muted` | #8a8a8a | #7a7a7a |
+| `code-hover` | rgb(10 10 10 / 0.07) | rgb(255 255 255 / 0.08) |
+| `focus` | #0a0a0a | #ffffff |
+| `selection` | rgb(10 10 10 / 0.12) | rgb(255 255 255 / 0.2) |
+| `track` | #ececec | #262626 |
+| `bar` | #858585 | #7a7a7a |
+| `scrim` | rgb(10 10 10 / 0.4) | rgb(0 0 0 / 0.6) |
+| `danger` | #b42318 | #ff7b72 |
+| `danger-tint` | #fdf0ef | #2a1311 |
+| `danger-tint-2` | #f9dcd9 | #4a1d19 |
 
-Dark contrast: the dark ink reads at 11.8:1 on #191919, `ink-2` #9b9b9b at 6.3:1 on the page and 5.5:1 on a raised block, and the dark danger #f28b88 at 6.16:1 on its tint #362422. The dark hairline shadows are 9.4% white at 1px; the popover and drawer keep their offsets with deeper black.
+Dark contrast: soft white text reads 16.9:1 on #0a0a0a; Pencil Gray 7.7:1 on the page and 6.9:1 on Terminal Gray; Prompt Gray 4.6:1 and 4.2:1; Bar Gray 3.5:1 on its track; Fault Red 6.9:1 on its wash and 5.6:1 on its chip; Run's near-black label 19.8:1 on white.
 
 ### Named Rules
-**The Blue Is a Decision Rule.** Blue appears where something was decided or is about to be: the Run fill, the focus outline, text selection, and the bar and check of the winning row. It is never a heading, a link colour, a border or a background.
+**The One Red Rule.** The palette has no hue but one red, and the red means a fault: something the API, the JSON parser or a share link refused. No blue, no success green, no warning amber; never red for emphasis, decoration or a destructive action (Remove question is a quiet gray button).
 
-**The Red Is a Fault Rule.** Red marks a refusal or a destruction, nothing else: the fault callout, the fault banner, fault lines, an invalid field's hairline, the location code of a 422 issue, and the Remove question button. Emphasis, warnings and decoration never take it.
+**The Ink Is The Accent Rule.** `accent` equals ink. Run, the skip link and the answer are marked by filling a shape with ink and by weight, never by a brand colour.
 
-**The Hairlines, Not Borders Rule.** Nothing draws a CSS border in the normal schemes. An edge is a 1px shadow (`rgb(15 15 15 / 0.1) 0 0 0 1px` on blocks, an inset 16% ink line on fields) or a 1px inset divider in `hairline`; forced-colors mode is the one place borders are drawn.
+**The Terminal Gray Rule.** Terminal Gray sits only behind what the API reads or returns: command boxes, fields, the model select, inline code. It is never a card, panel, sidebar or section ground, and an empty pane is a gray sentence, not an empty gray box.
+
+**The Inverse Rule.** The dark scheme is the logo kit's inverse and nothing else: the page #0a0a0a, the brand's ink pure white, text a soft white. It follows the system; there is no switch and no third scheme.
 
 ## Typography
 
-**Display Font:** the system sans (`ui-sans-serif`, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial)
-**Body Font:** the same system sans
-**Label/Mono Font:** the system mono (`ui-monospace`, SFMono-Regular, Menlo, Consolas, Liberation Mono, Courier)
+**Display Font:** Onest Variable (`"Onest Variable", ui-sans-serif, system-ui, sans-serif`)
+**Body Font:** Onest Variable (the same stack)
+**Label/Mono Font:** Geist Mono Variable (`"Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace`)
 
-**Character:** The type is the platform's own, set the way Notion sets it: 14px sans for everything the user reads or presses, 13px mono for everything the API reads or returns, one heavy 32px title, and no letter-spacing anywhere but that title. Tabular numerals are on for the whole body so figures in bar rows and property lists align.
+**Character:** Onest, a warm, slightly geometric grotesk, carries every word at the landing's weights, with tight negative tracking on headings only; Geist Mono carries every string the API reads or returns and every figure. Both are self-hosted from `crates/ardana-playground/fonts/` as ardana.ai loads them (fontsource 5.3.1 and 5.3.0: one variable `wght` file per script subset under its `unicode-range`, `font-display: swap`, SIL OFL 1.1), with the two latin files preloaded; the placeholder page carries the latin subsets alone. Numerals are tabular across the page.
 
 ### Hierarchy
-- **Page title** (700, 2rem, 1.2, -0.01em): the one `Ardana playground` heading (the page's `h1`) beside its 32px page glyph. **Page title, compact** (700, 1.5rem, 1.2, -0.01em): the same heading below 720px, beside a 24px glyph.
-- **Block heading** (600, 1rem, 1.3): the State and Questions headings, each question's id, and the Raw exchange and Snippets toggle headings.
-- **UI** (500, 0.875rem, 1.2): buttons, sidebar rows, the top bar crumb, the workspace name (600), option names of the winning row (600).
-- **Body** (400, 0.875rem, 1.5, tabular): the lede, instructions (max 65ch), option names, readouts, property names and values, field text, callout text (max 56ch).
-- **Small** (500, 0.8125rem, 1.4): segments (line-height 1), small buttons, the banner, the toast, a question's fault line; at 400 for the toggle captions and fault lines under fields.
-- **Label** (500, 0.75rem, 1.4): field labels, sidebar section headings (line-height 1), tags (line-height 1), the tooltip, criteria legends, the Sent and Received headings.
-- **Caption** (400, 0.75rem, 1.4): the token count under the state, the last run line, field notes, the sidebar foot, the note under an option name, the score fit.
-- **Code** (400, 0.8125rem, 1.6, mono): the state, the questions JSON, the wire panes, the snippet; 1.5 in a code field. Inline code is 0.85em of its line on the hover fill.
+- **Headline, page** (700, clamp(2rem, 3.2vw, 2.75rem), 1, -0.035em): the one "Ardana playground" heading, about 41px at 1280 wide; 1.875rem below 720px. The landing's page headline at operating size.
+- **Headline, notice** (700, clamp(1.75rem, 3vw, 2.25rem), 1.1, -0.03em, balanced): the placeholder page's one statement.
+- **Title** (600, 1.375rem, 1.2, -0.02em): the landing's catalog row title: each question's id at the head of its row, the State and Questions headings, and the Raw exchange and Snippets toggle headings.
+- **Title, compact** (600, 1.25rem, 1.2, -0.02em): below 720px, question ids together with the State, Questions, Raw exchange and Snippets headings, so an id never outsizes its section heading.
+- **Lede** (400, 1.0625rem, 1.45): the one sentence under the page title, in Pencil Gray at 60ch; 0.9375rem below 720px. Also the placeholder's paragraphs.
+- **Body** (400, 0.9375rem, 1.5, tabular): instructions at 65ch, option names, fact values, toggle captions, field text, empty-pane sentences; the top bar's crumb at 500.
+- **Button** (600, 0.9375rem, 1.2): the Run label.
+- **Link** (400, 0.9375rem, 1.2): quiet buttons and sidebar rows; 0.875rem in small buttons.
+- **Small** (500, 0.875rem, 1.4): the toast and the banner; a question's fault line at 400.
+- **Label** (500, 0.8125rem, 1.4): field labels, sidebar headings, builder legends, the Sent and Received captions; segments at line-height 1.
+- **Caption** (400, 0.8125rem, 1.4): notes, fact names, segmented legends, the last-run line, the state's token count, fault lines, the sidebar foot.
+- **Pill** (500, 0.75rem, 1.4): tags and tooltips; a score level's fit line at 400.
+- **Code, block** (Geist Mono 400, 0.8125rem, 1.6): the state, the questions JSON, the wire panes and the snippet, two-space tabs. The state editor's placeholder is words, so it is set in Onest at 0.9375rem; the questions JSON's placeholder is code and stays mono.
+- **Code, small** (Geist Mono 400, 0.8125rem, 1.45): the model select; typed ids and option keys in builder fields and the share link at the field's 1.5.
+- **Code, cell** (Geist Mono 400, 0.875rem, tabular): every returned figure: the readout at the end of a bar row (600 for the answer) and the figures in the fact row.
+- **Code, extra small** (Geist Mono 400, 0.75rem): the model name in the last-run line and the serving origin in the sidebar foot.
 
 ### Named Rules
-**The System Face Rule.** No web font is loaded and none may be added; the page renders in whatever sans and mono the platform ships. Letter-spacing is off everywhere except the -0.01em of the 32px title. Nothing is set in uppercase.
+**The Terminal Voice Rule.** Whatever is shown as the API reads or returns it is Geist Mono: the state, the questions JSON, the wire panes, the snippets, a model name, the serving origin, an id or option key in its field, and every returned figure. Whatever names or explains it is Onest, including a question's id as its heading, the option names beside the bars, and the state editor's placeholder.
 
-**The Figures As Returned Rule.** Probabilities print as percent with one decimal, confidence, noul, score and extras with two decimals, counts and names verbatim; every figure carries its raw value and JSON pointer in `data-value` and `data-field`. Figures are tabular and right-aligned in a 4.5rem readout column.
+**The One Heavy Title Rule.** Onest 700 appears once per page, on its h1, at -0.035em. Headings below it are 600 at -0.02em; nothing else is heavier than 600, tracked open, or set in capitals.
 
 ## Layout
 
-The shell is a two-column grid: a 240px sidebar and `minmax(0, 1fr)` for the main column, `min-height: 100vh`. The sidebar is sticky, full height, scrolls on its own, and carries a 1px inset hairline on its right edge. Collapsing it animates the first column to 0 over 200ms; the collapsed state is remembered in `localStorage` (`ardana.sidebar`) and the opener appears at the left of the top bar. Inside the sidebar: an 8px gutter, 16px between sections, 2px between rows, 24px section headings, 28px rows; the foot sits at the bottom with the serving origin and the Run shortcut.
+The shell is the landing's nav grown into a workspace: a grid of a 256px sidebar and `minmax(0, 1fr)`, full height. The sidebar is white, sticky, scrolls on its own and ends in the one vertical hairline; its head is the left end of the 70px top row, which is the landing's nav row: the 26px lockup sits 22px from the top, as on ardana.ai, and 24px from the left, so the top row reads as one bar. Collapsing the sidebar (its own control, or Ctrl/Cmd+\\) takes the first column to 0 over 200ms and puts the opener and the lockup at the top bar's left; the choice is remembered. Inside the sidebar: 24px between groups, 12px side padding, 28px group headings, 34px rows 2px apart, and the foot pinned to the bottom.
 
-The main column is a flex column: the 45px sticky top bar (12px side padding, inset hairline beneath, z-index 20), the banner beneath it (36px, only while it has text), then the page. The page is `max-width: 1400px`, centred, with 32px above, 48px at the sides and a 20vh tail so the last block can scroll under the bar; its blocks are 32px apart. The title row is a 32px glyph, a 12px gap and the heading, with the lede under it at 56ch.
+The main column stacks the sticky 70px top bar (at least 14px above and below, the fluid gutter at the sides, the crumb, then the actions 12px apart at the right), the banner under it (40px, only while it has something to say), then the page: centred, at most 1400px wide, 40px above, the gutter (16 to 48px) at the sides, a 20vh tail so the last block can scroll under the bar, 48px between sections. Anything the page scrolls to lands 12px under the bar (`scroll-padding-top: calc(var(--topbar) + var(--space-3))`).
 
-The two columns of the page are `minmax(0, 5fr) minmax(0, 7fr)` with a 32px gap, aligned to the start: the state on the left, the questions on the right; that order is a product commitment. The state block is a code block textarea at `clamp(280px, 52vh, 600px)` tall with its tag in the block head and its token caption beneath. Question blocks are 12px apart with 16px padding; inside, 12px between the head, instructions, bars and properties. A bar row is the grid `16px minmax(6rem, 12rem) minmax(0, 1fr) auto` with 12px gaps and a 24px minimum height; a property row is `9rem minmax(0, 1fr)` at 28px. The raw exchange is two equal panes 16px apart. Builder rows are `2fr 3fr auto` for options and `1.5rem 1fr auto` for levels, 8px apart.
+The page keeps the binding structure: the state on the left and the questions with their answers on the right, `minmax(0, 5fr) minmax(0, 7fr)` with the landing's 40px column gap, aligned to the top; then the raw exchange as two panes 24px apart, then the snippets. At 1280x800 the first viewport holds the top row, the title and lede, the state editor (`clamp(280px, 52vh, 600px)` tall) and the first question with its answer. Question rows take the landing's catalog-row padding, 26px above and below, and 14px between their parts. A bar row is the grid `16px minmax(6rem, 12rem) minmax(0, 1fr) auto` with 12px between columns at a 28px minimum (44px for a score level with its fit line), rows 4px apart (10px when score levels carry fit lines); the fact row wraps with the landing's gaps, 20px between lines and 48px between facts.
 
-Spacing steps are 4, 8, 12, 16, 24, 32 and 48px; 2px and 6px appear as half steps inside controls (the segmented track's padding, gaps beside icons, the gap between bar rows).
+The questions column is also a size container (`container-type: inline-size`): whenever it is narrower than 30rem (a phone, or a small laptop beside the sidebar), each bar row restacks to mark, name and figure on one line with the bar beneath the name and figure, 4px by 10px apart, so the bar keeps a readable length whatever the window's width; a score level's first line is then at least 40px, room for its figure over its fit.
+
+Spacing steps are 4, 8, 12, 16, 24, 40 and 48px, the landing's 26px row padding and the fluid gutter; 2, 6, 10, 14, 18 and 20px appear as half steps inside controls, boxes and the fact row.
 
 Breakpoints, all `max-width`:
-- **1200px**: page side padding drops to 32px.
-- **960px**: the columns stack (24px gap) and the state shrinks to 220px; the sidebar becomes a fixed drawer at `min(240px, 85vw)` over a scrim, sliding in from the left over 200ms, with the page marked `inert` while it is open; the top bar's opener is always shown; after a run the page scrolls the fault or the first question to the top.
-- **720px**: page padding 16px and gaps 24px; the title falls to 1.5rem and its glyph to 24px; question padding 12px; bar rows restack to `mark name value` over `. bar bar`; option rows put the description on a second line; the exchange panes stack; the share popover becomes fixed under the top bar with 12px side margins.
-
-Anything the page scrolls to (`.page`, `.question`, `.callout`, `.toggle`) has `scroll-margin-top` of the bar plus 12px, so a target lands under the sticky bar and not behind it.
+- **960px:** the columns stack, 40px apart, and the state editor falls to 220px; the sidebar becomes a drawer `min(256px, 85vw)` wide that slides in from the left over 200ms above the scrim, with the page inert behind it; the opener and the lockup stay in the top bar.
+- **720px:** the page tightens (24px above, 40px between sections); the title falls to 1.875rem, question ids and the section and toggle headings to 1.25rem, the lede to 0.9375rem; facts form two columns (16px by 24px); builder rows wrap; the exchange panes stack; the crumb and the top bar's stale-tag slot are removed (each question carries its own tag); the lockup is 22px; Run narrows to 14px sides and fits its label, so "Running" with its caret fits the bar at 390px; the share popover is fixed under the top bar with 16px margins.
+- **389px:** the lockup is 18px (above the kit's 80px minimum width), the top bar's gaps tighten, and Share becomes a 32px key showing the link glyph, its word visually hidden and its name still "Share link", so the bar keeps Share and Run on its one line.
 
 ## Elevation & Depth
 
-The system is flat with hairlines. Blocks that sit on the page (question blocks) get a 1px shadow ring, not a border; the sidebar, the top bar, the banner, a property list and a builder panel are separated by 1px inset hairlines. Only things that float above the page cast an offset shadow: the share popover, the drawer, the toast, the skip link, and the 1px lift of a checked segment. The dark scheme keeps the same shapes and swaps the 1px ring to 9.4% white.
+The system is flat, the landing's Flat Paper exactly: no shadow, no gradient, no layered surface. Structure is whitespace, 1px hairlines and the single tonal step of Terminal Gray. Layers that sit over the page are told apart without depth: the tooltip and the toast by inversion (an ink card on paper), the share popover by a 1px hairline, the drawer by the Ink Veil (40% ink; 60% black in the dark scheme). They stack by order alone: the top bar at 20, tooltips and the popover at 30, the toast at 40, the scrim at 55, the drawer at 60, the skip link at 70.
 
 ### Shadow Vocabulary
-- **Hairline ring** (`box-shadow: rgb(15 15 15 / 0.1) 0 0 0 1px`): question blocks. Dark: `rgb(255 255 255 / 0.094) 0 0 0 1px`.
-- **Field inset** (`box-shadow: inset 0 0 0 1px var(--hairline-strong)`): inputs, the select, an unchecked check box.
-- **Focus ring** (`box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--accent-tint)`): a focused field, select or code block; every other control takes a 2px `accent` outline at 1px offset.
-- **Fault inset** (`box-shadow: inset 0 0 0 1px var(--danger)`): a field or code block whose value was refused (`aria-invalid`).
-- **Divider** (`box-shadow: inset -1px 0 0 var(--hairline)` / `inset 0 -1px 0` / `inset 0 1px 0`): the sidebar's right edge, the top bar's and banner's bottom edge, the top of a property list or builder panel.
-- **Segment lift** (`box-shadow: 0 0 0 1px var(--edge-strong), rgb(15 15 15 / 0.1) 0 1px 2px`): the checked segment on its raised plate; the ring is `edge-strong` (55% ink, 45% white in dark), which holds 3:1 on the track so the picked state is not colour alone.
-- **Popover** (`box-shadow: rgb(15 15 15 / 0.1) 0 0 0 1px, rgb(15 15 15 / 0.1) 0 3px 6px, rgb(15 15 15 / 0.2) 0 9px 24px`): the share popover and the skip link. Dark: the ring at 9.4% white, the offsets at 50% and 60% black.
-- **Drawer** (`box-shadow: rgb(15 15 15 / 0.2) 0 0 0 1px, rgb(15 15 15 / 0.3) 0 12px 32px`): the sidebar as a drawer below 960px. Dark: ring at 9.4% white, offset at 70% black.
-- **Toast** (`box-shadow: rgb(15 15 15 / 0.3) 0 4px 16px`): the copy toast at the bottom right.
+Nothing casts a shadow. `box-shadow` draws only 1px inset lines, so an edge never changes a box's size:
+- **Divider** (`box-shadow: inset -1px 0 0 var(--line)` / `inset 0 -1px 0 var(--line)`): the sidebar's right edge; the bottom edge of the sidebar head, the top bar and the banner.
+- **Type ring** (`box-shadow: inset 0 0 0 1px var(--code-muted)`): a box you type in: fields, the model select, the state and questions editors.
+- **Fault ring** (`box-shadow: inset 0 0 0 1px var(--danger)`): a field or editor whose value was refused (`aria-invalid`).
+- **Rest ring** (`box-shadow: inset 0 0 0 1px var(--line)`): a field the builder cannot edit, drawn as an outline on paper.
+- **Picked ring** (`box-shadow: inset 0 0 0 1px var(--ink)`): the checked segment.
 
 ### Named Rules
-**The Floating Only Rule.** A block on the page never casts an offset shadow; it gets the 1px hairline ring or a divider. Offset shadows belong to surfaces that float over the page: the popover, the drawer, the toast, the skip link, and the checked segment's 1px lift.
+**The Flat Paper Rule.** Nothing casts a shadow. A layer that floats is set apart by inversion, a hairline or a scrim; a block on the page by a hairline or more space.
 
 ## Shapes
 
-Corners are small and stepped by role: 3px on the smallest things (tags, the check box, the bars, inline code, a defined term's focus shape), 4px on inputs, the select, rows, segments, the workspace mark and a question's fault line, 6px on buttons, question blocks, callouts, the segmented track, the popover, the toast and the skip link, 8px on code blocks and the empty wire panes, and 10px on the tooltip. Nothing is a pill and nothing is a circle except the icons' arcs.
+The landing's three shapes, at work: full pills (999px) for what you press hard or what marks (Run, the skip link, tags, segments, the toast, the bars and the answer's disc); softly rounded 10px boxes for what holds text the API reads (command boxes, fields, the select) and for the popover and the fault callout; and the concentric 6px inner corner for keys and rows (quiet and icon buttons, the copy key, sidebar rows, a question's fault line, the tooltip's painted card). Inline code takes 4px; a focus ring on a target with no shape of its own (a disclosure's summary, a defined term) follows a 3px corner. Everything else is square.
 
-There are no borders in the normal schemes; edges are shadows and dividers (see Elevation). The bar is a 6px track with a 3px radius whose fill grows to the returned probability. The check box is a 16px square with a 12px check glyph at stroke 2, drawn only when the row is the answer. Icons are drawn on one 16-unit grid at 16px (14px in the select and the small Run spinner), one 1.5px stroke with round caps and joins in the current colour; the only filled glyph is the toggle triangle. The workspace mark is a 20px square of ink with a white "A".
+The icons are drawn as the landing draws them: a 16-unit grid, one 1.5px stroke with round caps and joins, in the current colour, at 16px (14px in the select); the answer's check is 11px at a 2.2 stroke inside its 16px disc. The copy, check and arrow glyphs are the landing's own, and the arrow keeps the landing's 1.6 stroke. The sidebar's opener and closer draw a window with its sidebar (the panel glyph); on the smallest phones a link glyph stands in for Share's word. A disclosure opens on a chevron that turns 90°; the landing's arrow is kept for navigation (Restore previous leads with it, mirrored). No icon is a text glyph.
+
+The logo is the kit's tight horizontal lockup (`crates/ardana-playground/brand/ardana-logo.svg`), inline in `currentColor` from `accent`: ink on paper, white on #0a0a0a, 26px tall (22px in a phone's top bar, 18px at 389px and below, above the kit's 80px minimum width). The height is set on its outer svg only, so the nested mark keeps its own geometry; it is never recoloured, stretched or outlined. The favicons are the kit's; the SVG one follows the scheme.
+
+### Named Rules
+**The Three Shapes Rule.** A pill, a 10px box or its 6px inner key; 4px belongs to inline code and 3px to focus on shapeless text. A new component picks one of the three.
+
+**The Hairline Rule.** Rules are 1px. Between regions and rows they run horizontal; the sidebar's right edge is the one vertical rule, starting under the top row. Tags, the popover and a disabled field are the only closed outlines.
 
 ## Components
 
-Quiet at rest, revealed on hover: every control is a transparent shape that fills at 8% ink when the pointer arrives, and a decided one is blue. Hover fills, colours and shadows transition over 100ms `ease-in`; the shell and the drawer over 200ms on `cubic-bezier(0.3, 0, 0.5, 1)`; all transitions and animations are off under `prefers-reduced-motion`. In forced-colors mode buttons, fields, tags and blocks draw a 1px `CanvasText` border, the primary button and bar fills use `Highlight`, and focus uses `Highlight`.
+Quiet at rest, certain when pressed: words are gray until the pointer or the page makes them current, then ink, with no fill; the one filled thing is Run. Colours, rings and washes change over 150ms; the shell, the drawer, the scrim, the skip link, the disclosure chevron and the back arrow move over 200ms on the landing's ease-out (`cubic-bezier(0.16, 1, 0.3, 1)`). Under `prefers-reduced-motion` every transition and the bar growth stop and the caret holds steady; under `forced-colors` controls draw a 1px system border, Run and the answer's bar and disc take `Highlight`, and focus is `Highlight`.
 
 ### Buttons
-- **Shape:** 6px radius, 28px tall, 500 at 14px, 6px between icon and label, icons in `ink-2` that turn to ink on hover.
-- **Ghost (default):** transparent; hover 8% ink; active or `aria-expanded="true"` 16% ink; a held button (`aria-disabled="true"`) turns its label `ink-3` and its cursor default but stays focusable. Share, Edit, Copy, Add option and the sidebar's rows are ghosts.
-- **Primary (Run):** `accent-fill` with white text, 12px side padding; hover and active `accent-fill-hover`; held at 50% opacity with its reason in the banner under the top bar (`aria-describedby`); busy at 85% opacity with a 14px spinner arc turning at 900ms and the label reading Running or, while the server pulls the model, Pulling. It announces `Control+Enter Meta+Enter` in `aria-keyshortcuts` and carries a tooltip with the shortcut.
-- **Icon:** a 28px square (24px in the small size) whose name is its `aria-label` and its tooltip: the sidebar's opener and closer, Remove option and Remove level.
-- **Small:** 24px tall at 13px for row-level actions: Edit, Copy, Add option, Add level, Remove question (in `danger`).
-- **Focus:** a 2px `accent` outline at 1px offset on every button.
+- **Shape:** quiet and icon buttons take the 6px inner corner; Run is a full pill.
+- **Quiet (default):** transparent, Pencil Gray at 15px and 400, 32px tall with 10px sides; hover, press and `aria-expanded="true"` turn the label ink, with no fill. Share and Edit are quiet; Share is its word, and only at 389px and below a 32px key showing the link glyph, the word visually hidden and the name still "Share link". Small (Edit, Add option, Remove question): 28px tall, 8px sides, 14px. A held button carries `aria-disabled="true"`, never `disabled`, sits at 45% opacity and keeps its focus.
+- **Primary (Run):** Press Ink with a white 15px label at 600, 36px tall, 18px sides; hover Soft Press; a press scales it to 0.97. Held at 35% opacity with its reason in the banner (`aria-describedby`); busy at full strength, the label reading Running (Pulling while the server downloads the model) with the landing's blinking block caret after it. It keeps one width, as the landing's Copy pill does when it says Copied: its face and an unseen "Running" with its caret share one grid cell, so above 720px the pill is as wide as its widest face at rest and in flight; in a phone's top bar the unseen face is dropped, the sides narrow to 14px and the pill fits its label. Ctrl/Cmd+Enter presses it from anywhere, and its tooltip says so.
+- **Icon:** a 32px key (28px small) in Prompt Gray that turns Command Ink on the Icon Wash when hovered; its name is its `aria-label`, repeated in its tooltip. The sidebar's opener and closer, both the panel glyph (the closer hidden until the sidebar head is hovered or the sidebar holds focus), Remove option and Remove level.
+- **Focus:** the landing's ring on every control: 2px Focus Ink, 3px out, following the control's corner.
 
-### Segmented control
-A native radio group (`role="radiogroup"` labelled by its legend) in a 6px track of 8% ink with 2px padding. Each segment is a label 24px tall with 10px side padding, 13px at 500 in `ink-2`, hovering to ink; the checked segment sits on a `raised` plate with the segment lift shadow and reads in ink. The real radio covers its segment invisibly so arrow keys move the choice; focus shows as the 2px `accent` outline on the segment. Used for a question's type (noul, choice, score) and the snippet language.
+**The One Ink Pill Rule.** Run is the only filled button on a screen, and above 720px it keeps one width while it works. The skip link is an ink pill too, but it appears only on focus.
 
-### Fields
-- **Style:** 28px tall, 3px 8px padding, 4px radius, `field` fill under a 1px inset `hairline-strong`; 14px at 1.5; placeholders in `ink-2`; code fields (question id, option names, the share link) in 13px mono. A 12px label at 500 in `ink-2` sits 4px above; a 12px note or a 13px fault line sits beneath.
-- **Focus:** the inset ring turns blue and a 2px `accent-tint` halo appears outside it; the outline is dropped.
-- **Error:** `aria-invalid="true"` turns the inset ring `danger` and the fault line beneath it reads the message in `danger`; the message is announced politely only when the field turns invalid or valid again.
-- **Disabled:** a field the builder cannot edit (structured JSON) is disabled, transparent, in `ink-2`, with a note saying to edit it in the questions JSON.
-- **Select:** the model picker is a real `select` dressed as a field: transparent with the inset hairline, 28px right padding for a 14px chevron in `ink-2`, hover fill, the same focus ring; pulled models first, then the library models with their download size.
+### Chips
+- **Tag:** the landing's "default" pill: transparent, a 1px Hairline outline, Pencil Gray at 12px and 500, 2px by 8px. "Sent as text" or "Sent as JSON" in the state's head, "Inputs changed" in the top bar, "From last run · inputs changed" on a stale question. Static, never interactive.
+- **Segmented control:** a native radio group after a 13px Pencil Gray legend at 400, 12px before its options, so the legend never reads as one more option. Segments are 28px pills with 12px sides, 13px at 500 in Pencil Gray (ink on hover); the checked one reads in ink inside a 1px ink ring, so the pick never rests on colour alone. The real radio covers its segment invisibly, so the arrow keys move the pick; focus rings the segment. Used for a question's type (noul, choice, score) and the snippet's language.
 
-### Tags
-A 20px chip with 6px side padding, 3px radius, 12px at 500, `tag` fill and `tag-ink`: "Sent as text" or "Sent as JSON" in the state's head, "Inputs changed" in the top bar and "From last run · inputs changed" on a stale question and in the last-run line.
+### Command boxes (signature, from the landing)
+The landing's core object at work: a Terminal Gray box with 10px corners, Geist Mono 13px at 1.6, 16px by 18px of padding. The snippet keeps the landing's 40px copy key in its top-right corner and the gray `$` prompt before a curl line (drawn, never copied or read out). The copy key is Prompt Gray at rest and Command Ink on the Icon Wash when hovered; after a copy its glyph fades and shrinks as a check scales in, for 1.6s. A copy that worked is said to screen readers only; one the browser refused is said in the toast. An empty wire pane is a 15px Pencil Gray sentence. Bodies wrap; they never truncate.
 
-### Tooltip
-A dark card (`tooltip`, white in the dark scheme) with 4px 8px padding, 10px radius, 12px at 500, centred text, at most `min(272px, 60vw)` wide, rendered from `data-tip` as `::after` above, below, at the start or at the end of its control. A second line carries the shortcut ("Ctrl+Enter or ⌘↵"). It appears on hover, on focus-visible, or when a child has focus; a transparent 6px border bridges the gap so the pointer can cross onto it; Escape dismisses every tooltip (`tips-off` on the root) until the pointer or focus moves again. A tooltip describes; it is never the only name of a control. Property names (Confidence, P max, Certainty) are `dfn` terms with a help cursor and a tooltip that states their meaning, with the same text visually hidden for readers.
+### Inputs / Fields
+- **Style:** a 36px Terminal Gray box with 10px corners, 6px by 12px of padding, Command Ink at 15px (typed ids and option keys in Geist Mono 13px), placeholders in Pencil Gray, under a 13px Pencil Gray label at 500, 6px above; a 13px note or fault line beneath.
+- **Focus:** the 2px Focus Ink ring, 3px out.
+- **Error:** `aria-invalid="true"` turns the ring Fault Red, and the fault line beneath reads the refusal in Fault Red.
+- **Disabled:** a field the builder cannot edit (structured JSON) is a Hairline outline on Paper with gray text, and its note says where to edit it.
+- **Model select:** the landing's small command box as a real `select`: 40px, 10px corners, the type ring, the model's name in Geist Mono 13px, a 14px chevron in Prompt Gray at the right that turns Command Ink on hover. Pulled models first, then library models with their download size.
+- **Share link:** read only, a thing to copy: the input sits bare in a 40px Terminal Gray row with the copy key at its end, the landing's small command box with no ring; focus rings the whole row.
 
-### Toast
-The copy button's confirmation: a fixed card 12px from the bottom right, `tooltip` fill and ink, 8px 12px padding, 6px radius, 13px at 500, the toast shadow, in a `role="status"` span; it says what was copied and clears after 4 seconds.
+**The Ring Rule.** A box you type in (a field, the select, the state and questions editors) wears the 1px Prompt Gray ring; a box you copy from (the wire panes, the snippet, the share link's row) wears none. The ring says "type here"; the bare box says "copy this".
 
-### Banner
-The line under the top bar: 36px minimum, 6px 16px padding, 13px at 500, a hairline beneath, hidden when empty. Quiet (`panel` fill, ink) for a wait or a hint: why Run is held, or what a first run is downloading and its size; fault colours (`danger` on `danger-tint`) when the questions JSON does not parse. It is the Run button's description.
+### Navigation
+- **Sidebar:** white, 256px, the one vertical hairline at its right. The head is the 26px lockup, 22px from the top; then Model (the select), Presets and "On this page" under 13px Pencil Gray headings; the foot holds the serving origin in Geist Mono 12px and the Run shortcut, in Pencil Gray.
+- **Rows:** a preset or a section, set as the landing sets a nav link: 15px at 400 in Pencil Gray, 34px tall with 12px sides; ink on hover and when current (`aria-current`, the section whose top has passed under the bar), with no fill and no change of weight. "Restore previous" leads with the landing's arrow mirrored, which nudges 3px back on hover.
+- **Top bar:** the landing's nav row: Paper, 70px, one hairline beneath; the crumb "Playground" in 15px ink at 500, then the stale tag, Share and Run at the right. Share and Run never shrink; the tag gives way first, then the crumb. Share's popover opens 8px under the hairline, never across it. The document title follows the site's "Page · Ardana" pattern: "Playground · Ardana".
+- **Drawer (below 960px):** the sidebar fixed at the left, `min(256px, 85vw)`, sliding in over 200ms above the Ink Veil; the page behind is inert; Escape or the scrim closes it, and a pick inside closes it and moves focus on.
+- **Skip link:** "Skip to the page", the landing's ink pill sliding in from above the top-left corner on focus (8px by 14px, 14px text).
 
-### Navigation (sidebar and top bar)
-- **Sidebar:** `panel` fill, 240px, an inset hairline at the right; the workspace row (20px ink mark, "Ardana" at 600 as plain text, and a close control that is invisible until the row is hovered or the sidebar has focus), then the Model select, Presets as page rows, "On this page" rows, and the foot in 12px `ink-2`.
-- **Row:** 28px, 8px side padding, 4px radius, 14px at 500 in ink with a 16px `ink-2` glyph; hover 8% ink, active 16%; `aria-current="true"` keeps the hover fill on the section in view (the last section whose top has passed 96px). Presets load the state and questions and offer a "Restore previous" row in `ink-2`; section rows open a closed toggle, scroll to it and move focus onto it.
-- **Top bar:** 45px, `page` fill, hairline beneath; the opener (only while the sidebar is collapsed or a drawer), the page crumb (16px glyph, name at 500), then the "Inputs changed" tag, Share and Run. Share and Run never shrink; the tag gives way first, then the crumb.
-- **Collapse:** Ctrl/Cmd+\ or the two controls; 200ms on the grid columns; remembered in `localStorage`; focus moves to the opener on close and to the closer on open.
-- **Drawer (below 960px):** the sidebar fixed at the left over a 60% black scrim, sliding in over 200ms with the drawer shadow; the page behind is `inert`; Escape or the scrim closes it; the opener carries `aria-expanded` and `aria-controls`; a pick inside closes it and moves focus to the state.
+### Question row (signature)
+A catalog row, not a card: a hairline above the list and under each row, the landing's 26px of air, no fill and no frame. The head sets the id, at the landing's row-title size (the compact Title below 720px, with the section headings), beside the type control and Edit; the instructions follow in 15px Pencil Gray at 65ch. Edit opens the builder under a hairline inside the row: the id and instructions fields, then option or level rows with a legend counting them against their bounds, Add held at the upper bound and Remove at the lower, and Remove question at the right.
+- **Bar row:** a 16px mark, the option's name, a 6px Bar Track pill whose fill grows to the returned probability over 600ms on the ease-out, and the exact figure right-aligned in Geist Mono 14px in a 4.5rem column. In a questions column narrower than 30rem the bar drops beneath the name and figure. Before a run the options sit in ink on empty tracks with a gray "–".
+- **The answer:** once a run has answered, the ink disc with its paper check, the name and figure at 600, the bar in Press Ink. A noul row is a single probability, not a pick: no mark, its bar ink and its figure at 600 like a picked answer's.
+- **Fit:** a score level's fit line ("fit" and a percent, 12px) sits in its own figure's cell, under the figure, in a row at least 44px tall, so it can only belong to its level.
+- **Stale:** when the inputs no longer match the run, the figures stay but the answer's ink goes Bar Gray, the readouts go Pencil Gray, and a tag says so.
+- **Fact row:** under the bars, the landing's fact row: 13px Pencil Gray names over 15px values, 48px between facts and 20px between lines, wrapping (two columns below 720px). The Answer is the option's name at 600; every other fact is a figure in Geist Mono 14px. Each name is a defined term whose meaning shows in a tooltip on hover or focus, opening away from the nearer page edge so it is never cut: above 960px every fact after the first opens leftwards; from 721 to 960px, where the questions column starts at the page's edge, facts open rightwards and the fifth and later leftwards; at 720px and below, in two columns, the left column's open rightwards and the right column's leftwards.
+- **Fault:** a 422 issue that names the question appears under its head as a 14px line on Fault Wash with a Fault Red alert glyph, 6px corners.
+- **Add question:** an ink row at 15px and 500, led by the plus glyph, under the list, as the landing's forward links read.
 
-### Question block (signature)
-A `raised` block with the hairline ring, 6px radius, 16px padding (12px below 720px), 12px between its parts. The head puts the question id (16px at 600) beside the Type segmented control and the Edit ghost (`aria-expanded`, `aria-controls` on the builder panel); the instructions follow in `ink-2` at 65ch. Edit opens the builder under a hairline: id and instructions fields, then option rows (name, optional description, Remove) or level rows (number, description, Remove) with a legend counting them against their bounds, Add held with `aria-disabled` at the upper bound and Remove at the lower, and Remove question in `danger` at the right.
-- **Bar row:** a 16px check box (inset hairline; blue with a white check when the row is the answer; hidden for a noul row, which is a probability, not a pick), the option name (600 on the winner, with a 12px `ink-2` note beneath for score legends and "probability of yes"), the 6px bar whose fill grows from 0 to the probability over 400ms on the standard ease, and the exact figure right-aligned in a 4.5rem tabular column. Before a run the rows show the question's options on empty bars with an `–` readout and a hidden "not run yet". A score row adds "fit" and its percent under the readout.
-- **Stale:** when the inputs no longer match the run, the figures stay but the winner's blue bar and check go `bar-muted`, the readouts go `ink-2`, and the tag says so.
-- **Fault:** a 422 issue that names this question appears under the head as a 13px line on `danger-tint` with a `danger` alert glyph, while the question is as it was sent.
-- **Property list:** under a hairline, one 28px row per property: a 16px `ink-3` glyph, the name in `ink-2` as a `dfn` with its tooltip, the value in ink (the Answer at 600). An answer of an unknown type is shown as pretty JSON in a code block.
-- **Add question:** the "+ Add question" ghost row under the list, in `ink-2` until hovered, like a database's New row; it opens the new question's builder with focus on its id field.
+**The One Ink Line Rule.** Once a run has answered, each question has one ink line: its answer's bar, disc, name and figure. Every other option's name, bar and figure speaks in the gray. A noul's probability is the whole answer, so its bar is ink and its figure 600; a stale answer keeps its figures and gives up its ink.
 
-### Callouts
-- **Plain:** `code` fill, 6px radius, 16px padding (12px at the left), an `ink-2` glyph beside text at 56ch: the empty-list callout with inline `noul`, `choice` and `score`.
-- **Danger:** `danger-tint` fill; the alert glyph and the title ("HTTP 422 · the request was not answered.") in `danger` at 600; each issue as a location code (`body › questions › id`, `danger` on `danger-tint-2`, 3px radius) followed by its message in ink; an unreadable detail as a code block. It stands at the top of the questions column after a failed run.
+**The Catalog Row Rule.** Questions are rows between hairlines, never cards: no fill, no frame, no radius around a question.
 
-### Toggle blocks
-Native `details` open by default, for the Raw exchange and the Snippets. The summary is a fit-content row with a 4px radius and the hover fill: a 24px marker holding the filled triangle (turning 90° over 100ms when open), the heading at 16px 600, and a 13px caption in `ink-2` ("Last run, byte for byte", "The request as it stands"). Its content is 12px below: two wire panes, or the Language segmented control and Copy over the snippet.
+### Callouts and the banner
+- **Empty list:** a row of its own between two hairlines, Pencil Gray text at 60ch after the info glyph, with inline code for `noul`, `choice` and `score`.
+- **Fault (the one red box):** Fault Wash with 10px corners and 16px by 18px of padding; the alert glyph and the title ("HTTP 422 · the request was not answered.") in Fault Red at 600; each issue as its location code (Fault Red on Fault Chip, 4px corners, Geist Mono) followed by its message in ink. It stands at the top of the questions column after a refused run.
+- **Banner:** the line under the top bar: 40px, 14px at 500, a hairline beneath, hidden when empty. Quiet (Paper, Pencil Gray) for a wait or a hint: why Run is held, or which model a first run is downloading and its size. Fault colours (Fault Red on Fault Wash) only when the questions JSON does not parse.
 
-### Code blocks
-`code` fill, 8px radius, 13px mono at 1.6, 2-space tabs, 16px padding. As a textarea (the state at `clamp(280px, 52vh, 600px)`, the questions JSON at 200px) it resizes vertically, takes the blue focus ring and the `danger` ring when invalid, and has no visible edge at rest. As a `pre` (the sent and received bodies, the snippet) it wraps, is focusable (`tabindex="0"`) with an `aria-label`, and shows the bytes as they went over the wire. An empty pane is a 13px `ink-2` sentence on the same fill.
+### Tooltip and toast
+- **Tooltip:** an ink card (soft white in the dark scheme) with Paper text, Onest 12px at 500, centred, 6px by 10px, at most `min(272px, 60vw)`, drawn from `data-tip` above, below, at the start or at the end of its control; a second line names a shortcut ("Ctrl+Enter or ⌘↵"). It shows on focus, on hover where a pointer can hover, and stays while the pointer crosses onto it: a 6px transparent border bridges the gap, so its 12px outer corner paints at the 6px inner one. Escape dismisses every tooltip. It describes; it never names a control alone.
+- **Toast:** an ink pill fixed 16px from the bottom right, 10px by 16px, 14px at 500, only for what the clipboard refused.
 
-### Popover
-The share panel under the Share button: `raised`, 6px radius, 12px padding, 8px between its rows, the popover shadow, `min(420px, calc(100vw - 24px))` wide and right-aligned to the button (fixed under the top bar at 12px margins below 720px). It holds a 12px label, a read-only mono field that selects itself on focus, a Copy button, and a 12px note. Opening moves focus into the field; Escape closes it and returns focus to the button; a click outside closes it.
+### Disclosure blocks
+Native `details`, open by default, for the raw exchange and the snippets: a 20px chevron in Pencil Gray (ink on hover) that turns 90° over 200ms when open, the heading at Title size, and a 15px Pencil Gray caption ("Last run, byte for byte", "The request as it stands"). The content sits 16px below.
 
-### Skip link and status
-A "Skip to the page" link sits at 8px, 8px, hidden above the viewport until focused, on a `raised` card with the popover shadow. Two visually hidden `role="status"` regions announce the last run's outcome ("Answered by decider-2b-v11: 2 questions, 112 ms") and the builder's field notices; the share-link error and a failed model list are `role="alert"` fault lines. Headings run h1 (the page title) → h2 (State, Questions, Raw exchange, Snippets) → h3 (question ids, the Sent and Received captions).
+### Caret
+The landing's one ornament: a block caret (0.55em by 1em, in the current colour) blinking every 1.1s in steps, only after Run's label while a run is in flight; steady under reduced motion.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** set every control at 28px (24px inside a row), 14px at 500, transparent at rest, 8% ink on hover, 16% when pressed or expanded.
-- **Do** use `aria-disabled="true"` on a held button, never `disabled`, so it keeps focus and its tooltip; put the reason in the banner or beside the control.
-- **Do** separate surfaces with hairlines: the 1px ring on blocks, the inset 16% ink line on fields, the 1px inset divider between regions.
-- **Do** show a returned probability as a bar row: check, name, 6px bar grown over 400ms, the exact figure tabular at the right; the winner alone in blue.
-- **Do** keep every figure at its stated precision with `data-field` and `data-value` attached, and grey it (not remove it) when the inputs move on.
-- **Do** keep hover, colour and shadow transitions at 100ms `ease-in`, the shell and drawer at 200ms, and turn every transition and animation off under `prefers-reduced-motion`.
-- **Do** define a token once in `:root` and redefine it under `prefers-color-scheme: dark`; the page offers no theme switch.
+- **Do** read every colour from the `base.css` tokens, which keep the landing's names and values; derive a new token from a landing token (as `track`, `bar` and `scrim` are) and redefine it under `prefers-color-scheme: dark`.
+- **Do** set whatever the API reads or returns in Geist Mono on Terminal Gray, ring a box you type in with 1px Prompt Gray, and leave a box you copy from bare.
+- **Do** mark the answer with ink alone: the ink bar, the ink disc with its paper check, the name and figure at 600, every other option in the gray.
+- **Do** keep a stale answer's figures and take away only its ink.
+- **Do** answer hover by turning gray words ink; keep the Icon Wash for icon keys and the copy key.
+- **Do** keep the landing's focus ring (2px Focus Ink, 3px out) on every control, and stop every transition under reduced motion while the caret holds steady.
+- **Do** self-host Onest and Geist Mono from `fonts/` under fontsource's `unicode-range`s, and preload the two latin files.
+- **Do** draw the logo from the kit only, in `currentColor` from `accent`, 26px tall, white on #0a0a0a in the dark scheme.
+- **Do** keep the state on the left and the questions with their answers on the right; a restyle changes the look, never the structure or the behaviour.
 
 ### Don't:
-- **Don't** load a web font, add letter-spacing to UI text, or set anything in uppercase; the system sans and mono are the type.
-- **Don't** use blue for anything but the Run fill, focus, selection and the winning row; never as a heading, link, border or background.
-- **Don't** use red outside a fault or the Remove question action; no red emphasis, warning or decoration.
-- **Don't** draw a CSS border in the light or dark scheme; edges are hairline shadows, and borders belong to forced-colors mode only.
-- **Don't** give a block on the page an offset shadow, a gradient, an engraved legend, a glowing readout or any hardware metaphor.
-- **Don't** put a tooltip where a visible name belongs, and never name a control only by its tooltip.
-- **Don't** round, restyle or re-derive a returned value; show it as the API said it.
+- **Don't** introduce a hue: no blue, no success green, no warning amber; red belongs to faults only, never to emphasis, decoration or a destructive action.
+- **Don't** cast a shadow, draw a gradient or put content in a card; `box-shadow` draws only 1px inset lines.
+- **Don't** use Terminal Gray as a card, panel, sidebar or section ground, or behind an empty pane.
+- **Don't** set words in Geist Mono, or code and figures in Onest.
+- **Don't** load a font, icon, image or script from another origin.
+- **Don't** add a second filled button to a screen; Run is the one ink pill.
+- **Don't** add ornament beyond the caret, which appears only while a run is in flight.
+- **Don't** open a disclosure on the landing's arrow or draw an icon with a text glyph; the arrow is for navigation, the chevron for disclosure.
+- **Don't** add a theme switch or a third scheme; the page follows the system.
