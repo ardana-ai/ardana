@@ -1,9 +1,10 @@
 # Hugging Face guidelines
 
-Covers the Hugging Face side of Ardana: the `tokenizers` crate (`tokenizer.json`) in `crates/ardana-core`, chat
-template rendering with `minijinja` and `minijinja-contrib` in `crates/ardana-core/src/chat.rs`, the `hf-hub` client
-and the Hub cache layout in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`), and the `tmp/hf` model store
-that `cargo xtask fetch` fills from `xtask/fetch.toml`.
+Covers the Hugging Face side of Ardana: the `tokenizers` crate (`tokenizer.json`) in `crates/ardana-core`, natively
+and in the wasm32 build of the playground's engine module (`crates/ardana-engine`), chat template rendering with
+`minijinja` and `minijinja-contrib` in `crates/ardana-core/src/chat.rs`, the `hf-hub` client and the Hub cache layout
+in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants `ardana serve` pulls), and the
+`tmp/hf` model store that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 
 ## Versions
 - `tokenizers` 0.23.2 — loads each model's HF `tokenizer.json`; the single source of prompt token ids (Q2).
@@ -27,9 +28,10 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 - Only `cargo xtask fetch` reads the real `~/.cache/huggingface/hub`, and only for `[[hf_local]]` entries it copies
   read-only into `tmp/hf/hub`: it resolves `snapshots/<revision>/<file>` to its blob, copies the blob into
   `tmp/hf/hub/.../blobs/`, verifies it against its name (git blob id, or LFS sha256 for 64-hex names), links the
-  snapshot and writes `refs/main`. Ardana itself never reads or writes the user's real HF cache.
+  snapshot and writes `refs/main`. Ardana itself never reads or writes the user's real HF cache. The one other read
+  of the real cache is `cargo xtask onnx publish`'s, of `~/.cache/huggingface/token` (`onnx.md`).
 - `cargo xtask fetch --tests` installs only the files plain `cargo test` reads: every `[[hf]]` file (the library's
-  models) but the `.gguf` weights, which needs no token, so CI runs it. Plain tests use only the library's models
+  models) but the weights (`.gguf`, `.onnx`, `.onnx.data`), which needs no token, so CI runs it. Plain tests use only the library's models
   (decider-2b, Qwen3.5, SmolLM3); a test that needs the gated `[[hf_local]]` Llama 3.2 tokenizer is a real-model
   test (`#[ignore = "e2e: ..."]`), like those on Ollama's `llama3.2`.
 - `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`. `cargo xtask fetch` lists
@@ -57,6 +59,12 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
   maps short names to `hf.co/` GGUF repositories: `name`, `weights`, the default `quant`, its GGUF `size` in bytes,
   `release_date`, and the `tokenizer` repository and `layout` when the GGUF repository needs them. A new model family
   is one `[[model]]` entry; read sizes and files from the Hub API (`/api/models/<repo>/tree/main`), never invent them.
+- A model may name its `source`, the checkpoint `hf.co/<org>/<repo>@<40-hex commit>` that `cargo xtask onnx convert`
+  builds from, and a `[model.browser]` table, its browser variant (`library::BrowserWeights`): `weights`
+  (`hf.co/ardana-ai/<name>-ONNX`), `quant` (`int4` or `int8`) and the `size` a browser downloads (`model.onnx`,
+  `model.onnx.data`, `tokenizer.json`), which the parser requires. `browser_default` names a model with one. The
+  browser sizes, and the `size` of a GGUF ardana-ai hosts (decider-0.8b's), are the bytes `cargo xtask onnx convert`
+  built and recorded (`onnx.md`).
 - `ardana_registry::pull` resolves a library name first: `<name>[:<quant>]`, both case-insensitive, pulls
   `<weights>:<quant>` under the registry name `<name>` (or `<name>:<quant>`, lowercased, for another quant), with the
   library's tokenizer, layout and release date wherever the flags and the weights give none. Everything else is a
@@ -81,6 +89,24 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
   `local_files_only(true)`: `snapshot_download().local_files_only(true)` returns the cached `main` snapshot directory
   (its name is the commit), whose files stand for the repository's file list, and
   `download_file().revision(<commit>).local_files_only(true)` returns each file.
+- A browser variant is resolved cache first (`ardana_registry::pull_browser`): `Hub::cache_only` reads it as offline
+  mode would, and any error of that lookup pulls it from the Hub (unless `HF_HUB_OFFLINE` is set, when the error
+  stands). `BrowserCache::holds` answers, for `x_browser_pulled`, whether the cache holds a variant whole: the same
+  lookup of every file the pull reads (`browser_paths`), files found and not read. A variant `ardana serve` pulled once,
+  or `cargo xtask onnx convert` built, is then served without a Hub call, by a server that needs no variable for it (its
+  in-process tests cannot set one). Like offline mode, it takes the cached snapshot's files for the repository's, with
+  one check: a library model whose entry names no `layout` reads its profile from `decider_config.json`, so a cached
+  snapshot without that file is incomplete (`NotCached`), never read as the stock profile in the chat layout. The unit
+  test `cached_browser_variants_are_complete` builds `Hub::new` over a scratch cache under `$ARDANA_TMP`, with a closed
+  port as the Hub endpoint.
+
+### Browser variants (`ardana-registry`)
+- `pull_browser(name, progress)` resolves the `[model.browser]` table of the library model named exactly `name`: the
+  ONNX repository's `model.onnx`, `model.onnx.data` and `tokenizer.json` (`BROWSER_FILES`), with the tokenizer's
+  `tokenizer_config.json` and `chat_template.jinja` and the repository's `decider_config.json` when it has them, all at
+  one commit, into the hub cache only; a browser variant is never a registry entry. The profile is the one `ardana
+  pull <name>` derives: `decider_config.json` (plain layout) or the stock profile named `name` in the library's layout,
+  dated by the library's release date. `BrowserModel` holds the files, the commit and the profile.
 
 ### `ardana pull` (`ardana-registry`)
 - Online, list a repository once with `model(org, repo).info().send()` (`sha` is the `main` commit, `siblings` the
@@ -106,8 +132,10 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 - The layout under `tmp/hf/hub` is the official one: `models--<org>--<repo>/` holding `blobs/<hash>` (file bodies),
   `snapshots/<commit>/<path>` (symlinks into `blobs/`) and `refs/<revision>` (a text file with the commit id, e.g.
   `refs/main`). Python tooling may also add `.no_exist/` and `trees/`; ignore them.
-- Any code that writes into the cache without `hf-hub` (the `[[hf_local]]` copy for Q18) must produce exactly this
-  shape, including `refs/main` holding the snapshot commit, so a `main` lookup resolves offline.
+- Any code that writes into the cache without `hf-hub` (the `[[hf_local]]` copy for Q18, the repositories
+  `cargo xtask onnx convert` builds before they are published) must produce exactly this shape, including `refs/main`
+  holding the snapshot commit, so a `main` lookup resolves offline. A repository that exists only locally gets a local
+  commit id (`onnx.md`, "Repositories and the cache layout").
 - Treat everything in the cache as read-only once written; a changed file means a new commit, never an edit.
 
 ### Gated repositories (Q18)
@@ -118,9 +146,12 @@ that `cargo xtask fetch` fills from `xtask/fetch.toml`.
 - Prefer ungated sources for any new target (ggml-org GGUFs, Qwen/Qwen3.5-0.8B, HuggingFaceTB/SmolLM3-3B tokenizers).
 
 ### Tokenizers
-- Depend on `tokenizers` with `default-features = false, features = ["onig"]`: `onig` is the regex engine the Python
-  package uses for `Split` pre-tokenizers (Qwen's), while the default `progressbar` and `esaxx_fast` only serve
-  training.
+- Depend on `tokenizers` with `default-features = false` and one regex backend per target: `ardana-core` takes
+  `onig` natively (the engine the Python package uses for `Split` pre-tokenizers, Qwen's) and `unstable_wasm`
+  (`fancy-regex`, pure Rust, and `getrandom`'s `wasm_js`) on wasm32, where Oniguruma's C does not compile, through
+  `[target.'cfg(...)'.dependencies]` tables (resolver 3 leaves a target's features out of the others'). The workspace
+  entry names no backend; `ardana-registry` and `ardana`, native only, name `onig` themselves. The default
+  `progressbar` and `esaxx_fast` only serve training. Both backends read decider's prompt goldens to the same ids.
 - Load with `Tokenizer::from_file(path)`; map its `Box<dyn Error + Send + Sync>` into a typed error naming the path.
   `Tokenizer` is `Clone + Send + Sync`: load once per model and share it. Loading decider-2b's 20 MB
   `tokenizer.json` takes about a second in a debug build, so tests load it once and clone.

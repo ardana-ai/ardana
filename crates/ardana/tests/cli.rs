@@ -198,7 +198,7 @@ fn list_show_rm() -> Result<()> {
         assert!(
             stderr.contains(&format!(
                 "no model named \"{name}\"; pulled: qwen3.5-0.8b; library, pulled on first use: decider-2b, \
-                 decider-4b, qwen3.5-0.8b, smollm3-3b"
+                 decider-0.8b, decider-4b, qwen3.5-0.8b, smollm3-3b"
             )),
             "{stderr}"
         );

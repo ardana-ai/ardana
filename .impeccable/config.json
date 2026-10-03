@@ -16,6 +16,15 @@
         "value": "geist mono",
         "createdAt": "2026-10-01T23:32:03.641Z",
         "reason": "User confirmed 2026-10-01: bundle Onest + Geist Mono so the playground matches ardana.ai, whose DESIGN.md sets every terminal string in Geist Mono"
+      },
+      {
+        "rule": "blinking-cursor",
+        "value": "*",
+        "files": [
+          "tmp/evals/design/browser-download-*.html"
+        ],
+        "createdAt": "2026-10-03T01:13:14.979Z",
+        "reason": "Agent (W2): DESIGN.md's Caret, the landing's busy caret after Run's label only while a run is in flight; the frozen browser-download state is a run in flight"
       }
     ]
   }

@@ -4,13 +4,13 @@
 
 mod common;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use ardana_server::{ModelOptions, router};
 use axum::Router;
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::{HeaderMap, Request, StatusCode};
 use common::{get, models};
 use serde_json::json;
 use tower::ServiceExt;
@@ -79,5 +79,113 @@ async fn serves_the_embedded_page() -> Result<()> {
     let not_found = get(&app, "/v1/nope").await?;
     assert_eq!(not_found.status, 404);
     assert_eq!(not_found.body, json!({"detail": "Not Found"}));
+    Ok(())
+}
+
+/// The path of every file under `dir`, as the page names it (`/fonts/onest-latin-wght-normal.woff2`).
+fn files(dir: &Path, base: &Path, out: &mut Vec<String>) -> Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            files(&path, base, out)?;
+        } else if let Ok(relative) = path.strip_prefix(base) {
+            let parts: Vec<String> = relative
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy().into_owned())
+                .collect();
+            out.push(format!("/{}", parts.join("/")));
+        }
+    }
+    Ok(())
+}
+
+/// `GET uri` with `headers`: the status and the response's headers.
+async fn head(
+    app: &Router,
+    uri: &str,
+    headers: &[(&str, &str)],
+) -> Result<(StatusCode, HeaderMap)> {
+    let mut request = Request::builder().uri(uri);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    let response = app.clone().oneshot(request.body(Body::empty())?).await?;
+    Ok((response.status(), response.headers().clone()))
+}
+
+/// Every file of the page goes out with the cache policy its name allows, on a local server and a public one alike:
+/// the page and the in-tab engine (`/engine/`: the engine module and `engine.js`), whose names outlive their contents,
+/// are revalidated on every load and answer 304 while unchanged; every other file keeps memory-serve's week, its name
+/// changing with its contents (or never changing at all, as the fonts and onnxruntime-web's versioned directory). Every
+/// response keeps the page cross-origin isolated.
+#[tokio::test]
+async fn caches_only_what_its_name_pins() -> Result<()> {
+    let dir = embedded_dir();
+    let mut paths = Vec::new();
+    files(&dir, &dir, &mut paths)?;
+    paths.sort();
+    // The playground's own dist holds the in-tab engine; the placeholder holds none of it.
+    if dir.ends_with("dist") {
+        for file in [
+            "/engine/engine.js",
+            "/engine/ardana-engine.js",
+            "/engine/ardana-engine_bg.wasm",
+        ] {
+            ensure!(
+                paths.iter().any(|path| path == file),
+                "{} lacks {file}",
+                dir.display()
+            );
+        }
+    }
+    for public in [false, true] {
+        let opts = ModelOptions {
+            public,
+            ..ModelOptions::default()
+        };
+        let (_, models) = models(&format!("playground-cache-{public}"), &[], opts)?;
+        let app = router(models, None);
+        for path in &paths {
+            let (status, headers) = head(&app, path, &[]).await?;
+            ensure!(status == StatusCode::OK, "{path}: {status}");
+            let header = |name: &str| {
+                headers
+                    .get(name)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or_default()
+            };
+            let revalidated = path.ends_with(".html") || path.starts_with("/engine/");
+            let expected = if revalidated {
+                "no-cache"
+            } else {
+                "max-age=604800, stale-while-revalidate=86400"
+            };
+            ensure!(
+                header("cache-control") == expected,
+                "{path}: {:?}",
+                header("cache-control")
+            );
+            for (name, value) in [
+                ("cross-origin-opener-policy", "same-origin"),
+                ("cross-origin-embedder-policy", "require-corp"),
+                ("cross-origin-resource-policy", "same-origin"),
+            ] {
+                ensure!(header(name) == value, "{path}: {name} {:?}", header(name));
+            }
+            if revalidated {
+                let etag = header("etag").to_string();
+                ensure!(!etag.is_empty(), "{path} has no ETag");
+                let (status, again) = head(&app, path, &[("if-none-match", &etag)]).await?;
+                ensure!(
+                    status == StatusCode::NOT_MODIFIED,
+                    "{path} revalidated: {status}"
+                );
+                ensure!(
+                    again.get("cache-control").and_then(|v| v.to_str().ok()) == Some("no-cache"),
+                    "{path} revalidated: {again:?}"
+                );
+            }
+        }
+    }
     Ok(())
 }

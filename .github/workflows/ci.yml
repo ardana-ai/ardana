@@ -39,7 +39,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Check the wasm crates
-        run: cargo check --package ardana-api --package ardana-playground --target wasm32-unknown-unknown --locked
+        run: cargo check --package ardana-api --package ardana-playground --package ardana-engine --target wasm32-unknown-unknown --locked
 
   checks:
     name: project checks

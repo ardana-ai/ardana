@@ -10,7 +10,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use ardana_server::{ModelOptions, ServeArgs, router};
 use clap::{CommandFactory, Parser};
-use common::{Reply, eventually, get, models, post, send};
+use common::{Reply, eventually, get, models, post, send, with_held_variants};
 use serde_json::{Value, json};
 
 fn noul(instructions: &str) -> Value {
@@ -74,17 +74,21 @@ async fn surface() -> Result<()> {
     assert_eq!(listed.status, 200);
     assert_eq!(
         listed.body,
-        json!({"models": [
+        with_held_variants(json!({"models": [
             {"name": "decider-2b", "description": "hf.co/test/decider-2b-GGUF", "release_date": "2026-09-24",
-             "x_pulled": true, "x_default": true},
+             "x_pulled": true, "x_default": true, "x_browser": 1_121_602_009},
             {"name": "stock", "description": "hf.co/test/stock-GGUF", "release_date": "2026-09-28", "x_pulled": true},
+            {"name": "decider-0.8b", "description": "hf.co/ardana-ai/decider-0.8b-GGUF:Q8_0",
+             "release_date": "2026-09-19", "x_pulled": false, "x_size": 811_843_552, "x_browser": 467_748_928,
+             "x_browser_default": true},
             {"name": "decider-4b", "description": "hf.co/Mapika/decider-4b-GGUF:Q4_K_M", "release_date": "2026-09-24",
              "x_pulled": false, "x_size": 2_708_804_640_u64},
             {"name": "qwen3.5-0.8b", "description": "hf.co/ggml-org/Qwen3.5-0.8B-GGUF:Q4_0",
-             "release_date": "2026-02-28", "x_pulled": false, "x_size": 563_036_064},
+             "release_date": "2026-02-28", "x_pulled": false, "x_size": 563_036_064, "x_browser": 904_574_185},
             {"name": "smollm3-3b", "description": "hf.co/ggml-org/SmolLM3-3B-GGUF:Q4_K_M",
              "release_date": "2025-07-08", "x_pulled": false, "x_size": 1_915_305_312},
-        ]})
+        ]}))
+        .await?
     );
     assert_eq!(fake.loads(), 0, "listing loads nothing");
 
@@ -172,8 +176,8 @@ async fn model_resolution() -> Result<()> {
     assert_eq!(unknown.status, 404);
     assert_eq!(
         error_shape(&unknown, "not_found_error"),
-        "no model named \"gamma\"; pulled: alpha, beta; library, pulled on first use: decider-2b, decider-4b, \
-         qwen3.5-0.8b, smollm3-3b"
+        "no model named \"gamma\"; pulled: alpha, beta; library, pulled on first use: decider-2b, decider-0.8b, \
+         decider-4b, qwen3.5-0.8b, smollm3-3b"
     );
 
     let opts = ModelOptions {
@@ -228,6 +232,7 @@ async fn model_resolution() -> Result<()> {
         flags,
         [
             ("decider-2b", true, false),
+            ("decider-0.8b", false, false),
             ("decider-4b", false, true),
             ("qwen3.5-0.8b", false, false),
             ("smollm3-3b", false, false),
@@ -243,7 +248,7 @@ async fn model_resolution() -> Result<()> {
     assert_eq!(listed["models"][0]["x_size"], 1_274_396_800_u64);
     assert_eq!(
         listed["models"].as_array().map(Vec::len),
-        Some(4),
+        Some(5),
         "{listed}"
     );
     let reply = post(&app, &ask(Some("gamma"))).await?;
@@ -501,9 +506,16 @@ fn defaults() -> Result<()> {
         (
             opts.max_loaded_models,
             opts.max_queued_rows,
-            opts.default_model
+            opts.default_model,
+            opts.public
         ),
-        (1, 4096, None)
+        (1, 4096, None, false)
+    );
+    assert!(
+        Serve::try_parse_from(["serve", "--public"])?
+            .args
+            .model_options()
+            .public
     );
 
     let args = Serve::try_parse_from([
@@ -545,14 +557,13 @@ fn defaults() -> Result<()> {
     assert!(Serve::try_parse_from(["serve", "--max-loaded-models", "0"]).is_err());
 
     let command = Serve::command();
-    let api_key = command
-        .get_arguments()
-        .find(|arg| arg.get_id() == "api_key")
-        .expect("an --api-key argument");
-    assert_eq!(
-        api_key.get_env().and_then(|e| e.to_str()),
-        Some("ARDANA_API_KEY")
-    );
+    for (id, env) in [("api_key", "ARDANA_API_KEY"), ("public", "ARDANA_PUBLIC")] {
+        let arg = command
+            .get_arguments()
+            .find(|arg| arg.get_id() == id)
+            .unwrap_or_else(|| panic!("an argument {id}"));
+        assert_eq!(arg.get_env().and_then(|e| e.to_str()), Some(env));
+    }
 
     for (text, duration) in [
         ("250ms", 250),

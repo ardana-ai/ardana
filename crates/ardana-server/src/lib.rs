@@ -1,10 +1,17 @@
 //! The HTTP server (compatible with Jev and TypeSafe clients), model lifecycle and the embedded playground.
 //!
 //! `ardana serve` answers `POST /v1/systemone`, `GET /v1/models` and `GET /health` for the models of an Ardana
-//! registry and the model library ([`Models`]). The binary passes in the registry and the [`ardana_core::Runtimes`] it is built with, so
-//! this crate never sees a concrete runtime. Every other path serves the playground embedded at build time.
+//! registry and the model library ([`Models`]), and serves the browser variants of library models for the
+//! playground's in-tab engine (`GET /v1/browser/<name>/<file>`). The binary passes in the registry and the
+//! [`ardana_core::Runtimes`] it is built with, so this crate never sees a concrete runtime. Every other path serves
+//! the playground embedded at build time. Every response keeps the page and what it loads to this origin (Q13).
+//!
+//! `ardana serve --public` ([`ModelOptions::public`]) serves the same routes for a public playground, whose visitors
+//! run browser models in their own tabs: it lists the library, serves the browser files and answers every
+//! `POST /v1/systemone` with 403, so no model runs on the server.
 
 mod body;
+mod browser;
 pub mod error;
 pub mod models;
 
@@ -16,7 +23,7 @@ use ardana_core::LoadOptions;
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
 use axum::extract::{DefaultBodyLimit, Request, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -85,6 +92,14 @@ pub struct ServeArgs {
         value_parser = clap::value_parser!(u32).range(1..)
     )]
     pub max_queued_rows: u32,
+    /// Serve a public playground: browser models run in visitors' tabs, and no model runs on this server
+    #[arg(
+        long,
+        env = "ARDANA_PUBLIC",
+        hide_env_values = true,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
+    pub public: bool,
 }
 
 impl ServeArgs {
@@ -96,6 +111,7 @@ impl ServeArgs {
             keep_alive: self.keep_alive,
             max_loaded_models: self.max_loaded_models as usize,
             max_queued_rows: self.max_queued_rows as usize,
+            public: self.public,
         }
     }
 
@@ -130,11 +146,20 @@ pub fn parse_duration(text: &str) -> Result<Duration, String> {
 }
 
 /// The API: `/health` (open) and the `/v1` routes, behind the key when one is set, plus the embedded playground. Unknown
-/// `/v1/*` paths are 404 `{"detail":"Not Found"}` and never fall through to the playground.
+/// `/v1/*` paths are 404 `{"detail":"Not Found"}` and never fall through to the playground. Every response carries
+/// the cross-origin isolation headers ([`isolate`]). A public server refuses every decision before reading its body.
 pub fn router(models: Arc<Models>, api_key: Option<String>) -> Router {
+    let systemone = if models.public() {
+        post(refuse)
+    } else {
+        post(systemone)
+    };
     let mut v1 = Router::new()
-        .route("/systemone", post(systemone))
-        .route("/models", get(list_models));
+        .route("/systemone", systemone)
+        .route("/models", get(list_models))
+        // A layer wraps only the routes added before it: the browser files go out as stored, with their length.
+        .layer(CompressionLayer::new())
+        .route("/browser/{name}/{file}", get(browser::file));
     if let Some(key) = api_key {
         v1 = v1.route_layer(middleware::from_fn_with_state(
             Arc::<str>::from(key),
@@ -144,18 +169,37 @@ pub fn router(models: Arc<Models>, api_key: Option<String>) -> Router {
     let v1 = v1
         .fallback(|| async { ApiError::NotFound })
         .method_not_allowed_fallback(|| async { ApiError::MethodNotAllowed })
-        .layer(DefaultBodyLimit::max(BODY_LIMIT))
-        .layer(CompressionLayer::new());
+        .layer(DefaultBodyLimit::max(BODY_LIMIT));
     Router::new()
         .route("/health", get(health))
         .nest("/v1", v1)
         .with_state(models)
         .merge(playground())
+        .layer(middleware::map_response(isolate))
+}
+
+/// Q13: every response keeps its page in a browsing context group of its own (COOP), loads nothing another origin has
+/// not opted into (COEP) and is not loaded by another origin (CORP). The page is then cross-origin isolated, so
+/// onnxruntime-web's WASM backend can run on threads; no response carries a CORS header.
+async fn isolate(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    for (name, value) in [
+        ("cross-origin-opener-policy", "same-origin"),
+        ("cross-origin-embedder-policy", "require-corp"),
+        ("cross-origin-resource-policy", "same-origin"),
+    ] {
+        headers.insert(
+            HeaderName::from_static(name),
+            HeaderValue::from_static(value),
+        );
+    }
+    response
 }
 
 /// The playground `build.rs` embedded (or its placeholder), from memory: `index.html` at `/` and for every path no
-/// file matches (the SPA fallback). HTML is never cached, so a new binary's page is picked up at once; trunk's
-/// content-hashed assets keep memory-serve's default cache time.
+/// file matches (the SPA fallback). HTML is never cached, so a new binary's page is picked up at once, and neither is
+/// the in-tab engine ([`ENGINE`]); trunk's content-hashed assets, the fonts and onnxruntime-web's versioned directory
+/// keep memory-serve's default cache time.
 fn playground() -> Router {
     memory_serve::load!()
         .index_file(Some("/index.html"))
@@ -163,6 +207,24 @@ fn playground() -> Router {
         .fallback_status(StatusCode::OK)
         .html_cache_control(CacheControl::NoCache)
         .into_router()
+        .layer(middleware::from_fn(revalidate))
+}
+
+/// The in-tab engine's directory: the engine module trunk builds from `crates/ardana-engine` and the page's
+/// `engine.js`, named the same in every build.
+const ENGINE: &str = "/engine/";
+
+/// Sends the files of [`ENGINE`] with `Cache-Control: no-cache`: a browser asks for them again on every load, and
+/// memory-serve answers 304 while they are unchanged, so a page never runs with another binary's engine.
+async fn revalidate(request: Request, next: Next) -> Response {
+    let unhashed = request.uri().path().starts_with(ENGINE);
+    let mut response = next.run(request).await;
+    if unhashed {
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    }
+    response
 }
 
 /// Serves `app` on `listener` until Ctrl-C or SIGTERM, lets the requests in flight finish, then unloads every model.
@@ -213,8 +275,13 @@ async fn systemone(
     Ok(Json(models.decide(request).await?))
 }
 
+/// `POST /v1/systemone` on a public server: 403 whatever the request, its body left unread.
+async fn refuse() -> ApiError {
+    ApiError::RunsNoModel
+}
+
 async fn list_models(State(models): State<Arc<Models>>) -> Result<Json<ModelsResponse>, ApiError> {
-    Ok(Json(models.list()?))
+    Ok(Json(models.list().await?))
 }
 
 async fn health(State(models): State<Arc<Models>>) -> Result<Json<Value>, ApiError> {

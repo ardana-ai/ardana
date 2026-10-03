@@ -76,7 +76,9 @@ fn unknown_names() {
     // A bare name outside the library is no reference either; the error lists the library.
     let err = Ref::parse("decider").unwrap_err().to_string();
     assert!(
-        err.contains("neither a library model (decider-2b, decider-4b, qwen3.5-0.8b, smollm3-3b)"),
+        err.contains(
+            "neither a library model (decider-2b, decider-0.8b, decider-4b, qwen3.5-0.8b, smollm3-3b)"
+        ),
         "{err}"
     );
 }

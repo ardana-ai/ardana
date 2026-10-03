@@ -18,11 +18,15 @@
   gap: 14px;
 }
 
+/* With enlarged text on the narrowest phones a word of the title is wider than the page: it breaks, hyphenated where
+   the language allows, rather than widen the page. */
 .page-heading {
   font-size: clamp(2rem, 3.2vw, 2.75rem);
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .page-lede {
@@ -291,7 +295,7 @@ textarea.code-block[aria-invalid="true"] {
   font-weight: 400;
 }
 
-/* The bar: a 6px pill on the hairline gray, the fill grown to the returned probability. */
+/* The bar: a 6px pill on the hairline gray, the fill reaching the returned probability. */
 .bar {
   grid-area: bar;
   height: 6px;
@@ -300,13 +304,15 @@ textarea.code-block[aria-invalid="true"] {
   overflow: hidden;
 }
 
+/* The fill is as long as its track and slides in from the left until its rounded end stands at the level: the track
+   clips it to its own pill, and only a transform moves, so a growing bar costs no layout. */
 .bar-fill {
   display: block;
   height: 100%;
-  width: calc(var(--level, 0) * 100%);
   border-radius: var(--radius-pill);
   background: var(--bar);
-  animation: bar-grow 600ms var(--ease-out) both;
+  transform: translateX(calc((var(--level, 0) - 1) * 100%));
+  animation: bar-grow 600ms var(--ease-out);
 }
 
 /* The answer's bar is ink: the picked option, or a noul's probability, which is the whole answer. */
@@ -317,7 +323,7 @@ textarea.code-block[aria-invalid="true"] {
 
 @keyframes bar-grow {
   from {
-    width: 0;
+    transform: translateX(-100%);
   }
 }
 
@@ -391,10 +397,13 @@ textarea.code-block[aria-invalid="true"] {
   min-width: 0;
 }
 
+/* A fact's name breaks, hyphenated, only when enlarged text makes it wider than its column on the narrowest phones. */
 .property dt {
   color: var(--muted);
   font-size: var(--text-13);
   line-height: 1.4;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .property dd {
@@ -656,12 +665,15 @@ textarea.code-block[aria-invalid="true"] {
   font-weight: 400;
 }
 
+/* The block's content sits in one box of its own (a `details` element's), so the grid's gap stops above it: the
+   language row keeps the same 16px from the snippet. */
 .toggle-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 /* Wire panes: the sent and received bodies, side by side. */
@@ -714,11 +726,70 @@ textarea.code-block[aria-invalid="true"] {
   padding-right: 56px;
 }
 
-/* The curl snippet is a shell line: the landing's gray prompt in front of it, drawn but never copied or read out. */
-.snippet[data-language="curl"]::before {
+/* The curl snippet, the ardana commands and the install line are shell lines: the landing's gray prompt in front of
+   each, drawn but never copied or read out. */
+.snippet[data-language="curl"]::before,
+.snippet[data-language="ardana"]::before,
+.command-row > code::before {
   content: "$ " / "";
   color: var(--code-muted);
   user-select: none;
+}
+
+/* ---- The ardana CLI: the request for a model this server does not run, after `ardana pull` or the install line ---- */
+
+.cli {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.cli-lede {
+  max-width: 65ch;
+  color: var(--muted);
+  font-size: var(--text-15);
+  line-height: 1.45;
+}
+
+/* A step: its label over its command box, a note under it. */
+.cli-step {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cli-step .field-note {
+  overflow-wrap: anywhere;
+}
+
+/* The Windows line moves under its words whole when it fits there, rather than splitting its gray ground. */
+.cli-step .field-note code {
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* `ardana pull` and the install line: the landing's small command box (as `ardana pull` sits on ardana.ai), its copy
+   key at the end. */
+.command-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 4px 0 14px;
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  color: var(--code-ink);
+}
+
+.command-row > code {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--text-13);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 /* ---- Responsive ---- */
@@ -821,6 +892,29 @@ textarea.code-block[aria-invalid="true"] {
   }
 }
 
+/* Under a coarse pointer a toggle block's heading reaches 44px tall past its words (WCAG 2.5.5; see controls.css), and
+   what sits under a small control leaves room for both reaches: 24px under a heading, 16px between the parts of a
+   question's criteria. */
+@media (pointer: coarse) {
+  .toggle {
+    gap: var(--space-5);
+  }
+
+  .toggle > summary {
+    position: relative;
+  }
+
+  .toggle > summary::before {
+    content: "";
+    position: absolute;
+    inset: min(0px, (100% - 44px) / 2);
+  }
+
+  .criteria {
+    gap: var(--space-4);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bar-fill {
     animation: none;
@@ -835,6 +929,7 @@ textarea.code-block[aria-invalid="true"] {
 @media (forced-colors: active) {
   .callout-danger,
   .code-block,
+  .command-row,
   .question-fault {
     border: 1px solid CanvasText;
   }

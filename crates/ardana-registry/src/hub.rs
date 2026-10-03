@@ -2,7 +2,9 @@
 //!
 //! `hf-hub` 1.0.0 does not read `HF_HUB_OFFLINE`, so [`offline`] reads it and every download passes
 //! `local_files_only`. Offline, a repository's files are those of its cached `main` snapshot and no metadata endpoint
-//! is called. A pull that asks for progress prints each download's bytes to stderr ([`FileReport`]).
+//! is called; [`Hub::cache_only`] reads a repository that way whatever the variable says (a browser variant is looked
+//! up in the cache first, and taken from there only when the cache holds all of it). A pull that asks for progress
+//! prints each download's bytes to stderr ([`FileReport`]).
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -71,6 +73,10 @@ impl Snapshot {
     pub fn has(&self, file: &str) -> bool {
         self.files.iter().any(|f| f == file)
     }
+
+    pub fn commit(&self) -> &str {
+        &self.commit
+    }
 }
 
 impl Hub {
@@ -83,11 +89,30 @@ impl Hub {
             repo: "the Hugging Face client".into(),
             err,
         })?;
-        Ok(Hub {
+        Ok(Hub::new(client, offline(), progress))
+    }
+
+    /// A pull through `client`, every lookup in its cache alone when `offline`.
+    pub fn new(client: HFClient, offline: bool, progress: bool) -> Hub {
+        Hub {
             client,
-            offline: offline(),
+            offline,
             progress,
-        })
+        }
+    }
+
+    /// The same client reading the cache alone, as under `HF_HUB_OFFLINE`.
+    pub fn cache_only(&self) -> Hub {
+        Hub {
+            client: self.client.clone(),
+            offline: true,
+            progress: self.progress,
+        }
+    }
+
+    /// Whether every lookup stays in the cache.
+    pub fn is_offline(&self) -> bool {
+        self.offline
     }
 
     /// The `main` commit of `org/repo` and its files: from the Hub, or offline from the cached snapshot.

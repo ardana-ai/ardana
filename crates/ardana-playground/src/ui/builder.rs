@@ -319,6 +319,7 @@ fn choice(
         view! {
             <li class="criteria-row">
                 <input
+                    id=dom.with_value(|dom| format!("{dom}-option-{index}-name"))
                     class="field-input field-code"
                     type="text"
                     spellcheck="false"
@@ -362,7 +363,10 @@ fn choice(
                 "Add option",
                 move || count.get() >= *CHOICE_OPTIONS.end(),
                 move || {
-                    let _ = edit(&builder::add_option);
+                    let index = count.get_untracked();
+                    if edit(&builder::add_option).is_ok() {
+                        dom.with_value(|dom| focus_later(format!("{dom}-option-{index}-name")));
+                    }
                 },
             )}
         </div>
@@ -421,6 +425,7 @@ fn score(
             <li class="criteria-row level-row">
                 <span class="level-number" aria-hidden="true">{index}</span>
                 <input
+                    id=dom.with_value(|dom| format!("{dom}-level-{index}"))
                     class="field-input"
                     type="text"
                     aria-label=format!("Level {index} description")
@@ -448,7 +453,10 @@ fn score(
                 "Add level",
                 move || count.get() >= *SCORE_LEVELS.end(),
                 move || {
-                    let _ = edit(&builder::add_level);
+                    let index = count.get_untracked();
+                    if edit(&builder::add_level).is_ok() {
+                        dom.with_value(|dom| focus_later(format!("{dom}-level-{index}")));
+                    }
                 },
             )}
         </div>

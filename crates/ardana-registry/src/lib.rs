@@ -5,6 +5,8 @@
 //! profile (from `decider_config.json` when the weights come with one, else [`ModelProfile::stock`] in the chat
 //! layout) and records the result as one entry of `$ARDANA_HOME/models.toml` ([`Registry`]). The server and
 //! `ardana run <name>` look names up with [`Registry::named`]: a pulled entry, else a library model they pull first.
+//! [`pull_browser`] resolves a library model's browser variant (ONNX weights a visitor's tab runs) the same way, into
+//! the hub cache only: a browser variant is never a registry entry.
 
 pub mod hub;
 pub mod library;
@@ -39,6 +41,8 @@ const TOKENIZER_EXTRAS: [&str; 2] = [
     ardana_core::chat::CONFIG_FILE,
     ardana_core::chat::TEMPLATE_FILE,
 ];
+/// The files a tab downloads to run a browser variant: the graph, its external weights and the tokenizer.
+pub const BROWSER_FILES: [&str; 3] = ["model.onnx", "model.onnx.data", TOKENIZER_FILE];
 
 /// One registry entry: a named model resolved to its files, runtime and profile.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -165,8 +169,9 @@ struct ModelsFile {
     models: Vec<ResolvedModel>,
 }
 
-/// The named models of one Ardana home.
-#[derive(Debug, Clone)]
+/// The named models of one Ardana home. The default registry is empty and backed by no file: a public server's, which
+/// reads no registry.
+#[derive(Debug, Clone, Default)]
 pub struct Registry {
     path: PathBuf,
     models: Vec<ResolvedModel>,
@@ -471,10 +476,9 @@ async fn pull_ref(
         .id()
         .to_string();
     let tokenizer = load_tokenizer(&tokenizer_path)?;
-    let layout = opts.layout.unwrap_or(match config {
-        Some(_) => LayoutKind::Plain,
-        None => LayoutKind::Chat,
-    });
+    let layout = opts
+        .layout
+        .unwrap_or_else(|| default_layout(config.as_deref()));
     let profile = read_profile(
         &tokenizer_path,
         &tokenizer,
@@ -491,6 +495,175 @@ async fn pull_ref(
         profile,
         pulled_at: today(),
     })
+}
+
+/// The layout of a model that names none: plain with a `decider_config.json`, else chat.
+fn default_layout(config: Option<&Path>) -> LayoutKind {
+    match config {
+        Some(_) => LayoutKind::Plain,
+        None => LayoutKind::Chat,
+    }
+}
+
+/// A library model's browser variant in the hub cache: the files a tab downloads ([`BROWSER_FILES`]) and the profile it
+/// reads them with.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BrowserModel {
+    /// The library name.
+    pub name: String,
+    /// `hf.co/<org>/<repo>`, the ONNX repository.
+    pub reference: String,
+    /// The snapshot commit the files come from.
+    pub commit: String,
+    /// The cache path (`snapshots/<commit>/<file>`) of each of [`BROWSER_FILES`], in that order.
+    pub files: Vec<PathBuf>,
+    /// The profile `ardana pull <name>` derives for the model, from the same tokenizer and config files.
+    pub profile: ModelProfile,
+}
+
+impl BrowserModel {
+    /// The cache path of `file`, one of [`BROWSER_FILES`].
+    pub fn file(&self, file: &str) -> Option<&Path> {
+        let index = BROWSER_FILES.iter().position(|f| *f == file)?;
+        self.files.get(index).map(PathBuf::as_path)
+    }
+}
+
+/// Resolves the browser variant of the library model `name` in the hub cache, cache first: a variant the cache holds
+/// completely is read in place without a Hub call (as `HF_HUB_OFFLINE` reads a repository), so it is pulled once;
+/// otherwise its repository is pulled at its `main` commit, unless `HF_HUB_OFFLINE` is set. The profile is derived as
+/// [`pull`] derives the library model's own: `decider_config.json` beside the files, else the stock profile named
+/// `name` in the library's layout, dated by the library's release date.
+pub async fn pull_browser(name: &str, progress: bool) -> Result<BrowserModel, RegistryError> {
+    let (model, browser) = library()
+        .browser(name)
+        .ok_or_else(|| RegistryError::Invalid {
+            what: format!("the model {name:?}"),
+            msg: "no library model of that name has a browser variant".into(),
+        })?;
+    browser_variant(&Hub::from_env(progress)?, model, &browser.weights).await
+}
+
+/// The browser variant `reference` of `model` through `hub`, cache first: the cache's copy when it holds all of it,
+/// else (whatever the cache lacks or holds unreadable) the repository at its `main` commit, unless `hub` is offline.
+async fn browser_variant(
+    hub: &Hub,
+    model: &library::LibraryModel,
+    reference: &str,
+) -> Result<BrowserModel, RegistryError> {
+    match browser_files(&hub.cache_only(), model, reference).await {
+        Err(_) if !hub.is_offline() => browser_files(hub, model, reference).await,
+        cached => cached,
+    }
+}
+
+async fn browser_files(
+    hub: &Hub,
+    model: &library::LibraryModel,
+    reference: &str,
+) -> Result<BrowserModel, RegistryError> {
+    let located = browser_paths(hub, model, reference).await?;
+    let tokenizer = load_tokenizer(&located.tokenizer)?;
+    let layout = model
+        .layout
+        .unwrap_or_else(|| default_layout(located.config.as_deref()));
+    let mut profile = read_profile(
+        &located.tokenizer,
+        &tokenizer,
+        located.config.as_deref(),
+        layout,
+        &model.name,
+    )?;
+    profile
+        .release_date
+        .get_or_insert_with(|| model.release_date.clone());
+    Ok(BrowserModel {
+        name: model.name.clone(),
+        reference: located.snapshot.id(),
+        commit: located.snapshot.commit().to_string(),
+        files: located.files,
+        profile,
+    })
+}
+
+/// Where the files of a browser variant are in the hub cache: every file its pull reads.
+struct BrowserPaths {
+    snapshot: Snapshot,
+    tokenizer: PathBuf,
+    /// `decider_config.json`, for a model whose profile it gives.
+    config: Option<PathBuf>,
+    /// [`BROWSER_FILES`], in that order.
+    files: Vec<PathBuf>,
+}
+
+/// The cache paths of every file of the browser variant `reference` of `model` through `hub`, which downloads what the
+/// cache lacks unless it is offline.
+async fn browser_paths(
+    hub: &Hub,
+    model: &library::LibraryModel,
+    reference: &str,
+) -> Result<BrowserPaths, RegistryError> {
+    let Ref::Hf {
+        org,
+        repo,
+        file: None,
+    } = Ref::parse(reference)?
+    else {
+        return Err(RegistryError::Invalid {
+            what: reference.to_string(),
+            msg: format!(
+                "a browser variant is a whole repository, {}<org>/<repo>",
+                refs::HF_PREFIX
+            ),
+        });
+    };
+    let snapshot = hub.snapshot(&org, &repo).await?;
+    let tokenizer = hf_tokenizer(hub, &snapshot).await?;
+    // A model whose library entry names no layout reads its profile from `decider_config.json`. A cached snapshot
+    // lists only the files the cache holds, so there the config is required: a cache without it holds part of the
+    // variant, which would read as the stock profile in the chat layout.
+    let config = if snapshot.has(DECIDER_CONFIG) || (hub.is_offline() && model.layout.is_none()) {
+        Some(hub.file(&snapshot, DECIDER_CONFIG).await?)
+    } else {
+        None
+    };
+    let mut files = Vec::with_capacity(BROWSER_FILES.len());
+    for file in BROWSER_FILES {
+        files.push(if file == TOKENIZER_FILE {
+            tokenizer.clone()
+        } else {
+            hub.file(&snapshot, file).await?
+        });
+    }
+    Ok(BrowserPaths {
+        snapshot,
+        tokenizer,
+        config,
+        files,
+    })
+}
+
+/// The hub cache, asked whether it holds browser variants whole: built once, its lookups read the cache alone and
+/// never the Hub.
+pub struct BrowserCache(Hub);
+
+impl BrowserCache {
+    /// The hub cache the environment names, as a pull finds it (`HF_HOME` and the other variables, [`Hub::from_env`]).
+    pub fn from_env() -> Result<BrowserCache, RegistryError> {
+        Ok(BrowserCache(Hub::from_env(false)?.cache_only()))
+    }
+
+    /// Whether the cache holds the browser variant of the library model `name` whole: every file [`pull_browser`]
+    /// reads, so a pull reads it in place, without the Hub. The files are found, not read: one that does not read sends
+    /// a pull to the Hub all the same.
+    pub async fn holds(&self, name: &str) -> bool {
+        let Some((model, browser)) = library().browser(name) else {
+            return false;
+        };
+        browser_paths(&self.0, model, &browser.weights)
+            .await
+            .is_ok()
+    }
 }
 
 /// The GGUF of `snapshot` that `file` names; without `file`, the [`DEFAULT_QUANT`] one.
@@ -733,6 +906,145 @@ mod tests {
         assert_eq!(back.models, vec![model], "{text}");
     }
 
+    /// A file of the pinned snapshot of `repo` in `$HF_HOME/hub` (cargo's `[env]` points it at `tmp/hf`).
+    fn hf_file(repo: &str, name: &str) -> PathBuf {
+        let dir = PathBuf::from(std::env::var_os("HF_HOME").expect("cargo sets HF_HOME"))
+            .join("hub")
+            .join(format!("models--{}", repo.replace('/', "--")));
+        let commit = std::fs::read_to_string(dir.join("refs/main"))
+            .unwrap_or_else(|err| panic!("{}: {err}; run `cargo xtask fetch`", dir.display()));
+        dir.join("snapshots").join(commit.trim()).join(name)
+    }
+
+    /// The commit of the browser repository [`browser_cache`] writes.
+    const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    /// A hub cache in `$ARDANA_TMP/<test>` holding decider-2b's browser repository at [`COMMIT`] with `files`: its text
+    /// files as the repository has them (decider-2b's tokenizer and config, Qwen3.5's chat template), its graph and
+    /// weights empty; and a client of that cache whose every Hub call goes to a closed port, not retried, so a lookup
+    /// that leaves the cache fails. Returns the client and the snapshot directory.
+    fn browser_cache(test: &str, files: &[&str]) -> (hf_hub::HFClient, PathBuf) {
+        let cache = PathBuf::from(std::env::var_os("ARDANA_TMP").expect("cargo sets ARDANA_TMP"))
+            .join(test);
+        if cache.exists() {
+            std::fs::remove_dir_all(&cache).unwrap();
+        }
+        let repo = cache.join("models--ardana-ai--decider-2b-ONNX");
+        let snapshot = repo.join("snapshots").join(COMMIT);
+        std::fs::create_dir_all(&snapshot).unwrap();
+        std::fs::create_dir_all(repo.join("refs")).unwrap();
+        std::fs::write(repo.join("refs").join("main"), COMMIT).unwrap();
+        for file in files {
+            let source = match *file {
+                "model.onnx" | "model.onnx.data" => None,
+                ardana_core::chat::TEMPLATE_FILE => Some(hf_file("Qwen/Qwen3.5-0.8B", file)),
+                _ => Some(hf_file("Mapika/decider-2b-GGUF", file)),
+            };
+            match source {
+                Some(source) => {
+                    std::fs::copy(&source, snapshot.join(file)).unwrap_or_else(|err| {
+                        panic!("{}: {err}; run `cargo xtask fetch`", source.display())
+                    });
+                }
+                None => std::fs::write(snapshot.join(file), b"").unwrap(),
+            }
+        }
+        let client = hf_hub::HFClient::builder()
+            .cache_dir(cache)
+            .endpoint("http://127.0.0.1:9")
+            .retry_max_attempts(0)
+            .build()
+            .unwrap();
+        (client, snapshot)
+    }
+
+    fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(future)
+    }
+
+    /// A browser variant is taken from the cache only when the cache holds all of it: decider-2b's entry names no
+    /// layout, so its profile comes from `decider_config.json`, and a cache without that file (or with a file it cannot
+    /// read) sends the lookup to the Hub, or, offline, fails, rather than serve the stock profile.
+    #[test]
+    fn cached_browser_variants_are_complete() {
+        let (model, browser) = library().browser("decider-2b").unwrap();
+        let reference = browser.weights.as_str();
+        assert_eq!(reference, "hf.co/ardana-ai/decider-2b-ONNX");
+        assert_eq!(model.layout, None);
+        let lookup = |client: &hf_hub::HFClient, offline: bool| {
+            block_on(browser_variant(
+                &Hub::new(client.clone(), offline, false),
+                model,
+                reference,
+            ))
+        };
+        let gone_online = |looked_up: &Result<BrowserModel, RegistryError>| matches!(looked_up, Err(RegistryError::Hub { repo, .. }) if repo == reference);
+        // What `GET /v1/models` says of the variant (`x_browser_pulled`): whether the cache holds every file of it.
+        let held = |client: &hf_hub::HFClient| {
+            block_on(BrowserCache(Hub::new(client.clone(), true, false)).holds("decider-2b"))
+        };
+        let parts = [
+            TOKENIZER_FILE,
+            ardana_core::chat::CONFIG_FILE,
+            ardana_core::chat::TEMPLATE_FILE,
+            "model.onnx",
+            "model.onnx.data",
+        ];
+        let all: Vec<&str> = parts.iter().copied().chain([DECIDER_CONFIG]).collect();
+
+        // The whole variant in the cache: read in place, with decider's profile.
+        let (client, snapshot) = browser_cache("registry-browser-complete", &all);
+        let variant = lookup(&client, false).unwrap();
+        let config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(snapshot.join(DECIDER_CONFIG)).unwrap())
+                .unwrap();
+        let mut profile = from_decider_config(&config, Layout::Plain).unwrap();
+        profile.release_date = Some(model.release_date.clone());
+        assert_eq!(variant.profile, profile);
+        assert_eq!(
+            (variant.commit.as_str(), variant.reference.as_str()),
+            (COMMIT, reference)
+        );
+        assert_eq!(
+            variant.file(TOKENIZER_FILE),
+            Some(snapshot.join(TOKENIZER_FILE).as_path())
+        );
+        assert!(held(&client));
+
+        // Without the config the cache holds part of the variant: the lookup goes to the Hub (a closed port here), and
+        // offline, where the cache is all there is, it fails naming the file.
+        let (client, _) = browser_cache("registry-browser-partial", &parts);
+        assert!(!held(&client));
+        let looked_up = lookup(&client, false);
+        assert!(gone_online(&looked_up), "{looked_up:?}");
+        let looked_up = lookup(&client, true);
+        assert!(
+            matches!(&looked_up, Err(RegistryError::NotCached { what, .. })
+                if *what == format!("{reference} file {DECIDER_CONFIG}")),
+            "{looked_up:?}"
+        );
+
+        // A cached file that does not read sends the lookup to the Hub too, though the cache holds every file: the
+        // files are found, not read, to answer for the list.
+        let (client, snapshot) = browser_cache("registry-browser-unreadable", &all);
+        std::fs::write(snapshot.join(TOKENIZER_FILE), b"{").unwrap();
+        let looked_up = lookup(&client, false);
+        assert!(gone_online(&looked_up), "{looked_up:?}");
+        assert!(held(&client));
+
+        // A cache without the repository holds none of it.
+        let (client, _) = browser_cache("registry-browser-none", &all);
+        let repository = client
+            .cache_dir()
+            .join("models--ardana-ai--decider-2b-ONNX");
+        std::fs::remove_dir_all(repository).unwrap();
+        assert!(!held(&client));
+    }
+
     #[test]
     fn unknown_model_lists_pulled_and_library_names() {
         let err = RegistryError::UnknownModel {
@@ -741,8 +1053,8 @@ mod tests {
         };
         assert_eq!(
             err.to_string(),
-            "no model named \"x\"; pulled: a, b; library, pulled on first use: decider-2b, decider-4b, \
-             qwen3.5-0.8b, smollm3-3b"
+            "no model named \"x\"; pulled: a, b; library, pulled on first use: decider-2b, decider-0.8b, \
+             decider-4b, qwen3.5-0.8b, smollm3-3b"
         );
         let err = RegistryError::UnknownModel {
             name: "x".into(),

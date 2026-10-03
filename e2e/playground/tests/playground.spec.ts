@@ -1,14 +1,19 @@
 // W6 cases of the embedded playground, against the release `ardana` serving decider-2b (see playwright.config.ts).
 // The share links here are written as Jev's playground writes them, with its `jev-latest` alias; the picker reads
 // the alias as the server's default model and names that model.
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import {
+  browserRow,
   decimalSize,
   expectFiguresMatch,
   fixture,
   isSystemOne,
+  pickInBrowser,
   pickModel,
   picker as modelPicker,
+  root,
   runKey,
   screenshot,
   shareHash,
@@ -17,10 +22,22 @@ import {
   type Request,
 } from './helpers';
 
-test('embedded_binary', async ({ page }, testInfo) => {
+/** Q13: every response keeps the page cross-origin isolated and carries no CORS header. */
+function isolated(what: string, headers: Record<string, string>) {
+  expect(headers['cross-origin-opener-policy'], what).toBe('same-origin');
+  expect(headers['cross-origin-embedder-policy'], what).toBe('require-corp');
+  expect(headers['cross-origin-resource-policy'], what).toBe('same-origin');
+  expect(Object.keys(headers).filter((name) => name.startsWith('access-control-')), what).toEqual([]);
+}
+
+test('embedded_binary', async ({ page, baseURL }, testInfo) => {
+  const origin = new URL(baseURL!).origin;
+  const requests: string[] = [];
+  page.on('request', (r) => requests.push(r.url()));
   const index = await page.request.get('/');
   expect(index.status()).toBe(200);
   expect(index.headers()['content-type']).toContain('text/html');
+  isolated('/', index.headers());
   const html = await index.text();
 
   // Every asset index.html names is served, the wasm with its own type.
@@ -30,9 +47,25 @@ test('embedded_binary', async ({ page }, testInfo) => {
   for (const asset of new Set(assets)) {
     const reply = await page.request.get(asset);
     expect(reply.status(), asset).toBe(200);
+    isolated(asset, reply.headers());
     if (asset.endsWith('.wasm')) {
       expect(reply.headers()['content-type']).toBe('application/wasm');
     }
+  }
+
+  // R2.6: onnxruntime-web 1.30.0 comes from the page's own origin, byte for byte the vendored files.
+  const vendored = path.join(root, 'crates/ardana-playground/ort/1.30.0');
+  for (const [file, type] of [
+    ['ort.webgpu.bundle.min.mjs', /^(application|text)\/javascript/],
+    ['ort-wasm-simd-threaded.asyncify.wasm', /^application\/wasm$/],
+    ['ort.wasm.bundle.min.mjs', /^(application|text)\/javascript/],
+    ['ort-wasm-simd-threaded.wasm', /^application\/wasm$/],
+  ] as const) {
+    const reply = await page.request.get(`/ort/1.30.0/${file}`);
+    expect(reply.status(), file).toBe(200);
+    expect(reply.headers()['content-type'], file).toMatch(type);
+    isolated(file, reply.headers());
+    expect(Buffer.compare(await reply.body(), fs.readFileSync(path.join(vendored, file))), file).toBe(0);
   }
 
   // Unknown paths get the SPA's index.html; unknown API paths keep the API's 404.
@@ -52,6 +85,19 @@ test('embedded_binary', async ({ page }, testInfo) => {
   // Run is held while there is nothing to run, and says why.
   await expect(runKey(page)).toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByTestId('run-note')).toHaveText('Add a question to run');
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+
+  // Picking an "In browser" row loads the runtime from this origin; the module the page loaded is 1.30.0.
+  const loaded = page.waitForResponse((r) => new URL(r.url()).pathname === '/ort/1.30.0/ort.webgpu.bundle.min.mjs');
+  await pickInBrowser(page, 'decider-0.8b');
+  expect((await loaded).status()).toBe(200);
+  expect(await page.evaluate("import('/ort/1.30.0/ort.webgpu.bundle.min.mjs').then((ort) => ort.env.versions.web)")).toBe(
+    '1.30.0',
+  );
+  expect(requests.length).toBeGreaterThan(0);
+  for (const url of requests) {
+    expect(new URL(url).origin, url).toBe(origin);
+  }
   await screenshot(page, testInfo, 'embedded_binary');
 });
 
@@ -80,8 +126,13 @@ test('answers_match_api', async ({ page }, testInfo) => {
 
   await expect(page.getByTestId('fault')).toHaveCount(0);
   expect(response.request().postDataJSON().model).toBe(defaultModel);
-  // Focus stays on RUN, and the polite status region reads the outcome.
-  await expect(runKey(page)).toBeFocused();
+  // Focus stays on RUN, or on a phone, where the answers land a screen below it, goes to the first question's id; the
+  // polite status region reads the outcome.
+  if (testInfo.project.name === 'mobile') {
+    await expect(page.getByTestId('channel').first().getByRole('heading', { level: 3 })).toBeFocused();
+  } else {
+    await expect(runKey(page)).toBeFocused();
+  }
   await expect(page.getByTestId('run-status')).toHaveText(
     new RegExp(`^Answered by ${(json as unknown as { model: string }).model}: 2 questions, \\d+ ms$`),
   );
@@ -143,22 +194,30 @@ test('picker_raw_errors', async ({ page, baseURL }, testInfo) => {
   const requests: { url: string; type: string }[] = [];
   page.on('request', (r) => requests.push({ url: r.url(), type: r.resourceType() }));
 
-  // The picker lists /v1/models: the pulled models, then the library models a first run pulls, with their size.
+  // The picker lists /v1/models: the pulled models, then the models whose browser variant runs in the tab (a pulled
+  // one too: each row runs where it says), then the library models this server has not pulled, which the ardana CLI
+  // runs, each with its download size.
   const models = (await (await page.request.get('/v1/models')).json()) as { models: ModelInfo[] };
   const names = models.models.map((m) => m.name);
   const pulled = models.models.filter((m) => m.x_pulled !== false);
+  const inBrowser = models.models.filter((m) => m.x_browser !== undefined);
   const library = models.models.filter((m) => m.x_pulled === false);
   expect(pulled.map((m) => m.name)).toEqual(['decider-2b']);
+  expect(inBrowser.map((m) => m.name)).toEqual(['decider-2b', 'decider-0.8b', 'qwen3.5-0.8b']);
   expect(library.length).toBeGreaterThan(0);
   const ticket = fixture('ticket.json');
   await page.goto(`/${shareHash(ticket)}`);
   const picker = modelPicker(page);
-  await expect(picker.locator('option')).toHaveCount(names.length);
+  const values = [...pulled.map((m) => m.name), ...inBrowser.map((m) => browserRow(m.name)), ...library.map((m) => m.name)];
+  await expect(picker.locator('option')).toHaveCount(values.length);
   expect(await picker.locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
-    names,
+    values,
   );
   await expect(picker.locator('optgroup[label="Pulled"] option')).toHaveText(pulled.map((m) => m.name));
-  await expect(picker.locator('optgroup[label="Library · pulls on first run"] option')).toHaveText(
+  await expect(picker.locator('optgroup[label="In browser · runs in this tab"] option')).toHaveText(
+    inBrowser.map((m) => `${m.name} · ${decimalSize(m.x_browser!)}`),
+  );
+  await expect(picker.locator('optgroup[label="Library · runs with the ardana CLI"] option')).toHaveText(
     library.map((m) => `${m.name} · ${decimalSize(m.x_size!)}`),
   );
 

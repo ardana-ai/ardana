@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::fetch::lockfile_version;
 use crate::sandbox::Sandbox;
-use crate::serve::build_ardana;
+use crate::serve::{build_ardana, target_dir};
 
 /// Builds `dist/` and the release `ardana` serving it from memory; returns the binary.
 pub fn build(sandbox: &Sandbox) -> Result<PathBuf> {
@@ -27,6 +27,14 @@ fn build_dist(sandbox: &Sandbox) -> Result<()> {
     }
     let crate_dir = sandbox.repo_root().join("crates/ardana-playground");
     check_wasm_bindgen_pin(sandbox, &crate_dir.join("Trunk.toml"))?;
+    // wasm-bindgen never clears the `snippets/` it writes beside its output, and trunk copies that directory whole into
+    // every Rust link's target path. The playground's crates have none (`engine.js` is a file of its own), so one an
+    // older build left is removed, or `dist/` would carry it.
+    let snippets = target_dir(sandbox).join("wasm-bindgen/release/snippets");
+    if snippets.exists() {
+        std::fs::remove_dir_all(&snippets)
+            .with_context(|| format!("removing {}", snippets.display()))?;
+    }
     let status = sandbox
         .command(&trunk)
         .current_dir(&crate_dir)

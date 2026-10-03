@@ -13,11 +13,12 @@ ardana-core.workspace = true
 ardana-registry.workspace = true
 axum.workspace = true
 clap = { workspace = true, features = ["env"] }
+http-body.workspace = true
 memory-serve = { workspace = true, features = ["force-embed"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt", "net", "time", "sync", "signal", "macros"] }
+tokio = { workspace = true, features = ["rt", "net", "time", "sync", "signal", "macros", "fs", "io-util"] }
 tower-http = { workspace = true, features = ["compression-br", "compression-gzip"] }
 
 [build-dependencies]

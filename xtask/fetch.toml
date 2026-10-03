@@ -26,7 +26,9 @@
 #   revision  the full commit id the files come from; also written to `refs/main`
 #   files     files downloaded into tmp/hf/hub/models--<org>--<name> in the Hub cache
 #            layout (blobs/, snapshots/<revision>/, refs/main), each verified against
-#            its LFS sha256 or git blob id
+#            its LFS sha256 or git blob id; `fetch --tests` leaves out .gguf, .onnx and
+#            .onnx.data files
+#   `cargo xtask onnx publish <name>` pins the ardana-ai repositories it uploads here.
 #
 # [[hf_local]] fields: as [[hf]], but the files are copied read-only from the
 #   snapshot `revision` in the real home's ~/.cache/huggingface/hub (gated repos,
@@ -74,6 +76,15 @@ version = "fd54ea7"
 source = "git"
 url = "https://github.com/fstandhartinger/jevbench"
 rev = "fd54ea7dc02bbe29c6ac8f6e015a54cdcff26805"
+
+# The llama.cpp that `llama-cpp-sys-2` 0.1.157 vendors, for its `convert_hf_to_gguf.py` (`cargo xtask onnx
+# convert` writes the GGUFs ardana-ai hosts); the vendored copy lacks the `conversion/` package and gguf-py.
+[[tool]]
+name = "llama.cpp"
+version = "b11074"
+source = "git"
+url = "https://github.com/ggml-org/llama.cpp"
+rev = "26394b4e6749a41c3633db040e0987500a5f7013"
 
 [[tool]]
 name = "jevcompat"

@@ -1,5 +1,5 @@
 //! The Ardana logo: the logo kit's horizontal lockup, as ardana.ai's nav draws it, inline so it takes the page's ink
-//! (white in the dark scheme).
+//! (white in the dark scheme). Its drawing is in the page once, as a `<symbol>` every logo uses.
 
 use leptos::prelude::*;
 
@@ -7,8 +7,57 @@ use leptos::prelude::*;
 /// `currentColor`, the same drawing as the landing's `Logo.svelte`. See `brand/README.md`.
 const LOCKUP: &str = include_str!("../../brand/ardana-logo.svg");
 
+/// The id of the lockup's `<symbol>`.
+const SYMBOL: &str = "ardana-lockup";
+
+/// The lockup's `viewBox` and the drawing inside its outer `svg`.
+fn lockup() -> (&'static str, &'static str) {
+    let open = LOCKUP
+        .find('>')
+        .expect("the lockup opens with its outer svg tag");
+    let view_box = LOCKUP[..open]
+        .split_once("viewBox=\"")
+        .and_then(|(_, rest)| rest.split_once('"'))
+        .map(|(view_box, _)| view_box)
+        .expect("the lockup's outer svg has a viewBox");
+    let close = LOCKUP
+        .rfind("</svg>")
+        .expect("the lockup ends with its outer svg tag");
+    (view_box, &LOCKUP[open + 1..close])
+}
+
+/// The lockup's one copy in the page, a `<symbol>` that draws nothing until a [`Logo`] uses it: its paths are parsed
+/// once, however many logos the page shows.
+#[component]
+pub fn LogoSymbol() -> impl IntoView {
+    let (view_box, drawing) = lockup();
+    let symbol = format!(r#"<symbol id="{SYMBOL}" viewBox="{view_box}">{drawing}</symbol>"#);
+    view! { <svg class="logo-symbol" aria-hidden="true" focusable="false" inner_html=symbol></svg> }
+}
+
 /// The lockup, named "Ardana"; CSS sets its height (`.logo svg`).
 #[component]
 pub fn Logo(#[prop(optional)] class: &'static str) -> impl IntoView {
-    view! { <span class=format!("logo {class}") role="img" aria-label="Ardana" inner_html=LOCKUP></span> }
+    let (view_box, _) = lockup();
+    let drawn = format!(r##"<use href="#{SYMBOL}"></use>"##);
+    view! {
+        <span class=format!("logo {class}") role="img" aria-label="Ardana">
+            <svg viewBox=view_box aria-hidden="true" focusable="false" inner_html=drawn></svg>
+        </span>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The symbol keeps the kit's drawing whole: its frame, and everything inside the outer `svg`.
+    #[test]
+    fn the_lockup_becomes_one_symbol() {
+        let (view_box, drawing) = lockup();
+        assert_eq!(view_box, "0 0 610.71 106.00");
+        assert!(drawing.starts_with("<svg x=\"3.00\""), "{}", &drawing[..40]);
+        assert!(drawing.ends_with("/>"));
+        assert_eq!(drawing.matches("<path").count(), 3);
+    }
 }

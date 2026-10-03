@@ -5,13 +5,12 @@
 //! reads ([`fetch_tests`]).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 
 use crate::python::{MIN_PYTHON, managed_venv, uv};
-use crate::sandbox::Sandbox;
+use crate::sandbox::{Sandbox, run_stdout};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -122,7 +121,7 @@ pub fn fetch(sandbox: &Sandbox) -> Result<()> {
 }
 
 /// Installs only what plain `cargo test` reads: the files of every `[[hf]]`
-/// repository (the library's models) but the GGUF weights. Gated
+/// repository (the library's models) but the weights, GGUF and ONNX. Gated
 /// `[[hf_local]]` repositories serve only the `#[ignore]`d real-model tests and
 /// stay with `fetch`.
 pub fn fetch_tests(sandbox: &Sandbox) -> Result<()> {
@@ -226,7 +225,7 @@ impl Tool {
         }
     }
 
-    fn check(&self, sandbox: &Sandbox, version: &str) -> Result<()> {
+    pub(crate) fn check(&self, sandbox: &Sandbox, version: &str) -> Result<()> {
         match self.source {
             Source::Cargo => check_cargo(sandbox, &self.name, version),
             Source::Github => {
@@ -452,7 +451,7 @@ impl Tool {
     }
 
     /// `tmp/src/<name>`, where research clones live.
-    fn git_dir(&self, sandbox: &Sandbox) -> PathBuf {
+    pub(crate) fn git_dir(&self, sandbox: &Sandbox) -> PathBuf {
         sandbox.tmp().join("src").join(&self.name)
     }
 
@@ -571,8 +570,11 @@ struct HubFile {
     size: u64,
 }
 
+/// The weight files `fetch --tests` leaves out, by suffix: GGUF, and an ONNX graph with its external data.
+const WEIGHTS: [&str; 3] = [".gguf", ".onnx", ".onnx.data"];
+
 impl Hf {
-    /// This repository without its GGUF weights: the files plain `cargo test` reads.
+    /// This repository without its weights ([`WEIGHTS`]): the files plain `cargo test` reads.
     pub fn without_weights(&self) -> Hf {
         Hf {
             repo: self.repo.clone(),
@@ -580,7 +582,7 @@ impl Hf {
             files: self
                 .files
                 .iter()
-                .filter(|file| !file.ends_with(".gguf"))
+                .filter(|file| !WEIGHTS.iter().any(|suffix| file.ends_with(suffix)))
                 .cloned()
                 .collect(),
         }
@@ -618,7 +620,7 @@ impl Hf {
 
     /// Passes when `refs/main` holds the revision and every file resolves
     /// through `snapshots/<revision>/` to a non-empty blob.
-    fn check(&self, sandbox: &Sandbox) -> Result<()> {
+    pub(crate) fn check(&self, sandbox: &Sandbox) -> Result<()> {
         self.validate()?;
         let dir = self.repo_dir(sandbox);
         let refs = dir.join("refs/main");
@@ -772,7 +774,7 @@ impl Hf {
 }
 
 /// Links `snapshots/<rev>/<file>` relatively to `blobs/<blob>`.
-fn link_snapshot(snapshot: &Path, file: &str, blob: &str) -> Result<()> {
+pub(crate) fn link_snapshot(snapshot: &Path, file: &str, blob: &str) -> Result<()> {
     let link = snapshot.join(file);
     let parent = link.parent().context("snapshot link has no parent")?;
     std::fs::create_dir_all(parent)?;
@@ -785,7 +787,20 @@ fn link_snapshot(snapshot: &Path, file: &str, blob: &str) -> Result<()> {
 
 /// An LFS file must hash to its sha256, any other file to its git blob id.
 fn verify_blob(sandbox: &Sandbox, path: &Path, meta: &HubFile) -> Result<()> {
-    let actual = if meta.lfs {
+    let actual = blob_name(sandbox, path, meta.lfs)?;
+    if actual != meta.blob {
+        bail!(
+            "{} hashes to {actual}, expected {}",
+            path.display(),
+            meta.blob
+        );
+    }
+    Ok(())
+}
+
+/// The name of `path`'s blob in the Hub cache: its sha256 for an LFS file, else its git blob id.
+pub(crate) fn blob_name(sandbox: &Sandbox, path: &Path, lfs: bool) -> Result<String> {
+    let hash = if lfs {
         run_stdout(sandbox.command("shasum").args(["-a", "256"]).arg(path))?
     } else {
         run_stdout(
@@ -795,15 +810,11 @@ fn verify_blob(sandbox: &Sandbox, path: &Path, meta: &HubFile) -> Result<()> {
                 .arg(path),
         )?
     };
-    let actual = actual.split_whitespace().next().unwrap_or_default();
-    if actual != meta.blob {
-        bail!(
-            "{} hashes to {actual}, expected {}",
-            path.display(),
-            meta.blob
-        );
-    }
-    Ok(())
+    Ok(hash
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_string())
 }
 
 /// Passes when `tmp/.crates2.json` records `krate` at `version` and all its
@@ -877,20 +888,7 @@ fn download(sandbox: &Sandbox, url: &str, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-fn run_stdout(cmd: &mut Command) -> Result<String> {
-    let output = cmd.output().with_context(|| format!("running {cmd:?}"))?;
-    if !output.status.success() {
-        bail!(
-            "{:?} failed ({}): {}",
-            cmd.get_program(),
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    Ok(String::from_utf8(output.stdout)?)
-}
-
-fn remove_if_present(path: &Path) -> Result<()> {
+pub(crate) fn remove_if_present(path: &Path) -> Result<()> {
     let result = match std::fs::symlink_metadata(path) {
         Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
         Ok(_) => std::fs::remove_file(path),

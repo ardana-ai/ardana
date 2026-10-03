@@ -6,9 +6,9 @@
   display: grid;
   grid-template-columns: var(--sidebar) minmax(0, 1fr);
   min-height: 100vh;
-  transition: grid-template-columns var(--normal) var(--ease-out);
 }
 
+/* Collapsed, the sidebar's column goes at once: columns are layout, and nothing on the page animates layout. */
 .shell.collapsed {
   grid-template-columns: 0 minmax(0, 1fr);
 }
@@ -135,9 +135,11 @@
   color: var(--ink);
 }
 
-/* The section in view, in the "On this page" list: ink, as the landing marks its current page. */
+/* The section in view, in the "On this page" list: ink, as the landing marks its current page, and at 500, so it stands
+   apart in the dark scheme and in forced colours too, where its ink alone does not. */
 .row[aria-current="true"] {
   color: var(--ink);
+  font-weight: 500;
 }
 
 /* A label wraps rather than cut when text is enlarged. */
@@ -199,6 +201,11 @@
   padding: 14px var(--gutter);
   background: var(--bg);
   box-shadow: inset 0 -1px 0 var(--line);
+}
+
+/* A bar taller than a third of the viewport scrolls with the page. */
+.topbar-loose .topbar {
+  position: relative;
 }
 
 /* The lockup and the opener join the top bar only while the sidebar is collapsed or a drawer. */
@@ -268,13 +275,15 @@
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .changed:not(.on) .tag {
   display: none;
 }
 
-/* The banner under the top bar: why Run is held, or what a first run is downloading. A wait is gray; a fault is red. */
+/* The banner under the top bar: why Run is held, what a first run is downloading, or where a run in this tab is. A
+   wait is gray; a fault is red. */
 .banner {
   display: flex;
   align-items: center;
@@ -295,6 +304,115 @@
 .banner.quiet {
   background: var(--bg);
   color: var(--muted);
+}
+
+/* While a run in this tab is in flight the banner is its only progress: it stays right under the top bar, over the
+   page, at the bar's rendered height. When the whole banner would take too much of the screen, it sticks higher, its
+   words under the bar, so only its last row (the download bar and Stop) shows; past that it scrolls with the page. */
+.banner.busy {
+  position: sticky;
+  top: calc(var(--topbar-height) + var(--banner-stuck) - var(--banner-height));
+  z-index: 19;
+}
+
+.banner-loose .banner.busy {
+  position: static;
+}
+
+/* Whatever the page scrolls to meanwhile, focus by Tab or Shift+Tab included, lands under what stays, as tall as it is
+   rendered at this width, zoom and text size (WCAG 2.4.11). */
+html:has(.banner.busy) {
+  scroll-padding-top: calc(var(--topbar-stuck) + var(--banner-stuck) + var(--space-3));
+}
+
+/* The way to the ardana CLI's command, for a model this server has not pulled: the landing's forward link, an ink word
+   and its arrow, which nudges on hover as Restore previous's does. */
+.banner-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.banner-action .icon {
+  stroke-width: 1.6;
+  transition: transform var(--normal) var(--ease-out);
+}
+
+.banner-action:hover .icon {
+  transform: translateX(3px);
+}
+
+/* The banner's actions keep together after its words, 24px apart so the arrow of the first never points at the next:
+   the way to the ardana CLI's commands and, on a public server, the browser default in this tab instead. Where the
+   words and the actions do not fit one line, the actions take the next whole, rather than squeezing the words. */
+.banner:has(.banner-actions) {
+  flex-wrap: wrap;
+}
+
+.banner-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-5);
+}
+
+/* Stop ends a run in this tab, and "Run … in this tab instead" picks the browser default's row: the same ink word
+   without the arrow, which leads nowhere, underlined on hover as the landing's ink links are. */
+.banner-stop:hover,
+.banner-instead:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+/* The download bar and Stop keep together after the words. */
+.banner-track {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* A download into this tab: the answers' 6px pill bar, its track and its gray fill, after the bytes it counts. */
+.banner-progress {
+  flex: 0 1 160px;
+  min-width: 96px;
+  height: 6px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--track);
+  color: var(--bar);
+  overflow: hidden;
+  appearance: none;
+}
+
+.banner-progress::-webkit-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--track);
+}
+
+.banner-progress::-webkit-progress-value {
+  border-radius: var(--radius-pill);
+  background: var(--bar);
+}
+
+.banner-progress::-moz-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--bar);
+}
+
+/* Under the picker, an "In browser" pick says where Run answers and what its first run downloads. */
+.model-note {
+  margin: 6px 0 0;
+  padding: 0 var(--space-3);
 }
 
 /* ---- Share popover: anchored under the Share button, flat, a hairline around it ---- */
@@ -384,12 +502,26 @@
     height: 22px;
   }
 
+  /* The Share popover hangs 8px under the bar, however many rows the bar takes. */
   .popover {
     position: fixed;
-    top: calc(var(--topbar) + 8px);
+    top: calc(var(--topbar-height) + 8px);
     right: 16px;
     left: 16px;
     width: auto;
+  }
+
+  /* The bytes take their lines, the bar fills the next row with Stop at its end, at any text size. */
+  .banner {
+    flex-wrap: wrap;
+  }
+
+  .banner-track:has(.banner-progress) {
+    flex: 1 1 100%;
+  }
+
+  .banner-track .banner-progress {
+    flex: 1 1 0;
   }
 }
 
@@ -503,13 +635,38 @@
   }
 }
 
+/* Under a coarse pointer the rows and the share link's box are 44px tall, and the banner's actions (Stop, "Show the
+   command") reach 44px past their words within a 44px banner (WCAG 2.5.5); see controls.css. */
+@media (pointer: coarse) {
+  .row,
+  .popover-row,
+  .banner {
+    min-height: 44px;
+  }
+
+  /* The share link takes the whole height of its box. */
+  .popover-row .field-input {
+    align-self: stretch;
+  }
+
+  .banner-action {
+    position: relative;
+  }
+
+  .banner-action::before {
+    content: "";
+    position: absolute;
+    inset: min(0px, (100% - 44px) / 2);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .shell,
   .sidebar,
   .shell.drawer-open .sidebar,
   .scrim,
   .row,
   .row .icon-back,
+  .banner-action .icon,
   .workspace .button-icon,
   .skip-link {
     transition: none;
@@ -517,6 +674,10 @@
 
   .row:hover .icon-back {
     transform: scaleX(-1);
+  }
+
+  .banner-action:hover .icon {
+    transform: none;
   }
 }
 
@@ -533,5 +694,17 @@
 
   .popover-row {
     border: 1px solid CanvasText;
+  }
+
+  .banner-progress {
+    border: 1px solid CanvasText;
+  }
+
+  .banner-progress::-webkit-progress-value {
+    background: Highlight;
+  }
+
+  .banner-progress::-moz-progress-bar {
+    background: Highlight;
   }
 }

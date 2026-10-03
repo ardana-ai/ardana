@@ -248,13 +248,19 @@ pub fn run(cli: Cli, matches: &ArgMatches) -> Result<()> {
     }
 }
 
-/// `ardana serve`: the registry's models behind the API until Ctrl-C or SIGTERM.
+/// `ardana serve`: the registry's models behind the API until Ctrl-C or SIGTERM; with `--public`, the playground and
+/// its browser models alone.
 fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
-    let registry = Registry::open_default()?;
+    // A public server runs no model: it reads no registry and is given no runtime to run one with.
+    let (registry, runtimes) = if args.public {
+        (Registry::default(), Runtimes(Vec::new()))
+    } else {
+        (Registry::open_default()?, runtimes())
+    };
     let names = registry.names();
     let models = Arc::new(ardana_server::Models::new(
         registry,
-        runtimes(),
+        runtimes,
         args.model_options(),
     )?);
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -267,7 +273,9 @@ fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
             .await
             .with_context(|| format!("binding {addr}"))?;
         let local = listener.local_addr().context("reading the bound address")?;
-        let served = if names.is_empty() {
+        let served = if args.public {
+            "public: browser models run in the visitors' tabs, and no model runs here".to_string()
+        } else if names.is_empty() {
             format!(
                 "no models pulled yet; the first request pulls {} or the library model it names",
                 library().default

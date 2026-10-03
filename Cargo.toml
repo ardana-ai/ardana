@@ -8,6 +8,7 @@ members = [
     "crates/ardana-registry",
     "crates/ardana-server",
     "crates/ardana-playground",
+    "crates/ardana-engine",
     "xtask",
 ]
 
@@ -29,13 +30,14 @@ anyhow = "1"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
 hf-hub = "=1.0.0"
+http-body = "1"
 indexmap = { version = "2", features = ["serde"] }
 llama-cpp-2 = { version = "=0.1.157", default-features = false }
 minijinja = { version = "2.24.0", features = ["loop_controls"] }
 minijinja-contrib = { version = "2.24.0", features = ["pycompat"] }
 sha2 = "0.10"
 thiserror = "2"
-tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"] }
+tokenizers = { version = "=0.23.2", default-features = false }
 js-sys = "0.3"
 leptos = { version = "0.8", features = ["csr"] }
 lz-str = "0.2"
@@ -56,3 +58,12 @@ web-sys = "0.3"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+# `ardana-server`'s build script embeds the playground through memory-serve, which brotli-compresses and hashes every
+# asset (onnxruntime-web's 26.8 MB WASM among them). Release builds compile a build script's dependencies without
+# optimisation, which stretches that to minutes; optimised, the two crates doing the work take seconds.
+[profile.release.package.brotli]
+opt-level = 3
+
+[profile.release.package.sha2]
+opt-level = 3

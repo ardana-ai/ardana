@@ -2,13 +2,16 @@
 //!
 //! The request keeps every question spec as raw JSON so the server can answer a malformed spec with decider's own
 //! validation message instead of a deserialisation error; [`Question`] is the typed form clients build specs with.
-//! Maps keep insertion order, so answers follow the request's question order.
+//! Maps keep insertion order, so answers follow the request's question order. [`error`] holds the error bodies.
 
+pub mod error;
 pub mod format;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+pub use error::{Detail, ErrorBody, ValidationItem};
 
 /// A request's `state` from text as a person typed it: text that parses as a JSON object or array is sent as that
 /// JSON; any other text is sent as a string. The playground and `ardana run` read the state this way.
@@ -138,15 +141,27 @@ pub struct ModelInfo {
     pub name: String,
     pub description: String,
     pub release_date: String,
-    /// Whether the model is pulled; a library model that is not is pulled on its first request.
+    /// Whether the server has pulled the model; a library model it has not is pulled by its first API request, except
+    /// on a public server, which pulls and runs none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub x_pulled: Option<bool>,
-    /// Whether this is the model requests without a model use.
+    /// Whether this is the model requests without a model use; a public server has none.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub x_default: bool,
     /// A library model not pulled yet: its download size in bytes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub x_size: Option<u64>,
+    /// A model with a browser variant (ONNX weights a visitor's tab runs): the bytes the tab downloads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x_browser: Option<u64>,
+    /// Whether the server holds the browser variant whole in its Hugging Face cache, so it answers a tab's request for
+    /// the files at once; otherwise the first request pulls them from the Hub first.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub x_browser_pulled: bool,
+    /// Whether this is the browser model a playground offers first (`library.toml`'s `browser_default`): its tab row
+    /// is where the picker opens while the default model is not pulled.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub x_browser_default: bool,
 }
 
 impl ModelInfo {

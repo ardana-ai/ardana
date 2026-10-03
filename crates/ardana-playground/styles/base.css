@@ -56,6 +56,17 @@
   --sidebar: 256px;
   --topbar: 70px;
   --gutter: clamp(16px, 4vw, 48px);
+  /* The top bar's and the banner's rendered heights, and the height of the banner's last row when its download bar and
+     Stop take a row of their own, which the page keeps current (`ui::topbar::follow_heights`): the bar wraps on the
+     narrowest screens and with large text, and the banner's lines follow its words. */
+  --topbar-height: var(--topbar);
+  --banner-height: 0px;
+  --banner-row-height: 0px;
+  /* What of them stays on screen while the page scrolls under them: the bar, and of the in-flight banner all of it, or
+     its last row, or nothing, whatever keeps them within a third of the viewport (the root's `banner-row`,
+     `banner-loose` and `topbar-loose`, kept by the same function). */
+  --topbar-stuck: var(--topbar-height);
+  --banner-stuck: var(--banner-height);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --fast: 150ms;
@@ -94,13 +105,27 @@
   box-sizing: border-box;
 }
 
+/* Past a third of the viewport the bars let go: the banner's words scroll away under the bar, then the whole banner,
+   then the bar itself (a page zoomed far, or its text enlarged on a small screen). */
+:root.banner-row {
+  --banner-stuck: var(--banner-row-height);
+}
+
+:root.banner-loose {
+  --banner-stuck: 0px;
+}
+
+:root.topbar-loose {
+  --topbar-stuck: 0px;
+}
+
 /* Whatever the page scrolls to, by a jump or by Tab in either direction, lands under the sticky top bar, never behind
    it (WCAG 2.4.11). */
 html {
   background: var(--bg);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  scroll-padding-top: calc(var(--topbar) + var(--space-3));
+  scroll-padding-top: calc(var(--topbar-stuck) + var(--space-3));
   scrollbar-color: var(--code-muted) transparent;
 }
 
@@ -234,6 +259,14 @@ code {
   display: block;
   height: 26px;
   width: auto;
+}
+
+/* The lockup's one drawing, which every logo uses: it takes no room of its own. */
+.logo-symbol {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 /* The landing's one ornament: a blinking block caret, here while a run is in flight. */

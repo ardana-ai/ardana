@@ -338,3 +338,66 @@ fn response_shape() -> Result<()> {
     assert_eq!(empty.usage.input_tokens, 0);
     Ok(())
 }
+
+/// Logits handed back row by row, as the playground's in-tab engine replays what onnxruntime-web decoded.
+struct Replay(std::vec::IntoIter<Vec<Vec<f32>>>);
+
+impl LoadedModel for Replay {
+    fn n_ctx(&self) -> usize {
+        40_960
+    }
+
+    fn slot_logits(&mut self, _: &[u32], _: &[usize], _: &[u32]) -> anyhow::Result<Vec<Vec<f32>>> {
+        self.0
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("fewer logits than rows"))
+    }
+}
+
+/// `Decider::decodes` is what `run` asks a model for, so logits decoded elsewhere and replayed give the same response.
+#[test]
+fn decodes_replay_to_the_same_response() -> Result<()> {
+    let profile = ModelProfile {
+        isolated_levels: true,
+        ..ModelProfile::stock("decider-test", Layout::Plain)
+    };
+    let d = decider(profile)?;
+    let req = request(json!({
+        "fit": {"type": "score", "instructions": "How well?", "criteria": ["poor", "fair", "good"]},
+        "dept": {"type": "choice", "instructions": "Which?", "criteria": {"billing": null, "tech": null, "sales": null}},
+        "refund": {"type": "noul", "instructions": "Refund?"}}));
+    let plan = d.plan(&req)?;
+    let decodes: Vec<_> = d.decodes(&plan).collect();
+    assert_eq!(decodes.len(), plan.rows());
+    assert_eq!(
+        decodes.iter().map(|row| row.ids).collect::<Vec<_>>(),
+        plan.row_ids().collect::<Vec<_>>()
+    );
+    for row in &decodes {
+        // One question per row, read at the row's last token: the browser graph returns only that position.
+        assert_eq!(row.slots, [row.ids.len() - 1]);
+        assert_eq!(row.label_ids, &d.labels().ids[..row.label_ids.len()]);
+    }
+    // Isolated score levels are yes/no rows; the choice row reads three labels, the noul row two.
+    let widths: Vec<usize> = decodes.iter().map(|row| row.label_ids.len()).collect();
+    assert_eq!(widths, [2, 2, 2, 3, 2]);
+
+    let mut direct = fake();
+    let expected = d.run(&mut direct, &plan)?;
+    let logits: Vec<Vec<Vec<f32>>> = decodes
+        .iter()
+        .map(|row| {
+            row.slots
+                .iter()
+                .map(|_| (0..row.label_ids.len()).map(|i| i as f32 * 0.5).collect())
+                .collect()
+        })
+        .collect();
+    let replayed = d.run(&mut Replay(logits.into_iter()), &plan)?;
+    assert_eq!(replayed, expected);
+    assert_eq!(
+        direct.rows,
+        plan.row_ids().map(<[u32]>::to_vec).collect::<Vec<_>>()
+    );
+    Ok(())
+}

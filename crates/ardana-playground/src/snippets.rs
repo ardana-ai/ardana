@@ -1,10 +1,33 @@
 //! The current request as code: curl, the TypeSafe Python SDK (`typesafe-sdk` 0.7.2) and the TypeSafe TypeScript SDK
-//! (`@typesafe-ai/sdk` 0.6.0), each aimed at the server that serves the playground.
+//! (`@typesafe-ai/sdk` 0.6.0), each aimed at the server that serves the playground; and, for a model this server does
+//! not run (one picked in the tab, or one it has not pulled), the ardana CLI's commands, with ardana.ai's install line
+//! or `ardana pull` (Q4).
 
 use ardana_api::SystemOneRequest;
 use serde_json::Value;
 
 use crate::request;
+
+/// ardana.ai's install line, for macOS and Linux.
+pub const INSTALL: &str = "curl -fsSL https://ardana.ai/install.sh | sh";
+/// ardana.ai's install line for Windows, in PowerShell.
+pub const INSTALL_WINDOWS: &str = "irm https://ardana.ai/install.ps1 | iex";
+
+/// The ardana CLI's command that pulls `model`, as the pick writes it, into the registry of the machine it runs on: run
+/// where the server runs, it adds the model to the server's models.
+pub fn pull(model: &str) -> String {
+    format!("ardana pull {model}")
+}
+
+/// The ardana CLI's command that answers `request` on the model it names: `ardana run <model> --request -`, with the
+/// exact body Run sends on stdin, in a heredoc as the curl snippet carries it.
+pub fn cli(request: &SystemOneRequest) -> String {
+    format!(
+        "ardana run {} --request - <<'JSON'\n{}\nJSON\n",
+        request.model.as_deref().unwrap_or_default(),
+        request::body(request)
+    )
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
@@ -133,6 +156,22 @@ mod tests {
             "questions": {"refund": {"type": "noul", "instructions": "Refund?"}}
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn the_cli_reads_the_exact_body() {
+        let text = cli(&ticket());
+        let (command, rest) = text.split_once('\n').unwrap();
+        assert_eq!(command, "ardana run decider-2b --request - <<'JSON'");
+        assert_eq!(
+            rest.strip_suffix("\nJSON\n").unwrap(),
+            request::body(&ticket())
+        );
+    }
+
+    #[test]
+    fn the_pull_names_the_pick_as_written() {
+        assert_eq!(pull("decider-4b:q8_0"), "ardana pull decider-4b:q8_0");
     }
 
     #[test]

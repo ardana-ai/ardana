@@ -122,6 +122,21 @@ pub const GUIDELINES: &[Guideline] = &[
             "https://github.com/astral-sh/uv",
         ],
     },
+    Guideline {
+        file: "onnx.md",
+        pins: &[
+            ("onnxruntime-genai", "0.17.1"),
+            ("onnxruntime-web", "1.30.0"),
+        ],
+        official: &[
+            "https://onnxruntime.ai/",
+            "https://github.com/microsoft/onnxruntime",
+            "https://pypi.org/project/onnxruntime",
+            "https://www.npmjs.com/package/onnxruntime-web",
+            "https://github.com/ggml-org/llama.cpp",
+            "https://huggingface.co/docs/",
+        ],
+    },
 ];
 
 /// Rules `CLAUDE.md` must state, each recognised by a phrase it contains.

@@ -3,8 +3,10 @@
 Scope: the browser playground in `crates/ardana-playground`, a Leptos 0.8 client-side-rendered (CSR) app compiled to
 `wasm32-unknown-unknown`, bundled by trunk into `crates/ardana-playground/dist`, and embedded into the `ardana`
 binary by `crates/ardana-server` (see `axum.md`). It covers components and signals, calls to the same-origin `/v1/*`
-API, the trunk and wasm toolchain pinned through `cargo xtask fetch`, plain CSS, Jev share links, and the /impeccable
-design workflow that gates every UI change (Q23, Q27).
+API, the in-tab engine that runs a library model's browser variant on onnxruntime-web (W2) with the engine module
+`crates/ardana-engine` (the page's second wasm module, built by the same trunk run), the trunk and wasm
+toolchain pinned through `cargo xtask fetch`, plain CSS, Jev share links, and the /impeccable design workflow that
+gates every UI change (Q23, Q27).
 
 ## Versions
 - `leptos` 0.8 — UI framework, feature `csr` only (docs.rs shows 0.8.21)
@@ -17,9 +19,18 @@ design workflow that gates every UI change (Q23, Q27).
   `web-sys` features it calls (`Clipboard`, `Document`, `Element`, `Headers`, `HtmlElement`, `HtmlInputElement`,
   `KeyboardEvent`, `Location`, `MediaQueryList`, `Navigator`, `Performance`, `Request`, `RequestInit`, `Response`,
   `ScrollBehavior`, `ScrollIntoViewOptions`, `ScrollLogicalPosition`, `UrlSearchParams`, `Window`, plus `DomRect`
-  for the sidebar's section tracking, `Node` for the popover's outside-click check, `DomTokenList` for the
-  root's `tips-off` class, `FocusOptions` for focus without scrolling and `Storage` for the remembered sidebar
-  state)
+  for the sidebar's section tracking, `Node` for the popover's outside-click check, `FocusEvent` for the focus
+  leaving it, `DomTokenList` for the root's `tips-off`, `topbar-loose`, `banner-row` and `banner-loose` classes,
+  `FocusOptions` for focus without scrolling and `Storage` for the remembered sidebar
+  state; `ReadableStream`, `ReadableStreamDefaultReader` and `ReadableStreamReadResult` for a browser file's bytes as
+  they arrive, `AbortController` and `AbortSignal` for a run in the tab that is stopped, `Cache` and `CacheStorage` for
+  the files a tab keeps, `console` for the warning when it cannot, and `ResizeObserver` and `CssStyleDeclaration` for
+  the top bar's and the banner's rendered heights)
+- `ardana-engine` (workspace, `crates/ardana-engine`) — the engine module: `ardana-core`'s `Decider` as a wasm module
+  of its own, its tokenizer on the pure-Rust `fancy-regex` backend on wasm32 (`huggingface.md`, "Tokenizers"); kept
+  out of the page's wasm, which every visitor loads before the first paint, and imported on an "In browser" pick
+- onnxruntime-web 1.30.0 — vendored in `crates/ardana-playground/ort/1.30.0/` (`onnx.md`, "onnxruntime-web"), not an
+  npm dependency
 - `serde_json` with `float_roundtrip` (the workspace feature, `rust.md`) — numbers read from a response keep their
   exact `f64`, so a re-serialised `data-value` equals the API's JSON text
 - Onest Variable from `@fontsource-variable/onest` 5.3.1 and Geist Mono Variable from `@fontsource-variable/geist-mono`
@@ -28,8 +39,12 @@ design workflow that gates every UI change (Q23, Q27).
 
 ## Rules
 - Depend on `leptos` with `features = ["csr"]` and nothing else from its mode set; exactly one of `csr`, `hydrate`,
-  `ssr` may be on. The only workspace dependency is `ardana-api` (`cargo xtask check-deps` enforces it); never pull
-  in `ardana-core`, tokio, or anything that needs a filesystem.
+  `ssr` may be on. The playground's one workspace dependency is `ardana-api`: the page's own wasm carries no core
+  (`cargo xtask check-deps` enforces it). The in-tab engine's reader is `crates/ardana-engine`, a `cdylib` on
+  `ardana-api` and `ardana-core` (Q9) that exports `profile`, `reader` and their objects (`Profile`, `Reader`, `Run`)
+  with `#[wasm_bindgen]`; never pull the registry, the server, tokio, or anything that needs a filesystem into either
+  (the core's file reads, the chat template's, are never called there). Its `Tokenizer` comes from
+  `ardana_core::Tokenizer::from_bytes`, so it names no `tokenizers` features of its own.
 - Enter through `fn main() { leptos::mount::mount_to_body(App) }` and `use leptos::prelude::*;` in each module.
 - Components are `#[component] fn PascalName(..) -> impl IntoView`; props are function arguments. Keep one component
   per concern (state editor, questions editor/builder, model picker, results, raw panel, snippets, share).
@@ -37,7 +52,8 @@ design workflow that gates every UI change (Q23, Q27).
   and is a bug for live values. Attach handlers with `on:click=move |_| ..`.
 - Create state with `signal(..)` / `RwSignal::new(..)`; derive values with closures or `Memo::new` when costly.
   Never use an `Effect` to copy one signal into another; effects are only for syncing with the outside world
-  (URL hash, `localStorage`, DOM focus).
+  (URL hash, `localStorage`, DOM focus, a timer: the snippets wait for the editors to pause,
+  `ui::snippets::shown_request`).
 - Read without cloning where possible: `.read()` / `.with(..)` for large values (questions map, responses),
   `.get()` for small `Copy` values.
 - The builder and the raw questions JSON share one source of truth: a parsed `ardana_api` questions map plus the
@@ -49,19 +65,34 @@ design workflow that gates every UI change (Q23, Q27).
 - Type switches go through `Deck::switch_kind`, which keeps each question's criteria per type (`builder::KindMemory`)
   so a round trip through another type restores them. Preset loads and Remove question go through
   `Deck::load_preset` / `Deck::remove_question`, which keep both editors in `Deck::previous` for the console's
-  Restore previous key until the next edit.
+  Restore previous key until the next edit; `Deck::load_share` keeps them there too when they hold other work than
+  the link's, with the picker's row, which Restore previous picks again (`Deck::pick`).
 - Stale results: `Deck::sent` parses the exact body the last run sent; `inputs_changed` (state or model) and `stale`
   (anything) compare it with what Run would send now; a question is stale when its answer came from a different
   state, model or spec. Figures stay exact; only the tags change and the ink of the winning row goes gray.
-- Focus is never dropped: Run (held while the questions JSON is invalid or names no question, with the reason in
-  the `#run-note` banner from `Deck::held_reason`), Add option, Add level and every Remove button are held with
-  `aria-disabled` and a guard (`Deck::run`, `ui::builder::remove_button`, `add_button`), never `disabled`; after a rename
-  (the id field, or Instructions when the rename was committed by Tab), a removal, Add question, Restore previous
-  or a drawer pick, `ui::focus_later(id)` focuses the next control on the next animation frame, once the re-keyed
-  view exists. Element ids of a question come from `ui::dom_id`.
+- Focus is never dropped: Run (held while the questions JSON is invalid, the picked model runs only with the ardana
+  CLI, or the questions name none, with the reason in the `#run-note` banner from `Deck::held`), Add option, Add level
+  and every Remove button are held with `aria-disabled` and a guard (`Deck::run`, `ui::builder::remove_button`,
+  `add_button`), never `disabled`; after a rename (the id field, or Instructions when the rename was committed by Tab),
+  a removal, Add question, Add option or Add level (the new row's first field), Restore previous, a drawer pick or
+  Stop leaving the banner while it had the focus (Run), `ui::focus_later(id)` focuses the next control on the next
+  animation frame, once the re-keyed view exists. Element ids of a question come from `ui::dom_id`. Where the columns
+  stack, a run's answers land a screen below Run, so `ui::show_result` scrolls the fault or the first question to the
+  top and focuses its title (`.fault-title`, `.question-id`, both `tabindex="-1"`), as `ui::reveal` does for a section.
+  The skip link handles its own click (`preventDefault`, then `reveal("content")`): its fragment would push a history
+  entry whose Back loads the share link again. Under the open drawer the page and the skip link are `inert`; the Share
+  popover closes on a `focusout` beyond `#share` and on Escape at the window. A relationship names an id only while
+  its target exists (`aria-controls` of Edit and Share while open, Run's `aria-describedby` while the banner has its
+  sentence).
 - Announcements: two polite `role="status"` regions rendered empty from load (`run-status`: the run's outcome;
-  `notice`: an input turning invalid or valid again). Field errors are text tied with `aria-describedby`, never
-  `role="alert"`, so they do not repeat on every keystroke.
+  `notice`: an input turning invalid or valid again, a preset loaded). Effects write them through `ui::announce`, not
+  the view: words the region holds already are said again (another run's same outcome, the same preset loaded twice)
+  by emptying it for a frame first. Field errors are text tied with `aria-describedby`, never `role="alert"`, so they
+  do not repeat on every keystroke.
+- A tooltip is drawn, never read out: `.tip::after { content: attr(data-tip) / "" }`, so it never joins a control's
+  accessible name. A fact row is one Tab stop: its first name has `tabindex="0"`, the others `-1`, and
+  `ui::questions::step_facts` moves the focus along the row on Left, Right, Home and End; the first name's `data-keys`
+  says so in its tooltip under keyboard focus.
 - Anything in `view!` that uses `<`, `>`, `<=` or `>=` in an attribute goes in braces:
   `disabled=move || { count.get() >= max }`. Unbraced, the macro ends the tag at `>` and turns the rest of the
   attribute into child nodes, running handler bodies at render.
@@ -69,14 +100,25 @@ design workflow that gates every UI change (Q23, Q27).
   id, renamed on `change` only; option and level rows by index), and each row's values are reactive closures over a
   `Memo` of its question, so typing never recreates the focused input.
 - State text that parses as a JSON object or array is sent as JSON; every other text is sent as a string (R7.2).
-- All network access goes through one `ApiClient { base_url }` module with typed methods (`models()`, `systemone(req)`)
-  using `ardana_api` request/response types. Construct it with the page origin; never hard-code a host, never call
-  any non-`/v1/*` URL (Q15, R6.6).
+- All network access goes through one `ApiClient { base_url }` module with typed methods (`models()`,
+  `systemone(req)`, `browser_profile(name, signal)`, `browser_file(name, file, from, version, signal)`, whose
+  `api::Download` hands out the bytes as they arrive) using `ardana_api` request/response types; a browser file's
+  failure says whether the connection or the server failed (`api::Failed`).
+  Construct it with the page origin; never hard-code a host, never call any non-`/v1/*` URL (Q15, R6.6). The
+  page's own static files are the exception, loaded by their loaders: trunk's loader fetches the wasm, and
+  `engine.js` imports the engine module from beside itself (`/engine/ardana-engine.js`, whose `init` fetches its WASM
+  beside it) and onnxruntime-web from `/ort/1.30.0/`, whose bundles fetch their WASM modules beside them.
 - Load `/v1/models` with a `LocalResource` (browser fetch futures are `!Send`); run decisions with
-  `Action::new_local`, `dispatch` on the Run button, and drive the UI from `pending()` and `value()`. Ctrl/Cmd+Enter
+  `Action::new_local` over a `deck::Job` (the exact body, and for a run in the tab its model and `x_browser`),
+  `dispatch` on the Run button, and drive the UI from `pending()` and `value()`. `Deck::run` is the one place a run
+  happens and where it goes: the server (`ApiClient::systemone`) or, with an "In browser" row picked, the tab
+  (`engine::run`); both yield an `api::Exchange` that records where it was answered (`Place::Server`,
+  `Place::Tab(backend)`). Ctrl/Cmd+Enter
   presses Run from anywhere on the page and Ctrl/Cmd+\ toggles the sidebar, both through one `window_event_listener`
   on `keydown` in `ui::App`; a collapsed sidebar is remembered in `localStorage` (`ardana.sidebar`, web-sys
-  `Storage`).
+  `Storage`). The same listener scrolls a `<textarea>` that Tab lands on whole into view (`ui::show_text_field`, a
+  frame later, `block: nearest`) when it fits below the bars: Chrome brings only a field's caret into view, which can
+  leave its top under the sticky bars (WCAG 2.4.11); a field taller than that room keeps the browser's place.
 - Keep the exact request JSON sent and the exact response body text received (status included) for the raw panel;
   show 422/413 `detail` as returned. Render an answer whose `type` is unknown as raw JSON instead of failing the
   whole response (R6.6).
@@ -87,38 +129,160 @@ design workflow that gates every UI change (Q23, Q27).
   token counts equal to `usage` (R6.5).
 - Keep pure logic (share codec, state-mode detection, number formatting, builder edits, presets, snippet generation)
   in plain Rust modules with no DOM access, so it is unit-testable and reusable by the snippet and share code.
-- Layout of `crates/ardana-playground/src`: `api.rs` (`ApiClient`, the only network code), `share.rs` (decode and
-  `link`), `request.rs` (state mode, questions parsing, the request and its body, editor texts, reading replies into
-  typed answers or raw JSON and error `detail`s), `builder.rs` (question edits on raw specs), `presets.rs` (the three
-  presets, request files in `presets/` plus `tests/fixtures/requests/ticket.json`), `snippets.rs` (curl, Python and
-  TypeScript), `deck.rs` (`Deck`: every signal of the page, `Copy`, passed whole to components, plus the
-  `Action` that runs and the `Memo` of the last run) and `ui/` with one module per region: `sidebar` (the logo, the
-  model select, the presets, the page's sections), `topbar` (the sidebar opener and the logo while the sidebar is
-  away, Share and its popover, Run, the banner under it), `state` (the state block), `questions` (the last run's
-  line, the fault callout, one row per question with its type control, Edit and a bar per option, the Add question
-  row, the questions JSON editor), `builder` (a question's builder fields), `exchange` and `snippets` (toggle
-  blocks), `controls` (the segmented control and the copy key), `logo` (the brand lockup), `icons` and `figure` (the
-  `data-value` figures). `ui::Shell` holds the sidebar's collapsed and drawer state.
+- The in-tab engine (`engine.rs`, `engine.js`, Q9): `GET /v1/browser/<name>/profile` (the server pulls the variant on
+  the first request; the `ETag` is the version of its files), then the files from this browser's Cache Storage
+  (`ardana-browser <name> <version>`, one cache per model and version; older versions are deleted once a run has every
+  file of the current one) or downloaded with progress and kept. A download keeps what it has received as it goes, in
+  parts of `engine::PART` (4 MiB) under `<file's URL>?bytes=<start>-<end>/<length>`, so one that stops (the connection
+  drops, Stop, a reload) resumes in a later run: the parts kept from the first byte on are read back, and the rest is
+  asked for with `Range: bytes=<had>-` and `If-Range: "<version>"`; a `206` is that rest, and a `200` (the server's copy
+  changed) starts the file over and drops the parts. The bar counts the kept bytes as had. A file that arrives whole is
+  kept whole and its parts deleted (a browser that refuses the whole file keeps its parts instead), so no file is kept
+  twice, and only a whole file counts as kept (`holds`, `Files::keeps`). Cache Storage exists in a secure context only
+  (`window.caches` reads `undefined` on an insecure page): there `engine::caches` gives none, the run downloads its
+  files without keeping them, and nothing on the page says they are kept (`engine::keeps_files`). The engine module
+  reads the profile before any file is fetched; the tokenizer comes first and the request is planned (`Reader::plan`,
+  `Decider::plan` in the module) before the weights are fetched, so a refused request downloads only the tokenizer and
+  answers with `DecideError::status` and `DecideError::body`, the server's own bytes. The page decodes each planned row
+  (`Run::ids`, `Run::labels`, from `Decider::decodes`) on onnxruntime-web and hands its logits back (`Run::push`); the
+  module replays them through `Decider::run` and serialises the response as axum's `Json` does (`Run::status`,
+  `Run::body`). The model, its reader and its session stay loaded between runs, one model at a time, until a server row
+  is picked (`Deck::pick` calls `engine::unload`: the session is released and the reader freed; a later run in the tab
+  loads the model again from the kept files). Every object the engine module hands out holds that module's memory: the
+  page frees it once done (`engine::Freed`, `free()` on drop). `engine.js` is a file of its own, which trunk copies
+  beside the engine module (`rel="copy-file"` into `dist/engine/`, preloaded by a plain `modulepreload` link) and the
+  page's wasm imports as a `raw_module` (`/engine/engine.js`), so the page has no wasm-bindgen snippet. It imports the
+  engine module and onnxruntime-web on first use (or when an "In browser" row is picked, the page's opening pick among
+  them) and holds the only JavaScript: the import of each module (a failed one is forgotten and asked for again under a
+  new query), the session, one decode per row, and the release, which waits for a row still decoding (a run stopped
+  mid-row leaves onnxruntime-web running it). A failed import of the engine module fails that run: "Ardana's engine did
+  not load into this tab. Run again once the connection is back."
+- A run in the tab is stopped by `Deck::stop` (the banner's Stop while the server pulls or the tab downloads, and
+  picking another row at any stage): the action is aborted (`ActionAbortHandle`, so nothing it would have answered lands
+  and Run is Run again), `engine::stop` aborts the run's `AbortController`, whose signal every browser-file request
+  carries, and a session that finishes starting after the stop is released (`engine.js#createSession`). The run status
+  then says "Stopped, not answered", and when Stop ended a download (`engine::stop` reads the run's stage) "Stopped, not
+  answered. The next run resumes the download." (`engine::stopped`; where the page keeps no files: "… The next run
+  starts the download over: a page without HTTPS keeps no files.").
+- A run in the tab that gets no answer says why in the page's words (`api::Unanswered::advice`, one cause and one next
+  step: run again once the connection is back, try again later, or reload the page when a retry cannot work, a build
+  that loaded and could not start the model), under the title "Not answered in this tab."; the reason as the browser
+  gave it is the raw exchange's. A download that stopped says where, and what the next run does with it: "The download
+  of decider-0.8b stopped at 145.6 MB of 467.7 MB. Run again once the connection is back to resume it." (where the
+  page keeps no files: "… to start it over: a page without HTTPS keeps no files.").
+- Layout of `crates/ardana-playground/src`: `api.rs` (`ApiClient`, the only network code), `engine.rs` and `engine.js`
+  (the in-tab engine; its reader is `crates/ardana-engine/src/lib.rs`), `share.rs` (decode and `link`), `request.rs`
+  (state mode, questions parsing, the request and its body, editor texts, reading replies into typed answers or raw JSON
+  and error `detail`s), `builder.rs` (question edits on raw specs), `presets.rs` (the three presets, request files in
+  `presets/` plus `tests/fixtures/requests/ticket.json`), `snippets.rs` (curl, Python and TypeScript, and the ardana
+  CLI's commands with ardana.ai's install line), `deck.rs` (`Deck`: every signal of the page, `Copy`, passed whole to
+  components, plus the `Action` that runs and the `Memo` of the last run) and `ui/` with one module per region:
+  `sidebar` (the logo, the model select, the presets, the page's sections), `topbar` (the sidebar opener and the logo
+  while the sidebar is away, Share and its popover, Run, the banner under it), `state` (the state block), `questions`
+  (the last run's line, the fault callout, one row per question with its type control, Edit and a bar per option, the
+  Add question row, the questions JSON editor), `builder` (a question's builder fields), `exchange` and `snippets`
+  (toggle blocks), `controls` (the segmented control and the copy key), `logo` (the brand lockup), `icons` and `figure`
+  (the `data-value` figures). `ui::Shell` holds the sidebar's collapsed and drawer state.
 - Figures: every API value on screen is a `ui::figure` element with `data-field` (a JSON pointer into the response),
   `data-value` (the raw value: a number as the shortest JSON text, a string as is) and `data-format` (`percent`,
   `fixed2`, `verbatim`). Formatting (`ardana_api::format`, shared with `ardana run`) rounds the number's decimal
   text half up (`round_decimal`), never the binary value, so `0.1235` shows `12.4%` on every platform; the Playwright
   helpers apply the same rule with BigInt.
 - The page speaks only real model names; no text on it mentions Jev. The model picker lists `/v1/models`: the pulled
-  models (`x_pulled` not `false`) in an optgroup "Pulled", then the library models a first run pulls in "Library ·
-  pulls on first run", labelled with their `x_size` (`decider-4b · 2.7 GB`, `ardana_api::human_size`); a share link
-  naming a model the list lacks adds it as is. The picked model starts empty and `Deck::set_models` picks the
-  `x_default` entry (else the first pulled one) once the list arrives; while nothing is picked a request names no
-  model. The list is fetched again after every run, since a run may have pulled its model. `?autorun=1` runs once
-  after `/v1/models` answers.
-- While a run whose model the list marks unpulled is in flight, the Run label reads "Pulling" and the banner
-  `#run-note` under the top bar says "Downloading <name> (<size>) on first run": the API reports no pull progress,
-  so the page never draws one. The same banner, in the fault colours, says "Questions JSON has an error" while Run
-  is held.
+  models (`x_pulled` not `false`) in an optgroup "Pulled", then every model with an `x_browser` in "In browser · runs
+  in this tab", labelled with that size, then the library models this server has not pulled in "Library · runs with
+  the ardana CLI", labelled with their `x_size` (`decider-4b · 2.7 GB`, `ardana_api::human_size`); a share link naming
+  a model the list lacks adds it as is. A model both pulled and browser-capable has a row in each group, and each row
+  runs where it says (Q14). A server row's value is the model's name; an "In browser" row's is `<name> in-browser`
+  (`deck::browser_value`: a word after a space, which no model name holds), and `Deck::pick` reads either into
+  `model` and `in_browser`. The select's value follows the pick through an effect that sets it a frame after the
+  options are drawn, not through `prop:value`: options are redrawn whenever the list changes, their elements reused by
+  place, and a select keeps the selection its elements had (one removed with its group, one drawn over another's
+  place), so a model pulled or removed meanwhile, listed again, left the select on its first row.
+- `Deck::runs` says where Run answers the pick: `Tab` for an "In browser" row, else where the server reads the name
+  (`deck::named`, as `Registry::named` reads it: the exact listed name, else a library model's other spellings, its
+  name in any case with or without a `:<quant>`, the quant lowercased): `Server` for a model this server has pulled
+  under any spelling, `Cli` for any other spelling of a listed model (one the server would pull; the CLI resolves it
+  itself) and every server row of a public server (a list that marks no default model), and `Server` for a name nothing
+  listed matches on a local server, which refuses it (404) without pulling. Run never pulls (Q2): a `Cli` pick holds
+  Run, and the snippets show the ardana CLI's commands instead. `Deck::handoff` says which (`deck::Handoff`, Q4 as the
+  user amended it): `Install` on a public server (ardana.ai's install line, then `ardana run`), `Pull` on a local one
+  for a model it has not pulled under any spelling, an "In browser" row's model too (`ardana pull <pick as written>`,
+  then `ardana run`; a local server runs ardana already, so it never shows the install line), and `Run` for the "In
+  browser" row of a model it has pulled (`ardana run` alone). Under the picker, a pick that does not run on the server
+  says where it runs (`#model-note`, the select's description): "Runs in this tab. The first run downloads <size>,
+  which this browser keeps. Running it takes 3 to 4 times that in memory; only a reload frees all of it." (where the
+  page has no Cache Storage: "Runs in this tab. The first run on each visit downloads <size>: a page without HTTPS
+  keeps no files. …"; the memory sentence is `ui::topbar::IN_MEMORY`, measured for every browser model on WebGPU and
+  WASM, `onnx.md`), on a local server "Not pulled on this server. Pull it with
+  the ardana CLI where the server runs (<x_size>), then Run answers here.", on a public one "Runs with the ardana CLI on
+  your machine; its first run downloads <x_size>." (the size, `Deck::pull_size`, for any spelling of a listed name, not
+  for another quant).
+- The picked model starts empty, and `Deck::place` places the page's first pick, and a share link's, once `/v1/models`
+  is in (`Deck::unplaced`; a pick by hand ends the wait): no model (nothing linked, or Jev's `jev-*` alias) opens on
+  `deck::opening_row` (the `x_default` model when it is pulled, else the `x_browser_default` model's "In browser" row,
+  Q11, else the default model or the first pulled one), a linked model on `deck::linked_row` (through `deck::named`:
+  the "In browser" row of the listed model it names when this server has not pulled that model and it has one, the
+  only place it runs here; the listed model's own row for another spelling of its name; else the name as it is). While
+  nothing is picked a request names no model. The list is fetched again after every run and whenever the tab comes
+  back (`focus` at the window, `visibilitychange` with the document shown: `ardana pull` or `ardana rm` may have
+  changed the server's models since), so a model pulled meanwhile is a server row Run sends, without a reload. `?autorun=1` runs once after `/v1/models` answers (`Deck::autorun`): a
+  server pick at once, a pick in the tab only when its files need no download (`engine::kept`); a first run in the tab
+  waits for the tap.
+- The banner `#run-note` under the top bar says, in this order: where a run in the tab is (below); why Run is held
+  (`deck::Held`): in the fault colours "Questions JSON has an error"; quiet, on a local server "This server has not
+  pulled <name>: pull it with the ardana CLI" (`Held::Pull`) and on a public one "<name> runs with the ardana CLI on
+  your machine" (`Held::Cli`), followed by the ink "Show the command" key, whose arrow leads to the commands
+  (`ui::reveal("snippets")`: the block opens, scrolls under the top bar and its summary takes focus; the sidebar's
+  section rows use the same function), and on a public server by "Run <browser default> in this tab instead"
+  (`Deck::browser_default`), which picks that model's "In browser" row and focuses Run; quiet, "Add a question to
+  run"; else, quiet, what a run of the picked "In browser" row downloads while its files are not kept (`Deck::kept`,
+  probed from Cache Storage whenever such a row is picked and after each run): "Run downloads <name> into this tab
+  once: <size>, kept by this browser. Running it takes 3 to 4 times that in memory." (where the page has no Cache
+  Storage: "Run downloads <name> into this tab on each visit: <size>, as a page without HTTPS keeps no files. …").
+  Run's description is the banner's sentence alone (`#run-note-text`), never its bar or actions.
+- Snippets (Q4): a `Server` pick shows curl, Python (`typesafe-sdk`) and TypeScript (`@typesafe-ai/sdk`) aimed at the
+  page origin; a `Tab` or `Cli` pick shows the step `Deck::handoff` names, `ardana pull <name>` (`snippets::pull`)
+  with what it downloads or ardana.ai's install line (`snippets::INSTALL`, its Windows line under it), and then
+  `ardana run <name> --request -` with the exact body Run sends in a heredoc (`snippets::cli`), each in a command box
+  with its copy key, and on a public server what the CLI's first run downloads (`x_size`). The raw exchange's heading says
+  where Run sends ("Sent · POST /v1/systemone", "Sent · in this tab", or "Sent" for a `Cli` pick, whose empty pane
+  reads "Nothing sent yet."). The block builds its text only while it is open (its `toggle` event), and from editors
+  holding more than 32 KB only once they have stayed unchanged for 150 ms (`leptos::prelude::debounce`), so a key
+  typed in a long state never rebuilds and redraws a snippet; a copy key builds its text from the request as it stands
+  when pressed.
+- A run in the tab says where it is through `Deck::stage` (`engine::Stage`, set before the run is dispatched so the page
+  never shows a server's wait for it), the Run label "Loading" unless said otherwise: nothing while it asks the server
+  for the files it holds (`Asking`: it answers at once); "Pulling the browser files of <name> (<size>) on the server"
+  with the label "Pulling" while the server pulls them, which the server says itself: the run passes the model's
+  `x_browser_pulled` (`deck::Job`), and when the page's list says the server does not hold the files the run lists the
+  models again before it asks for the profile (`engine::held`) and says Pulling only if they still are not held, never
+  after a time; "Downloading <name> into this tab: <had> of <size>" with a `<progress>` bar (the answers' track and gray
+  fill, redrawn every half percent, hidden from assistive technology) as one stage across the three files, from the
+  first file a run lacks (the files it kept count as had); "Starting <name> in this tab" once it has every file, while
+  it reads the kept ones, loads the tokenizer or starts onnxruntime-web; "Running <name> in this tab on WebGPU" (or
+  WASM, "Running") while the rows decode. While the server pulls or the tab downloads, the banner ends in "Stop"; while
+  a run is in flight it stays right under the top bar (`.banner.busy`, at the bar's measured height), and the scroll
+  padding covers both. The polite `run-status` region says each stage once (`ui::topbar::tab_status`, a download in
+  tenths: "Downloading <name> into this tab: 30% of <size>"), then the run's outcome. The answered line and the run
+  status then say "Answered by <model> in this tab on <backend>", the raw exchange's heading "Sent · in this tab"
+  (before a first run too, while an "In browser" row is picked), and the latency counts the plan, the decodes and the
+  readout, not the download. Answers from a run in the tab are stale once the server row is picked, and the other way
+  round. A held or busy Run shows no tooltip (`.run-key[aria-disabled]`, `[aria-busy]`): it would say "Send the state
+  and questions" at the pill's faded strength, over the banner.
 - Per-run visuals (the bars growing to their values) restart because each question's answer view is redrawn from
   the run number.
 - Set dynamic CSS custom properties with a style tuple, `style=("--level", value.to_string())`; the rules that read
-  them live in `.css`.
+  them live in `.css`. The one exception is the root element, which no view renders: `ui::topbar::follow_heights` (a
+  `ResizeObserver` on the top bar and the banner, and the window's `resize`) keeps `--topbar-height`,
+  `--banner-height` and `--banner-row-height` (the banner's last row, its download bar and Stop on a row of their own)
+  on it, and the classes `topbar-loose`, `banner-row` and `banner-loose` at what of them stays on screen
+  (`ui::topbar::stuck`: at most a third of the viewport, so 400% zoom or enlarged text on a small screen keeps most of
+  it). `base.css` turns them into `--topbar-stuck` and `--banner-stuck`, which `scroll-padding-top` (`base.css`, and
+  `shell.css` while a run is in flight) and the sticky banner's `top` read, and the phone Share popover's `top` reads
+  `--topbar-height`, so focus lands clear of what stays at every width, zoom and text size (WCAG 2.4.11) and the
+  popover hangs under the bar however many rows it takes. Only the bar's and the sidebar head's `min-height` read the
+  nominal `--topbar`.
 
 ## Share links
 - Format: `#share/<compressToEncodedURIComponent(JSON)>`, payload
@@ -127,7 +291,8 @@ design workflow that gates every UI change (Q23, Q27).
   `lz_str::decompress_from_encoded_uri_component(s)`, which returns `Option<Vec<u16>>`; convert with
   `String::from_utf16` and treat `None`, invalid UTF-16 or bad JSON as a visible share-link error, never a panic.
 - Read the hash on load and on `hashchange`; `location.hash` includes the leading `#`. `?autorun=1` runs the loaded
-  share once after models load (R6.2 URLs).
+  share once after models load (R6.2 URLs). A link loaded over editors that hold other work keeps them, and the
+  picker's row, for Restore previous (`Deck::load_share`); nothing on the page itself writes a fragment.
 - `selectedModels` is optional when reading (a docs link has none); a link without one, or with a `jev-*` alias
   (`jev-latest`, `jev-1.12`), opens on the server's default model, so Jev's links keep working.
 - The playground writes its own link with `share::link(origin, &SharePayload::new(state, questions, model))`, keys in
@@ -139,11 +304,24 @@ design workflow that gates every UI change (Q23, Q27).
 - `crates/ardana-playground/index.html` drives trunk. Every asset tag needs `data-trunk`:
   `<link data-trunk rel="rust" data-wasm-opt="z" />` for the crate and `<link data-trunk rel="css" href="styles/...css" />`
   per stylesheet. `data-wasm-opt` (`0`-`4`, `s`, `z`) only runs in `--release` builds.
-- Unhashed static files go in with `rel="copy-dir"` (`fonts/`, served at `/fonts/`) and `rel="copy-file"`
-  (`brand/favicon.svg`, `brand/favicon.ico`, served at the root); plain `<link>` tags without `data-trunk` name them
-  by absolute path (the favicons, the preload of the two latin font files), and the `embedded_binary` case fetches
-  every such path. memory-serve gives these files its default week-long cache, so a changed font or icon takes a new
-  file name.
+- The engine module is a second `rel="rust"` link: `href="../ardana-engine" data-type="worker"
+  data-bindgen-target="web" data-target-path="engine"`. A worker link injects no script and no preload (the page
+  imports the module itself, on an "In browser" pick), is named after its crate without a content hash
+  (`dist/engine/ardana-engine.js` and `ardana-engine_bg.wasm`), and `web` makes its glue an ES module whose default
+  `init` fetches the WASM beside it. `engine.js` joins it there (`rel="copy-file" data-target-path="engine"`), with a
+  plain `<link rel="modulepreload" href="/engine/engine.js" />` so the page's glue does not wait a round trip for it.
+  Names that never change need a fresh copy on every load: `ardana serve` sends `/engine/` with `Cache-Control:
+  no-cache` (`axum.md`), so a page never runs with another binary's engine.
+- No crate of the playground has a wasm-bindgen snippet (`#[wasm_bindgen(module = ...)]`, `inline_js`): wasm-bindgen
+  names a snippet's directory by its crate's name and version alone, a name memory-serve would keep for a week across
+  builds, and trunk copies wasm-bindgen's whole `snippets/` output into every Rust link's target path, the engine's
+  too. Import JavaScript as `raw_module` from a file trunk copies into `dist/engine/`; `cargo xtask build` removes a
+  `snippets/` an older build left in `target/wasm-bindgen/`.
+- Unhashed static files go in with `rel="copy-dir"` (`fonts/`, served at `/fonts/`; `ort/`, onnxruntime-web, served at
+  `/ort/`) and `rel="copy-file"` (`brand/favicon.svg`, `brand/favicon.ico`, served at the root); plain `<link>` tags
+  without `data-trunk` name them by absolute path (the favicons, the preload of the two latin font files), and the
+  `embedded_binary` case fetches every such path. memory-serve gives these files its default week-long cache, so a
+  changed font or icon takes a new file name, and a new onnxruntime-web a new version directory.
 - `Trunk.toml` sits next to `index.html` and pins tools under `[tools]`: `wasm_bindgen = "<Cargo.lock version>"` and
   `wasm_opt = "version_133"`. Trunk uses a tool from `PATH` only when its version matches, otherwise it downloads.
   Bump the pin, `xtask/fetch.toml` (`cargo-lock:wasm-bindgen`) and `cargo xtask fetch` together whenever Cargo.lock's
@@ -160,7 +338,7 @@ design workflow that gates every UI change (Q23, Q27).
   into `~/.cargo/bin` on a developer machine; `trunk serve` is not part of the workflow, the playground is served by
   `ardana serve`.
 - Keep `[build] filehash = true` (trunk's default) so hashed asset names let the server cache assets while
-  `index.html` stays uncached.
+  `index.html` and `/engine/` stay uncached.
 - Do not set `opt-level = "z"` on the workspace `[profile.release]`: it would also shrink-optimize the server binary.
   Size work for the wasm goes through `data-wasm-opt`, dependency choices, and brotli from memory-serve.
 
@@ -182,16 +360,24 @@ design workflow that gates every UI change (Q23, Q27).
   loaded from another origin. Icons are inline SVG from `ui::icons::Icon` (one 16-unit grid, one round stroke,
   `currentColor`; the copy, check and arrow glyphs are the landing's), never Unicode glyphs or emoji.
 - The logo and favicons are the Ardana logo kit's files, copied into `crates/ardana-playground/brand/` (provenance in
-  its README) and regenerated from the kit, never drawn or edited by hand: `ui::logo::Logo` inlines the lockup
-  (`include_str!`) in `currentColor`, 26px tall (22px in a phone's top bar, 18px below 390px, above the kit's
-  80px minimum width). Size it through `.logo > svg` only: the lockup nests the mark's own `svg`, whose
-  geometry must stay as drawn.
+  its README) and regenerated from the kit, never drawn or edited by hand: `ui::logo::LogoSymbol` puts the lockup
+  (`include_str!`) in the page once, its outer `svg` turned into a `<symbol>`, and each `ui::logo::Logo` draws it
+  with `<use>` in `currentColor`, 26px tall (22px in a phone's top bar, 18px below 390px, above the kit's 80px minimum
+  width). Size it through `.logo > svg` only: the lockup nests the mark's own `svg`, whose geometry must stay as drawn.
+- The page's own words stay in the latin subsets of both faces: a shortcut is spelled out ("Ctrl+Enter or Cmd+Enter",
+  never ⌘↵), so no other subset is fetched for the page's own text.
 - Light and dark follow the system through `prefers-color-scheme` (`color-scheme: light dark`, the tokens redefined
   in one `@media` block in `base.css`); there is no theme control. The dark scheme is the logo kit's inverse: ink on
   `#0a0a0a`, the Run pill white. `forced-colors` blocks keep the checked segment, the bars, the primary button and the
   hairlines visible.
-- Dynamic visuals (bar widths) set a CSS custom property or a class from the view; the rules that use them stay in
-  `.css`. Class names come from DESIGN.md's tokens and components.
+- Dynamic visuals (a bar's level) set a CSS custom property or a class from the view; the rules that use them stay in
+  `.css`. Class names come from DESIGN.md's tokens and components. Motion moves `transform` and `opacity` only, never a
+  layout property: a bar's fill is as long as its track and slides in to its level (`translateX`, clipped by the
+  track), the drawer slides, and the wide sidebar's column collapses at once.
+- Touch: under `(pointer: coarse)` every control reaches 44px by 44px (WCAG 2.5.5) without a change to its look: small
+  keys, segments, toggle headings and banner actions through a transparent `::before` inset to
+  `min(0px, (100% - 44px) / 2)`, rows, fields, the select, the share link's box and the banner by a 44px
+  `min-height`. A fine pointer keeps the drawn sizes.
 - Every UI change, from the first component on, goes through the /impeccable skill: PRODUCT.md, DESIGN.md and the
   `crates/ardana-playground` surface brief (Operate mode, six-block direction contract) exist before the first
   component; read the skill's `reference/craft-floor.md` before each UI edit; `buildPath` stays `"code"` with no image
@@ -205,7 +391,18 @@ design workflow that gates every UI change (Q23, Q27).
 ## Testing
 - Unit-test the pure modules with `cargo test -p ardana-playground` where they do not touch the DOM.
 - Behavioural checks are Playwright suites in `e2e/playground` (`cargo xtask e2e playground`) against the embedded
-  binary serving decider-2b from `tmp/hf`; never replace the model with canned responses in e2e.
+  binary serving decider-2b from `tmp/hf`; never replace the model with canned responses in e2e. `browser_run` runs
+  decider-0.8b's browser variant in the tab, on WebGPU and on WASM, `insecure_origin` on a page that is no secure
+  context, `browser_stop` stops its download (and waits for a tap under `?autorun=1`), `browser_recover` runs again
+  after a dropped connection, `first_run` opens an empty registry in the tab, `run_command` holds Run for every
+  model the server has not pulled, under any spelling, and `pull_while_open` runs the shown `ardana pull` while the
+  page is open; `cargo xtask e2e public` drives the same page on
+  `ardana serve --public` (`playwright.md`). The zoom and text-size reflow, the focus, announcement and ARIA cases,
+  the touch reach and the first load's weight have cases of their own (`reflow.spec.ts`, `focus.spec.ts`,
+  `polish.spec.ts`). The pure picker rules (`deck::opening_row`, `deck::linked_row`, `deck::server_runs` for every
+  spelling on a local and a public server), the banner's and the status's words and what of the bars stays on screen
+  (`ui::topbar`), the logo's symbol (`ui::logo`), the CLI's handoff and its note (`deck::handoff`,
+  `ui::sidebar::cli_note`) and the ardana commands (`snippets::pull`, `snippets::cli`) have unit tests.
 
 ## Sources
 - https://book.leptos.dev/getting_started/index.html — CSR setup: `csr` feature, trunk, wasm32 target, `mount_to_body`
@@ -235,3 +432,21 @@ design workflow that gates every UI change (Q23, Q27).
 - https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/unicode-range — one file per script subset, fetched on use
 - https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/font-display — `swap`, as the landing loads them
 - https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/preload — `as="font"` preloads need `crossorigin`
+- https://developer.mozilla.org/en-US/docs/Web/API/Cache — `match`, `put`: the files a tab keeps across visits
+- https://developer.mozilla.org/en-US/docs/Web/API/Window/caches — `caches` exists in secure contexts only
+- https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts — which pages are secure contexts
+- https://developer.mozilla.org/en-US/docs/Web/API/AbortController — `abort()` and a request's `signal`: Stop
+- https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/status_role — polite status messages
+- https://developer.mozilla.org/en-US/docs/Web/API/ReadableStreamDefaultReader/read — a download read chunk by chunk
+- https://developer.mozilla.org/en-US/docs/Web/HTML/Element/progress — the download bar
+- https://developer.mozilla.org/en-US/docs/Web/CSS/content — alternative text after `/`: a tooltip drawn, not read out
+- https://developer.mozilla.org/en-US/docs/Web/CSS/@media/pointer — `pointer: coarse`: the 44px reach under a finger
+- https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/inert — the page and the skip link under the drawer
+- https://developer.mozilla.org/en-US/docs/Web/API/FocusEvent/relatedTarget — where the focus goes as it leaves the popover
+- https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-margin-bottom — room for a term's tooltip under it
+- https://developer.mozilla.org/en-US/docs/Web/SVG/Element/symbol — the logo's one drawing, which each logo uses
+- https://wasm-bindgen.github.io/wasm-bindgen/reference/js-snippets.html — snippets, named by their crate, which the playground avoids
+- https://wasm-bindgen.github.io/wasm-bindgen/reference/attributes/on-js-imports/raw_module.html — `raw_module = "/engine/engine.js"`, an import written as is
+- https://wasm-bindgen.github.io/wasm-bindgen/reference/attributes/on-js-imports/method.html — `method` bindings on the engine module's objects
+- https://wasm-bindgen.github.io/wasm-bindgen/reference/deployment.html — `--target web`: an ES module whose `init` fetches the WASM
+- https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/modulepreload — `engine.js` fetched with the page's glue

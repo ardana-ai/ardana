@@ -109,9 +109,12 @@ pub fn serve() -> String {
     "Examples:
   ardana serve                              API and playground on http://127.0.0.1:8000
   ardana serve --host 0.0.0.0 --api-key s3cret
+  ardana serve --public                     A public playground that runs no model itself
   curl http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -d @request.json
 
 Endpoints: POST /v1/systemone, GET /v1/models, GET /health, and the playground at /.
-A request naming a library model that is not pulled yet pulls it first."
+A request naming a library model that is not pulled yet pulls it first.
+With --public, browser models run in each visitor's tab: the server lists the library and serves their files, and
+answers every POST /v1/systemone with 403."
         .to_string()
 }

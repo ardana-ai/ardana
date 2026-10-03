@@ -1,6 +1,7 @@
 //! A running `ardana serve` for the end-to-end suites: the release binary serving decider-2b, pulled offline from
 //! `tmp/hf` into its own `ARDANA_HOME` under `tmp/e2e/<suite>` (or with that home empty, so the first request pulls
-//! it), on a free port of 127.0.0.1. Dropping it stops the server.
+//! it, or a public server on it, which runs no model; either over an empty Hub cache of its own when asked), on a free
+//! port of 127.0.0.1. Dropping it stops the server.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -28,10 +29,14 @@ pub fn build_ardana(sandbox: &Sandbox) -> Result<PathBuf> {
     if !status.success() {
         bail!("cargo build --release --package ardana failed ({status})");
     }
-    let target = std::env::var_os("CARGO_TARGET_DIR")
+    Ok(target_dir(sandbox).join("release/ardana"))
+}
+
+/// The workspace's cargo target directory.
+pub fn target_dir(sandbox: &Sandbox) -> PathBuf {
+    std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|| sandbox.repo_root().join("target"));
-    Ok(target.join("release/ardana"))
+        .unwrap_or_else(|| sandbox.repo_root().join("target"))
 }
 
 pub struct Server {
@@ -39,6 +44,19 @@ pub struct Server {
     /// `http://127.0.0.1:<port>`.
     pub url: String,
     pub log: PathBuf,
+    /// Its `ARDANA_HOME`.
+    pub home: PathBuf,
+}
+
+/// How [`Server::launch`] starts `ardana serve`.
+enum Mode<'a> {
+    /// decider-2b pulled first, and the API key when given.
+    Pulled(Option<&'a str>),
+    /// On an empty registry: its first request pulls decider-2b. Its Hub cache is `<dir>/hf` when `own_cache` (empty:
+    /// every pull fails, offline), else `tmp/hf`.
+    Empty { own_cache: bool },
+    /// `--public`, its Hub cache in `<dir>/hf` when `true` (empty: every browser pull fails), else `tmp/hf`.
+    Public { own_cache: bool },
 }
 
 impl Server {
@@ -50,22 +68,33 @@ impl Server {
         name: &str,
         api_key: Option<&str>,
     ) -> Result<Server> {
-        Server::launch(sandbox, ardana, name, api_key, true)
+        Server::launch(sandbox, ardana, name, Mode::Pulled(api_key))
     }
 
     /// Starts `ardana serve` on the empty home `tmp/e2e/<name>/home`: its first request pulls decider-2b, offline from
     /// `tmp/hf`.
     pub fn start_empty(sandbox: &Sandbox, ardana: &Path, name: &str) -> Result<Server> {
-        Server::launch(sandbox, ardana, name, None, false)
+        Server::launch(sandbox, ardana, name, Mode::Empty { own_cache: false })
     }
 
-    fn launch(
+    /// Starts `ardana serve` on the empty home `tmp/e2e/<name>/home` over the empty Hub cache `tmp/e2e/<name>/hf`: it
+    /// holds no model and no browser variant, and every pull fails offline.
+    pub fn start_uncached(sandbox: &Sandbox, ardana: &Path, name: &str) -> Result<Server> {
+        Server::launch(sandbox, ardana, name, Mode::Empty { own_cache: true })
+    }
+
+    /// Starts `ardana serve --public` on the empty home `tmp/e2e/<name>/home`, reading the browser variants offline
+    /// from `tmp/hf`, or from the empty cache `tmp/e2e/<name>/hf` with `own_cache`.
+    pub fn start_public(
         sandbox: &Sandbox,
         ardana: &Path,
         name: &str,
-        api_key: Option<&str>,
-        pull: bool,
+        own_cache: bool,
     ) -> Result<Server> {
+        Server::launch(sandbox, ardana, name, Mode::Public { own_cache })
+    }
+
+    fn launch(sandbox: &Sandbox, ardana: &Path, name: &str, mode: Mode) -> Result<Server> {
         let dir = sandbox.tmp().join("e2e").join(name);
         if dir.exists() {
             std::fs::remove_dir_all(&dir).with_context(|| format!("emptying {}", dir.display()))?;
@@ -82,7 +111,7 @@ impl Server {
                 .env_remove("ARDANA_API_KEY");
             cmd
         };
-        if pull {
+        if let Mode::Pulled(_) = mode {
             let pulled = ardana_command()
                 .args(["pull", MODEL])
                 .status()
@@ -102,14 +131,30 @@ impl Server {
             .args(["serve", "--port", &port.to_string()])
             .stdout(out.try_clone()?)
             .stderr(out);
-        if let Some(key) = api_key {
-            serve.env("ARDANA_API_KEY", key);
+        let own_cache = match mode {
+            Mode::Pulled(key) => {
+                if let Some(key) = key {
+                    serve.env("ARDANA_API_KEY", key);
+                }
+                false
+            }
+            Mode::Public { own_cache } => {
+                serve.arg("--public");
+                own_cache
+            }
+            Mode::Empty { own_cache } => own_cache,
+        };
+        if own_cache {
+            let cache = dir.join("hf");
+            std::fs::create_dir_all(&cache)?;
+            serve.env("HF_HOME", cache);
         }
         let child = serve.spawn().context("starting ardana serve")?;
         let mut server = Server {
             child,
             url: format!("http://127.0.0.1:{port}"),
             log,
+            home,
         };
         server.wait_ready(sandbox)?;
         println!(

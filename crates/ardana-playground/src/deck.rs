@@ -7,14 +7,196 @@ use leptos::prelude::*;
 use ardana_api::{ModelInfo, ModelsResponse, QuestionType, SystemOneRequest};
 use serde_json::Value;
 
-use crate::api::{ApiClient, Exchange};
+use crate::api::{ApiClient, Exchange, Place, Unanswered};
 use crate::builder::{self, KindMemory};
+use crate::engine::{self, Stage};
 use crate::request::{self, Questions, Reply};
 use crate::share::SharePayload;
 
 /// The prefix of the model aliases share links from other playgrounds carry (`jev-latest`, `jev-1.12`); the API reads
 /// them as its default model, and so does the picker.
 const ALIAS_PREFIX: &str = "jev-";
+
+/// What the picker's value of a model's "In browser" row adds to its name: a word after a space, which no model name
+/// holds (`ardana pull` refuses whitespace in names), so the row never takes a server model's value.
+const IN_BROWSER: &str = " in-browser";
+
+/// The picker's value of the "In browser" row of `name`.
+pub fn browser_value(name: &str) -> String {
+    format!("{name}{IN_BROWSER}")
+}
+
+/// The model a picker value names, and whether it is the model's "In browser" row.
+fn picked_row(value: &str) -> (&str, bool) {
+    match value.strip_suffix(IN_BROWSER) {
+        Some(name) => (name, true),
+        None => (value, false),
+    }
+}
+
+/// The picker row a page opens on, from `/v1/models`: the default model (`x_default`) when this server has pulled it;
+/// else the browser default's "In browser" row ([`browser_default`], Q11); else the default model, or the first pulled
+/// one.
+fn opening_row(models: &[ModelInfo]) -> Option<String> {
+    let default = models.iter().find(|m| m.x_default);
+    if let Some(default) = default.filter(|m| m.pulled()) {
+        return Some(default.name.clone());
+    }
+    if let Some(browser) = browser_default(models) {
+        return Some(browser_value(&browser.name));
+    }
+    default
+        .or_else(|| models.iter().find(|m| m.pulled()))
+        .map(|m| m.name.clone())
+}
+
+/// The browser default (`x_browser_default`, Q11), when the list names one with a browser variant.
+fn browser_default(models: &[ModelInfo]) -> Option<&ModelInfo> {
+    models
+        .iter()
+        .find(|m| m.x_browser_default && m.x_browser.is_some())
+}
+
+/// The picker row a share link's model opens on: the "In browser" row of the listed model it names when this server
+/// has not pulled that model and the tab can run it, since the tab is where it runs here; the listed model's own row
+/// for another spelling of its name; else the name as it is.
+fn linked_row(models: &[ModelInfo], name: &str) -> String {
+    match named(models, name) {
+        Named::Listed(m) | Named::Quant(m) if !m.pulled() && m.x_browser.is_some() => {
+            browser_value(&m.name)
+        }
+        Named::Listed(m) => m.name.clone(),
+        Named::Quant(_) | Named::Unlisted => name.to_string(),
+    }
+}
+
+/// What a model name means in `/v1/models`, read as the server reads a request's model (`Registry::named`): a library
+/// model in any case, with or without a `:<quant>`, the quant recorded in lowercase. The list names every library
+/// model by its own name, pulled or not.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Named<'a> {
+    /// A listed model, by its exact name or another spelling of it.
+    Listed(&'a ModelInfo),
+    /// Another quant of the listed model, which the list does not name: the server pulls it.
+    Quant(&'a ModelInfo),
+    /// Nothing listed: the server refuses it (404) unless it has pulled it since it listed.
+    Unlisted,
+}
+
+fn named<'a>(models: &'a [ModelInfo], name: &str) -> Named<'a> {
+    let listed = |wanted: &str| models.iter().find(|m| m.name == wanted);
+    if let Some(model) = listed(name) {
+        return Named::Listed(model);
+    }
+    let (base, spelled) = match name.split_once(':') {
+        Some((base, quant)) => {
+            let base = base.to_ascii_lowercase();
+            let spelled = format!("{base}:{}", quant.to_lowercase());
+            (base, spelled)
+        }
+        None => {
+            let base = name.to_ascii_lowercase();
+            (base.clone(), base)
+        }
+    };
+    match (listed(&spelled), listed(&base)) {
+        (Some(model), _) => Named::Listed(model),
+        (None, Some(model)) => Named::Quant(model),
+        (None, None) => Named::Unlisted,
+    }
+}
+
+/// Where Run answers a server row's pick `name`: on the server only what it has pulled, under any spelling; with the
+/// ardana CLI any other model the list names, in any spelling or quant (the CLI resolves it), and on a public server
+/// every pick; on a local server, a name nothing listed matches goes to the server, which refuses it without pulling.
+fn server_runs(models: &[ModelInfo], name: &str) -> Runs {
+    match named(models, name) {
+        Named::Listed(model) if model.pulled() => Runs::Server,
+        Named::Listed(_) | Named::Quant(_) => Runs::Cli,
+        Named::Unlisted if public(models) => Runs::Cli,
+        Named::Unlisted => Runs::Server,
+    }
+}
+
+/// Whether `/v1/models` comes from a public server, which runs no model: a list that marks no default model.
+fn public(models: &[ModelInfo]) -> bool {
+    !models.is_empty() && !models.iter().any(|m| m.x_default)
+}
+
+/// How the ardana CLI reaches the model `name` where this server does not run the pick: a public server's visitor
+/// installs ardana; on a local server, which ardana runs already, `ardana pull` adds a model it has not pulled, under
+/// any spelling (an "In browser" row's model too), and a model it has pulled needs only `ardana run`.
+fn handoff(models: &[ModelInfo], name: &str) -> Handoff {
+    if public(models) {
+        Handoff::Install
+    } else if server_runs(models, name) == Runs::Server {
+        Handoff::Run
+    } else {
+        Handoff::Pull
+    }
+}
+
+/// Where Run answers the pick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Runs {
+    /// `POST /v1/systemone`: a model this server has pulled, or, on a local server, a name nothing listed matches.
+    Server,
+    /// This tab, on the model's browser variant: an "In browser" row.
+    Tab,
+    /// Nowhere here: a model this server would have to pull, or any server row of a public server. The page hands it
+    /// over to the ardana CLI ([`Handoff`]), and Run sends nothing (Q2).
+    Cli,
+}
+
+/// How the page hands a pick this server does not run ([`Runs::Tab`], [`Runs::Cli`]) over to the ardana CLI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Handoff {
+    /// A public server, which runs no model: ardana.ai's install line, then `ardana run` on the visitor's own machine.
+    Install,
+    /// A local server that has not pulled the model: `ardana pull` where the server runs, after which Run sends the
+    /// model's server row here, then `ardana run`.
+    Pull,
+    /// A local server that has pulled the model (picked on its "In browser" row): `ardana run`.
+    Run,
+}
+
+/// Why Run is held.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Held {
+    /// The questions JSON does not parse.
+    Invalid,
+    /// The picked model runs only with the ardana CLI ([`Runs::Cli`]) until `ardana pull` adds it to this local
+    /// server ([`Handoff::Pull`]).
+    Pull(String),
+    /// The picked model runs only with the ardana CLI, on the visitor's own machine: a public server runs no model
+    /// ([`Handoff::Install`]).
+    Cli(String),
+    /// There is no question to ask.
+    Empty,
+}
+
+impl Held {
+    /// The banner's words.
+    pub fn text(&self) -> String {
+        match self {
+            Held::Invalid => "Questions JSON has an error".to_string(),
+            Held::Pull(model) => {
+                format!("This server has not pulled {model}: pull it with the ardana CLI")
+            }
+            Held::Cli(model) => format!("{model} runs with the ardana CLI on your machine"),
+            Held::Empty => "Add a question to run".to_string(),
+        }
+    }
+}
+
+/// What Run sends, and where it is answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Job {
+    pub body: String,
+    /// For a run in this tab: the model, the bytes of its browser files (`x_browser`), and whether the server holds
+    /// them (`x_browser_pulled`).
+    pub tab: Option<(String, u64, bool)>,
+}
 
 /// Every signal of the page; `Copy`, so each component takes it whole.
 #[derive(Clone, Copy)]
@@ -26,45 +208,90 @@ pub struct Deck {
     pub questions_error: RwSignal<Option<String>>,
     /// The question whose builder is open.
     pub editing: RwSignal<Option<String>>,
-    /// The picked model; empty until `/v1/models` names the default, and a request then names none.
+    /// The picked model; empty until `/v1/models` names the row to open on, and a request then names none.
     pub model: RwSignal<String>,
-    /// `/v1/models` as last listed: the pulled models, then the library models a first run pulls.
+    /// Whether the pick is the model's "In browser" row: Run answers in this tab, on its browser variant.
+    pub in_browser: RwSignal<bool>,
+    /// Whether the pick waits for `/v1/models` to place it: the page's first pick, or a share link's.
+    unplaced: StoredValue<bool>,
+    /// `/v1/models` as last listed: the pulled models, then the library models this server has not pulled.
     pub models: RwSignal<Vec<ModelInfo>>,
     /// The model the last run named (none for the server's default).
     pub run_model: RwSignal<Option<String>>,
     /// Why the URL's share link could not be loaded.
     pub share_error: RwSignal<Option<String>>,
-    /// Both editors as they were before a preset load or a removed question, until the next edit.
-    pub previous: RwSignal<Option<(String, String)>>,
+    /// Both editors as they were before a preset load, a removed question or a share link, until the next edit.
+    pub previous: RwSignal<Option<Previous>>,
     /// Each question's criteria per type it has had, so switching its type back restores them.
     kinds: StoredValue<HashMap<String, KindMemory>>,
-    /// A polite announcement when an input turns invalid or valid again.
+    /// A polite announcement when an input turns invalid or valid again, or a preset loads; each set is said, the same
+    /// words again too.
     pub notice: RwSignal<String>,
-    pub runner: Action<String, Exchange>,
+    /// Where a run in this tab is, while one is in flight.
+    pub stage: RwSignal<Option<Stage>>,
+    /// Ends the run in this tab in flight ([`Deck::stop`]).
+    stopper: StoredValue<Option<ActionAbortHandle>>,
+    /// Whether the last run was stopped before it answered.
+    pub stopped: RwSignal<bool>,
+    /// Whether a run of the picked "In browser" row downloads nothing (`engine::kept`): the model it was asked for, and
+    /// the answer.
+    pub kept: RwSignal<Option<(String, bool)>>,
+    pub runner: Action<Job, Exchange>,
     pub last: Memo<Option<LastRun>>,
     /// The request the last run sent, read back from its exact body.
     pub sent: Memo<Option<SystemOneRequest>>,
-    /// Whether the state or the model differs from the last run's.
+    /// Whether the state, the model or where it runs differs from the last run's.
     pub inputs_changed: Memo<bool>,
     /// Whether anything RUN would send differs from the last run's request.
     pub stale: Memo<bool>,
+}
+
+/// What Restore previous puts back: both editors, and the picker's row when what replaced them (a share link) picked
+/// another.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Previous {
+    state: String,
+    questions: String,
+    pick: Option<String>,
 }
 
 /// The last `POST /v1/systemone`: what went over the wire, and the reply read from it (`Err` when no response came).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LastRun {
     pub exchange: Exchange,
-    pub reply: Result<Reply, String>,
+    pub reply: Result<Reply, Unanswered>,
     /// Counts runs, so each run's results are drawn afresh.
     pub number: usize,
 }
 
+impl LastRun {
+    /// Whether the run was answered in this tab.
+    pub fn in_tab(&self) -> bool {
+        matches!(self.exchange.place, Place::Tab(_))
+    }
+}
+
 impl Deck {
     pub fn new(client: ApiClient) -> Deck {
-        let runner = Action::new_local(move |body: &String| {
+        let stage = RwSignal::new(None);
+        let kept = RwSignal::new(None);
+        let runner = Action::new_local(move |job: &Job| {
             let client = client.clone();
-            let body = body.clone();
-            async move { client.systemone(body).await }
+            let job = job.clone();
+            async move {
+                match job.tab {
+                    None => client.systemone(job.body).await,
+                    Some((name, total, pulled)) => {
+                        let exchange =
+                            engine::run(&client, &name, total, pulled, job.body, stage).await;
+                        // A run that started the model has every file: the next downloads nothing.
+                        if matches!(exchange.place, Place::Tab(Some(_))) {
+                            kept.set(Some((name, true)));
+                        }
+                        exchange
+                    }
+                }
+            }
         });
         let version = runner.version();
         let last = Memo::new(move |_| {
@@ -86,6 +313,7 @@ impl Deck {
         });
         let state_text = RwSignal::new(String::new());
         let model = RwSignal::new(String::new());
+        let in_browser = RwSignal::new(false);
         let questions = RwSignal::new(Questions::new());
         let inputs_changed = Memo::new(move |_| {
             sent.with(|sent| {
@@ -93,6 +321,9 @@ impl Deck {
                     sent.model.as_deref() != Some(model.read().as_str())
                         || sent.state != request::state_value(&state_text.read())
                 })
+            }) || last.with(|last| {
+                last.as_ref()
+                    .is_some_and(|run| run.in_tab() != in_browser.get())
             })
         });
         let stale = Memo::new(move |_| {
@@ -109,12 +340,18 @@ impl Deck {
             questions_error: RwSignal::new(None),
             editing: RwSignal::new(None),
             model,
+            in_browser,
+            unplaced: StoredValue::new(true),
             models: RwSignal::new(Vec::new()),
             run_model: RwSignal::new(None),
             share_error: RwSignal::new(None),
             previous: RwSignal::new(None),
             kinds: StoredValue::new(HashMap::new()),
             notice: RwSignal::new(String::new()),
+            stage,
+            stopper: StoredValue::new(None),
+            stopped: RwSignal::new(false),
+            kept,
             runner,
             last,
             sent,
@@ -203,7 +440,7 @@ impl Deck {
     /// that now holds its place, if any.
     pub fn remove_question(&self, id: &str) -> Option<String> {
         let mut next = None;
-        self.keep_previous(|| {
+        self.keep_previous(false, || {
             let _ = self.edit(|questions| {
                 if let Some(index) = questions.get_index_of(id) {
                     questions.shift_remove_index(index);
@@ -221,22 +458,30 @@ impl Deck {
 
     /// Loads a preset into both editors, keeping them as they were for Restore previous.
     pub fn load_preset(&self, state_text: String, questions_text: String) {
-        self.keep_previous(|| self.load(state_text, questions_text));
+        self.keep_previous(false, || self.load(state_text, questions_text));
     }
 
-    /// Puts back both editors as they were before the last preset load or removed question.
+    /// Puts back both editors as they were before the last preset load, removed question or share link, and the
+    /// picker's row a share link replaced.
     pub fn restore_previous(&self) {
-        if let Some((state, questions)) = self.previous.get_untracked() {
-            self.load(state, questions);
+        if let Some(previous) = self.previous.get_untracked() {
+            self.load(previous.state, previous.questions);
+            if let Some(pick) = previous.pick {
+                self.pick(&pick);
+            }
         }
     }
 
-    /// Runs `change`, then offers the editors as they were before it for Restore previous.
-    fn keep_previous(&self, change: impl FnOnce()) {
-        let before = (
-            self.state_text.get_untracked(),
-            self.questions_text.get_untracked(),
-        );
+    /// Runs `change`, then offers the editors as they were before it for Restore previous, with the picker's row when
+    /// `pick` (a change that picks another, once it is placed).
+    fn keep_previous(&self, pick: bool, change: impl FnOnce()) {
+        let before = Previous {
+            state: self.state_text.get_untracked(),
+            questions: self.questions_text.get_untracked(),
+            pick: pick
+                .then(|| untrack(|| self.picked()))
+                .filter(|pick| !pick.is_empty()),
+        };
         change();
         self.previous.set(Some(before));
     }
@@ -249,53 +494,149 @@ impl Deck {
         self.editing.set(None);
     }
 
-    /// Loads a share link's editors and model; a link without a model, or with an alias, picks the default model.
+    /// Loads a share link's editors and model. Once `/v1/models` is in, a link without a model, or with an alias, opens
+    /// where the page opens, and a model on the row it runs on here ([`linked_row`]). Editors that hold other work
+    /// than the link's stay one Restore previous away, with the row they had; the link they hold already leaves what
+    /// Restore previous offers as it was.
     pub fn load_share(&self, share: Result<SharePayload, String>) {
         match share {
             Ok(payload) => {
-                self.load(payload.document_text, payload.prompts_text);
-                let model = payload
-                    .selected_models
-                    .into_iter()
-                    .next()
-                    .filter(|model| !model.starts_with(ALIAS_PREFIX))
-                    .or_else(|| self.default_model_untracked());
-                self.model.set(model.unwrap_or_default());
+                let differ = untrack(|| {
+                    let (state, questions) = (self.state_text.read(), self.questions_text.read());
+                    !(state.is_empty() && questions.is_empty())
+                        && (*state != payload.document_text || *questions != payload.prompts_text)
+                });
+                let load = || {
+                    self.load(payload.document_text, payload.prompts_text);
+                    let model = payload
+                        .selected_models
+                        .into_iter()
+                        .next()
+                        .filter(|model| !model.starts_with(ALIAS_PREFIX));
+                    self.model.set(model.unwrap_or_default());
+                    self.in_browser.set(false);
+                    self.unplaced.set_value(true);
+                    self.place();
+                };
+                if differ {
+                    self.keep_previous(true, load);
+                } else {
+                    let previous = self.previous.get_untracked();
+                    load();
+                    self.previous.set(previous);
+                }
                 self.share_error.set(None);
             }
             Err(err) => self.share_error.set(Some(err)),
         }
     }
 
-    /// Takes a `/v1/models` list; while no model is picked, picks its default.
+    /// Takes a `/v1/models` list, and places the pick that waits for it.
     pub fn set_models(&self, list: ModelsResponse) {
         self.models.set(list.models);
-        if self.model.with_untracked(String::is_empty)
-            && let Some(default) = self.default_model_untracked()
-        {
-            self.model.set(default);
+        self.place();
+    }
+
+    /// Places a pick that waits for `/v1/models`, once the list is in: no model opens on [`opening_row`], a share
+    /// link's model on [`linked_row`].
+    fn place(&self) {
+        if !self.unplaced.get_value() || self.models.with_untracked(Vec::is_empty) {
+            return;
+        }
+        let model = self.model.get_untracked();
+        let row = self.models.with_untracked(|models| {
+            if model.is_empty() {
+                opening_row(models)
+            } else {
+                Some(linked_row(models, &model))
+            }
+        });
+        if let Some(row) = row {
+            self.pick(&row);
+        }
+        self.unplaced.set_value(false);
+    }
+
+    /// Picks the picker row whose value is `value`: a model on the server, or a model's "In browser" row. Another row
+    /// stops a run in this tab.
+    pub fn pick(&self, value: &str) {
+        let (name, in_browser) = picked_row(value);
+        let same = untrack(|| self.in_browser.get() == in_browser && *self.model.read() == name);
+        if !same {
+            self.stop();
+        }
+        self.model.set(name.to_string());
+        self.in_browser.set(in_browser);
+        self.unplaced.set_value(false);
+        if in_browser {
+            engine::prepare();
+        } else {
+            // The server's runs need nothing of a model run in this tab: its session (the weights on the GPU, or in
+            // onnxruntime-web's memory) is released, and a later run in the tab loads it again from the kept files.
+            engine::unload();
         }
     }
 
-    /// The model requests without one use: the one the list marks `x_default`, else its first pulled model.
-    fn default_model_untracked(&self) -> Option<String> {
-        self.models.with_untracked(|models| {
-            models
-                .iter()
-                .find(|m| m.x_default)
-                .or_else(|| models.iter().find(|m| m.pulled()))
-                .map(|m| m.name.clone())
+    /// The picker's value of the pick.
+    pub fn picked(&self) -> String {
+        let model = self.model.get();
+        if self.in_browser.get() {
+            browser_value(&model)
+        } else {
+            model
+        }
+    }
+
+    /// The bytes a tab downloads to run the picked model's browser variant, while its "In browser" row is picked.
+    pub fn browser_size(&self) -> Option<u64> {
+        if !self.in_browser.get() {
+            return None;
+        }
+        self.listed(&self.model.read())?.x_browser
+    }
+
+    /// The `/v1/models` entry of the model `name`.
+    pub fn listed(&self, name: &str) -> Option<ModelInfo> {
+        self.models
+            .with(|models| models.iter().find(|m| m.name == name).cloned())
+    }
+
+    /// Whether this page comes from a public server, which runs no model ([`public`]).
+    pub fn public(&self) -> bool {
+        self.models.with(|models| public(models))
+    }
+
+    /// How the ardana CLI reaches the pick, where this server does not run it ([`Handoff`]).
+    pub fn handoff(&self) -> Handoff {
+        self.models
+            .with(|models| self.model.with(|model| handoff(models, model)))
+    }
+
+    /// The browser default's name, when the list names one that runs in a tab.
+    pub fn browser_default(&self) -> Option<String> {
+        self.models
+            .with(|models| browser_default(models).map(|m| m.name.clone()))
+    }
+
+    /// What the ardana CLI downloads to pull the pick, or to run it first: the size of the listed model it names, in
+    /// any spelling of its name (`x_size`); none for another quant, whose file the list does not name.
+    pub fn pull_size(&self) -> Option<u64> {
+        self.models.with(|models| {
+            self.model.with(|model| match named(models, model) {
+                Named::Listed(m) => m.x_size,
+                Named::Quant(_) | Named::Unlisted => None,
+            })
         })
     }
 
-    /// The listed model `name` when it is not pulled yet: the first run naming it pulls it.
-    pub fn unpulled(&self, name: &str) -> Option<ModelInfo> {
-        self.models.with(|models| {
-            models
-                .iter()
-                .find(|m| m.name == name && !m.pulled())
-                .cloned()
-        })
+    /// Where Run answers the pick: this tab for an "In browser" row, else where the server reads the model's name
+    /// ([`server_runs`]): run there only when it has pulled the model, never pulled by a run.
+    pub fn runs(&self) -> Runs {
+        if self.in_browser.get() {
+            return Runs::Tab;
+        }
+        self.models
+            .with(|models| self.model.with(|model| server_runs(models, model)))
     }
 
     /// The request RUN would send now.
@@ -305,31 +646,267 @@ impl Deck {
         })
     }
 
-    /// Whether Run can send: the questions parse, there is at least one, and no run is in flight.
+    /// Whether Run can send: nothing holds it ([`Deck::held`]) and no run is in flight.
     pub fn can_run(&self) -> bool {
-        self.questions_error.with(Option::is_none)
-            && self.questions.with(|q| !q.is_empty())
-            && !self.runner.pending().get()
+        self.held().is_none() && !self.runner.pending().get()
     }
 
-    /// Why Run is held, when it is held for a reason the page can name.
-    pub fn held_reason(&self) -> Option<&'static str> {
+    /// Why Run is held, when it is: the questions do not parse, the pick runs only with the ardana CLI (here once it is
+    /// pulled, or on the visitor's machine), or there is no question.
+    pub fn held(&self) -> Option<Held> {
         if self.questions_error.with(Option::is_some) {
-            Some("Questions JSON has an error")
+            Some(Held::Invalid)
+        } else if self.runs() == Runs::Cli {
+            let model = self.model.get();
+            Some(if self.public() {
+                Held::Cli(model)
+            } else {
+                Held::Pull(model)
+            })
         } else if self.questions.with(|q| q.is_empty()) {
-            Some("Add a question to run")
+            Some(Held::Empty)
         } else {
             None
         }
     }
 
-    /// Sends the editors as they are now; does nothing while RUN is held.
+    /// Sends the editors as they are now, to the server or, with an "In browser" row picked, to this tab's engine;
+    /// does nothing while RUN is held.
     pub fn run(&self) {
         if !untrack(|| self.can_run()) {
             return;
         }
         let request = untrack(|| self.request());
         self.run_model.set(request.model.clone());
-        self.runner.dispatch(request::body(&request));
+        let tab = untrack(|| {
+            self.in_browser.get().then(|| {
+                let name = self.model.get();
+                let size = self.browser_size().unwrap_or_default();
+                let pulled = self.listed(&name).is_some_and(|m| m.x_browser_pulled);
+                (name, size, pulled)
+            })
+        });
+        let in_tab = tab.is_some();
+        if in_tab {
+            // Set before the run starts, so the page never shows a server's wait for a run in this tab.
+            self.stage.set(Some(Stage::Asking));
+        }
+        self.stopped.set(false);
+        let handle = self.runner.dispatch(Job {
+            body: request::body(&request),
+            tab,
+        });
+        self.stopper.set_value(in_tab.then_some(handle));
+    }
+
+    /// Runs a share link once, as `?autorun=1` asks: at once on the server; in this tab only when its files need no
+    /// download, since a first run there downloads what nobody has agreed to yet (Run then waits for a tap).
+    pub fn autorun(&self) {
+        if untrack(|| self.runs()) != Runs::Tab {
+            self.run();
+            return;
+        }
+        let deck = *self;
+        let name = self.model.get_untracked();
+        leptos::task::spawn_local(async move {
+            let kept = engine::kept(&name).await;
+            // The pick may have moved on meanwhile: only the row the link opened on runs.
+            if kept && deck.in_browser.get_untracked() && deck.model.get_untracked() == name {
+                deck.run();
+            }
+        });
+    }
+
+    /// Stops the run in this tab in flight, if any: its downloads end where they are, Run is Run again, and nothing it
+    /// would have answered lands.
+    pub fn stop(&self) {
+        if self.stage.get_untracked().is_none() {
+            return;
+        }
+        if let Some(handle) = self.stopper.try_update_value(Option::take).flatten() {
+            handle.abort();
+        }
+        engine::stop();
+        self.stage.set(None);
+        self.stopped.set(true);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn picker_values_name_the_model_and_where_it_runs() {
+        assert_eq!(
+            picked_row(&browser_value("decider-0.8b")),
+            ("decider-0.8b", true)
+        );
+        assert_eq!(picked_row("decider-0.8b"), ("decider-0.8b", false));
+        assert_eq!(picked_row("decider-2b:q8_0"), ("decider-2b:q8_0", false));
+        assert_ne!(browser_value("decider-2b"), "decider-2b");
+    }
+
+    /// A `/v1/models` entry: `name`, pulled or not, the default model or not, and with a browser variant (the browser
+    /// default when `browser` is `Some(true)`) or not.
+    fn info(name: &str, pulled: bool, default: bool, browser: Option<bool>) -> ModelInfo {
+        ModelInfo {
+            name: name.to_string(),
+            description: String::new(),
+            release_date: String::new(),
+            x_pulled: Some(pulled),
+            x_default: default,
+            x_size: None,
+            x_browser: browser.map(|_| 1),
+            x_browser_pulled: false,
+            x_browser_default: browser == Some(true),
+        }
+    }
+
+    /// Q11: the page opens on the default model when the server has pulled it, else on the browser default's row in
+    /// the tab (an empty registry, or a public server, which has no default model).
+    #[test]
+    fn the_page_opens_where_a_model_runs() {
+        let local = [
+            info("decider-2b", true, true, Some(false)),
+            info("decider-0.8b", false, false, Some(true)),
+            info("decider-4b", false, false, None),
+        ];
+        assert_eq!(opening_row(&local).as_deref(), Some("decider-2b"));
+        let empty = [
+            info("decider-2b", false, true, Some(false)),
+            info("decider-0.8b", false, false, Some(true)),
+            info("decider-4b", false, false, None),
+        ];
+        assert_eq!(opening_row(&empty), Some(browser_value("decider-0.8b")));
+        let public = empty.clone().map(|m| ModelInfo {
+            x_default: false,
+            ..m
+        });
+        assert_eq!(opening_row(&public), Some(browser_value("decider-0.8b")));
+        // Without a browser default: the default model, else the first pulled one.
+        let plain = [
+            info("decider-4b", false, true, None),
+            info("smollm3-3b", true, false, None),
+        ];
+        assert_eq!(opening_row(&plain).as_deref(), Some("decider-4b"));
+        assert_eq!(opening_row(&plain[1..]).as_deref(), Some("smollm3-3b"));
+        assert_eq!(opening_row(&[]), None);
+
+        // A share link's model opens in the tab only where this server lacks it and the tab can run it, whatever the
+        // spelling; another spelling of a listed model opens on that model's row.
+        for name in ["decider-0.8b", "DECIDER-0.8B", "decider-0.8b:Q8_0"] {
+            assert_eq!(
+                linked_row(&empty, name),
+                browser_value("decider-0.8b"),
+                "{name}"
+            );
+            assert_eq!(
+                linked_row(&public, name),
+                browser_value("decider-0.8b"),
+                "{name}"
+            );
+        }
+        assert_eq!(linked_row(&local, "decider-2b"), "decider-2b");
+        assert_eq!(linked_row(&local, "Decider-2B"), "decider-2b");
+        assert_eq!(linked_row(&empty, "decider-4b"), "decider-4b");
+        assert_eq!(linked_row(&empty, "Decider-4B"), "decider-4b");
+        assert_eq!(linked_row(&empty, "decider-4b:q8_0"), "decider-4b:q8_0");
+        assert_eq!(linked_row(&empty, "speed_latest"), "speed_latest");
+    }
+
+    /// Run answers on the server only what it has pulled, read as the server reads names (`Registry::named`): any
+    /// other spelling of a library model, which the server would pull, goes to the ardana CLI; a name nothing listed
+    /// matches goes to a local server, which refuses it without pulling; a public server runs nothing.
+    #[test]
+    fn run_never_makes_the_server_pull() {
+        // decider-2b pulled (the default), and its Q8_0 too; the rest of the library not.
+        let local = [
+            info("decider-2b", true, true, Some(false)),
+            info("decider-2b:q8_0", true, false, None),
+            info("decider-0.8b", false, false, Some(true)),
+            info("decider-4b", false, false, None),
+        ];
+        let spellings = [
+            ("decider-2b", Runs::Server),
+            ("Decider-2B", Runs::Server),
+            ("decider-2b:q8_0", Runs::Server),
+            ("DECIDER-2B:Q8_0", Runs::Server),
+            ("decider-2b:q4_0", Runs::Cli),
+            ("decider-4b", Runs::Cli),
+            ("Decider-4B", Runs::Cli),
+            ("decider-4b:q8_0", Runs::Cli),
+            ("decider-4b:Q8_0", Runs::Cli),
+            ("decider-0.8b", Runs::Cli),
+            ("DECIDER-0.8B", Runs::Cli),
+            ("decider-0.8b:Q8_0", Runs::Cli),
+            ("speed_latest", Runs::Server),
+            ("hf.co/Mapika/decider-2b-GGUF:Q4_K_M", Runs::Server),
+        ];
+        for (name, runs) in spellings {
+            assert_eq!(server_runs(&local, name), runs, "local {name}");
+        }
+        let served_publicly = [
+            info("decider-2b", false, false, Some(false)),
+            info("decider-0.8b", false, false, Some(true)),
+            info("decider-4b", false, false, None),
+        ];
+        for (name, _) in spellings {
+            assert_eq!(
+                server_runs(&served_publicly, name),
+                Runs::Cli,
+                "public {name}"
+            );
+        }
+        // A list not in yet is no public server's.
+        assert!(!public(&[]));
+    }
+
+    /// A pick this server does not run goes to the ardana CLI: on a local server, which ardana runs already, after
+    /// `ardana pull` for a model it has not pulled under any spelling (an "In browser" row's model too), and without it
+    /// for an "In browser" row of a model it has pulled; on a public server, after ardana.ai's install line.
+    #[test]
+    fn the_cli_gets_a_model_onto_a_local_server() {
+        let local = [
+            info("decider-2b", true, true, Some(false)),
+            info("decider-0.8b", false, false, Some(true)),
+            info("decider-4b", false, false, None),
+        ];
+        for name in [
+            "decider-4b",
+            "Decider-4B",
+            "decider-4b:q8_0",
+            "decider-2b:q4_0",
+            "decider-0.8b",
+        ] {
+            assert_eq!(handoff(&local, name), Handoff::Pull, "{name}");
+        }
+        assert_eq!(handoff(&local, "decider-2b"), Handoff::Run);
+        let served_publicly = local.clone().map(|m| ModelInfo {
+            x_pulled: Some(false),
+            x_default: false,
+            ..m
+        });
+        for name in ["decider-4b", "decider-2b", "decider-0.8b"] {
+            assert_eq!(handoff(&served_publicly, name), Handoff::Install, "{name}");
+        }
+        assert_eq!(
+            browser_default(&served_publicly).map(|m| m.name.as_str()),
+            Some("decider-0.8b")
+        );
+        assert_eq!(browser_default(&local[..1]), None);
+    }
+
+    #[test]
+    fn the_banner_says_why_run_is_held() {
+        assert_eq!(
+            Held::Pull("decider-4b".into()).text(),
+            "This server has not pulled decider-4b: pull it with the ardana CLI"
+        );
+        assert_eq!(
+            Held::Cli("decider-4b".into()).text(),
+            "decider-4b runs with the ardana CLI on your machine"
+        );
+        assert_eq!(Held::Empty.text(), "Add a question to run");
     }
 }

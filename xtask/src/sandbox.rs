@@ -182,3 +182,26 @@ impl Sandbox {
 pub fn cargo() -> OsString {
     std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into())
 }
+
+/// Runs `cmd` with its output on the terminal; fails unless it exits 0.
+pub fn run(cmd: &mut Command) -> Result<()> {
+    let status = cmd.status().with_context(|| format!("running {cmd:?}"))?;
+    if !status.success() {
+        bail!("{:?} failed ({status})", cmd.get_program());
+    }
+    Ok(())
+}
+
+/// Runs `cmd` and returns its stdout; fails with its stderr unless it exits 0.
+pub fn run_stdout(cmd: &mut Command) -> Result<String> {
+    let output = cmd.output().with_context(|| format!("running {cmd:?}"))?;
+    if !output.status.success() {
+        bail!(
+            "{:?} failed ({}): {}",
+            cmd.get_program(),
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8(output.stdout)?)
+}

@@ -26,20 +26,37 @@ language: real local model names, never Jev's.
 
 ## Operating Context
 - The playground is served by `ardana serve` at `/`, same origin as the public API (`/v1/systemone`, `/v1/models`,
-  `/health`); it has no remote endpoints in Step 1.
+  `/health`, and `/v1/browser/<name>/<file>` for browser models); it has no remote endpoints in Step 1. The same page is
+  also a public onboarding demo, served by `ardana serve --public`, which runs no model on the server: its visitors run
+  the browser models in their own tabs, and every other model shows how to install ardana and run it.
 - Developers move between the playground, their editor and a terminal; they copy curl, Python (`typesafe-sdk`) and
-  TypeScript (`@typesafe-ai/sdk`) snippets out of it.
+  TypeScript (`@typesafe-ai/sdk`) snippets out of it, and, for a model the server does not run, the ardana CLI's
+  commands: `ardana pull` to put it on this server and the `ardana run` command that sends the same request (on a
+  public server, ardana.ai's install line takes the pull's place).
 - Share links (`#share/<lz-string payload>`), including those on docs.typesafe.ai, open in it.
-- Models come from Ardana's library (`decider-2b` by default) or any `hf.co/` GGUF, pulled with `ardana pull` or on
-  their first run, and are listed by `/v1/models`: decider-format System 1 models and stock instruct models read in
-  chat layout. A first run on an empty machine downloads the model, and the page says so.
+- Models come from Ardana's library (`decider-2b` by default) or any `hf.co/` GGUF, pulled with `ardana pull`, `ardana
+  run` or an API request's first use, and are listed by `/v1/models`: decider-format System 1 models and stock instruct
+  models read in chat layout. The playground never makes the server pull one, under any spelling of its name: a model
+  the server has not pulled shows `ardana pull <name>`, to run where the server runs, and the page runs it on the
+  server once the list it reads again (after each run, and whenever its tab comes back) says it is pulled; a public
+  server, which runs no model, shows how to install ardana and run it, and offers the browser default in the tab
+  instead; and a server with nothing pulled opens on the browser default (decider-0.8b) in the tab.
+- A library model with a browser variant (decider-0.8b, decider-2b, qwen3.5-0.8b) can also run in the visitor's tab:
+  the server pulls its ONNX files once and serves them, the tab downloads them once and keeps them (where the page is a
+  secure context; elsewhere it downloads them on each visit, and says so), and onnxruntime-web (vendored, same origin)
+  runs them on WebGPU, else WASM. Before a first run the page says what Run will download, and what the model then
+  takes in memory, and nothing downloads without a tap; while it runs the page shows the server's pull, the download
+  with its bytes, a Stop, and then where the answers came from.
 
 ## Capabilities and Constraints
 - Inputs: state as text or JSON; a `questions` map with `noul` (optional true/false criteria), `choice` (2..255 named
-  options) and `score` (2..10 ordered levels) questions; a model picked from `/v1/models`.
+  options) and `score` (2..10 ordered levels) questions; a model picked from `/v1/models`, run on the server or, from
+  its "In browser" row, in the tab, or, when the server does not run it, handed over as the ardana CLI's commands
+  (`ardana pull` onto a local server, or ardana.ai's install line on a public one, then `ardana run`).
 - Outputs: per-question answers with probabilities, confidence, noul and score values, `x_` extras, token usage and
   latency; the raw request and response; `detail` of 413 and 422 errors.
-- Every displayed value equals the API response it came from.
+- Every displayed value equals the API response it came from; a run in the tab answers with the same planner and
+  readout as the server, refusals included, byte for byte.
 - Stack: Leptos CSR built with trunk and embedded in the binary; styles live in `.css` files.
 - Step 1 excludes remote endpoints, a theme switcher, image inputs, and Jev's lesson walkthroughs. The page follows
   the system's light or dark scheme (`prefers-color-scheme`) and offers no control of its own.

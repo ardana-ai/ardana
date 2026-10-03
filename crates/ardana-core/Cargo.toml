@@ -15,7 +15,14 @@ minijinja-contrib.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokenizers.workspace = true
+
+# The tokenizer's regex backend: Oniguruma (C), as the Python package uses it, natively; fancy-regex (pure Rust) in
+# the playground's wasm32 build, where Oniguruma does not compile.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokenizers = { workspace = true, features = ["onig"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokenizers = { workspace = true, features = ["unstable_wasm"] }
 
 [dev-dependencies]
 sha2.workspace = true

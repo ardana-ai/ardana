@@ -193,6 +193,20 @@ pub fn hf_file(repo: &str, name: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// `listed`, a `/v1/models` body as a test expects it, with `x_browser_pulled` on every model whose browser variant the
+/// hub cache (`tmp/hf`) holds whole: all three once `cargo xtask onnx convert` has built them, none where `cargo xtask
+/// fetch --tests` fetched no ONNX file (CI).
+pub async fn with_held_variants(mut listed: Value) -> Result<Value> {
+    let cache = ardana_registry::BrowserCache::from_env()?;
+    for model in listed["models"].as_array_mut().context("models")? {
+        let name = model["name"].as_str().unwrap_or_default().to_string();
+        if model.get("x_browser").is_some() && cache.holds(&name).await {
+            model["x_browser_pulled"] = Value::Bool(true);
+        }
+    }
+    Ok(listed)
+}
+
 /// `$ARDANA_TMP/<name>`, emptied.
 pub fn scratch(name: &str) -> Result<PathBuf> {
     let tmp = PathBuf::from(std::env::var_os("ARDANA_TMP").context("ARDANA_TMP is not set")?);

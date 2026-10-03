@@ -1,0 +1,20 @@
+[package]
+name = "ardana-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# The playground's second WebAssembly module: trunk builds this library (`data-type="worker"` in
+# crates/ardana-playground/index.html) into `dist/engine/`, and the page imports it on an "In browser" pick.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow.workspace = true
+ardana-api.workspace = true
+ardana-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+wasm-bindgen.workspace = true

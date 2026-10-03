@@ -1,8 +1,9 @@
 //! [`Decider`]: a Jev request -> prompt rows -> label logits from a [`LoadedModel`] -> typed answers, as decider 1.6.0's
 //! `/v1/systemone` (`decider/serve.py#systemone`) computes them, with one prompt row per decode.
 
-use ardana_api::{SystemOneRequest, SystemOneResponse, Usage};
+use ardana_api::{ErrorBody, SystemOneRequest, SystemOneResponse, Usage, ValidationItem};
 use indexmap::IndexMap;
+use serde_json::Value;
 use tokenizers::Tokenizer;
 
 use crate::profile::ModelProfile;
@@ -27,6 +28,32 @@ pub enum DecideError {
 impl From<PromptError> for DecideError {
     fn from(err: PromptError) -> Self {
         DecideError::Runtime(err.into())
+    }
+}
+
+/// How the API answers a request it could not decide; the server and the playground's in-tab engine both answer with
+/// these, so a refused request reads the same wherever it ran.
+impl DecideError {
+    /// 422 for bad input, 413 for too much input, 500 for a failing tokenizer or runtime.
+    pub fn status(&self) -> u16 {
+        match self {
+            DecideError::Invalid { .. } => 422,
+            DecideError::Capacity(_) => 413,
+            DecideError::Runtime(_) => 500,
+        }
+    }
+
+    /// One `value_error` at `loc` with decider's message, a `request_too_large` error, or an `api_error`.
+    pub fn body(&self) -> ErrorBody {
+        match self {
+            DecideError::Invalid { loc, msg } => ErrorBody::validation(vec![ValidationItem::new(
+                loc.iter().cloned().map(Value::String).collect(),
+                msg.clone(),
+                "value_error",
+            )]),
+            DecideError::Capacity(msg) => ErrorBody::error("request_too_large", msg.clone()),
+            DecideError::Runtime(err) => ErrorBody::error("api_error", format!("{err:#}")),
+        }
     }
 }
 
@@ -91,6 +118,16 @@ impl Plan {
     pub fn row_ids(&self) -> impl Iterator<Item = &[u32]> {
         self.items.iter().map(|it| it.ids.as_slice())
     }
+}
+
+/// One row as [`Decider::run`] decodes it: [`LoadedModel::slot_logits`]'s arguments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Decode<'a> {
+    pub ids: &'a [u32],
+    /// The answer slot of each question in the row (one per row in [`Decider::plan`]'s rows).
+    pub slots: &'a [usize],
+    /// The label ids every slot is read at, in label order.
+    pub label_ids: &'a [u32],
 }
 
 /// Reads decider-format and stock models through one tokenizer and profile.
@@ -201,6 +238,20 @@ impl Decider {
         Err(DecideError::Capacity(msg))
     }
 
+    /// What [`Decider::run`] asks the model for, row by row in decode order: the ids, the answer slots and the label
+    /// ids each slot is read at. A runtime that cannot be called from `run` (an asynchronous one, in a browser)
+    /// decodes these itself and hands the logits back through a [`LoadedModel`] that replays them.
+    pub fn decodes<'a>(&'a self, plan: &'a Plan) -> impl Iterator<Item = Decode<'a>> {
+        plan.items.iter().map(|item| {
+            let width = item.nopts.iter().copied().max().unwrap_or(0);
+            Decode {
+                ids: &item.ids,
+                slots: &item.slots,
+                label_ids: &self.labels.ids[..width],
+            }
+        })
+    }
+
     /// Decodes every row alone and reads the answers: per slot, softmax over the question's label logits divided by
     /// the temperature of its answer type.
     pub fn run(
@@ -210,12 +261,11 @@ impl Decider {
     ) -> Result<SystemOneResponse, DecideError> {
         self.check(plan, Some(model.n_ctx()))?;
         let mut probs = Vec::with_capacity(plan.items.len());
-        for (item, row) in plan.items.iter().zip(&plan.rows) {
-            let width = item.nopts.iter().copied().max().unwrap_or(0);
-            let label_ids = &self.labels.ids[..width];
+        for ((decode, item), row) in self.decodes(plan).zip(&plan.items).zip(&plan.rows) {
             let logits = model
-                .slot_logits(&item.ids, &item.slots, label_ids)
+                .slot_logits(decode.ids, decode.slots, decode.label_ids)
                 .map_err(DecideError::Runtime)?;
+            let width = decode.label_ids.len();
             if logits.len() != item.slots.len() || logits.iter().any(|l| l.len() != width) {
                 return Err(DecideError::Runtime(anyhow::anyhow!(
                     "the runtime returned {} logit rows for {} slots, expected {width} logits each",

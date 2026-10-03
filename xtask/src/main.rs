@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result, bail};
 use xtask::sandbox::Sandbox;
-use xtask::{deps, docs, e2e, env, export, fetch, playground};
+use xtask::{deps, docs, e2e, env, export, fetch, onnx, playground};
 
 const USAGE: &str = "usage: cargo xtask <step>
   env [--claude]   print the sandbox environment as shell exports, or write it
@@ -14,6 +14,12 @@ const USAGE: &str = "usage: cargo xtask <step>
   check-deps       check the workspace members and dependency direction
   check-docs       check CLAUDE.md, AGENTS.md and docs/guidelines
   export-decider   export decider's prompt layout cases into crates/ardana-core/tests/data/decider
+  onnx convert <name>
+                   build a library model's browser ONNX (and the GGUF ardana-ai
+                   hosts) into tmp/hf and record its sizes in library.toml
+  onnx publish <name> [--dry-run]
+                   upload them to huggingface.co/ardana-ai and pin them in
+                   xtask/fetch.toml, or only print the commands
   e2e <suite>      run an end-to-end suite";
 
 fn main() -> ExitCode {
@@ -47,6 +53,16 @@ fn run() -> Result<()> {
         ["check-deps"] => deps::check_deps(&deps::metadata(root)?)?,
         ["check-docs"] => docs::check_docs(root)?,
         ["export-decider"] => sandbox()?.guarded("export-decider", export::export_decider)?,
+        ["onnx", "convert", name] => {
+            sandbox()?.guarded(&format!("onnx convert {name}"), |s| onnx::convert(s, name))?
+        }
+        ["onnx", "publish", name] => sandbox()?.guarded(&format!("onnx publish {name}"), |s| {
+            onnx::publish(s, name, false)
+        })?,
+        ["onnx", "publish", name, "--dry-run"] => sandbox()?
+            .guarded(&format!("onnx publish {name} --dry-run"), |s| {
+                onnx::publish(s, name, true)
+            })?,
         ["e2e", suite] => sandbox()?.guarded(&format!("e2e {suite}"), |s| e2e::run(s, suite))?,
         _ => bail!("{USAGE}"),
     }

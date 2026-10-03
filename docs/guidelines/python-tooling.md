@@ -3,7 +3,9 @@
 Covers the Python side of Ardana's evaluation harnesses: uv, the uv-managed Python interpreter, the jevcompat uv tool,
 the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs and `cargo xtask e2e jevcompat`,
 `e2e sdk` and `e2e jevbench` run against `ardana serve`. It also covers the decider research clone in
-`tmp/src/decider` that W2 runs to export goldens. Ardana itself ships no Python; nothing here is a runtime dependency.
+`tmp/src/decider` that W2 runs to export goldens, and the `tmp/py/onnx` venv in which `cargo xtask onnx` exports the
+browser variants (its pins and recipe live in `onnx.md`). Ardana itself ships no Python; nothing here is a runtime
+dependency.
 
 ## Versions
 - `uv` 0.7.3 — the only installer and venv manager for Python work; the dev machine's uv, run inside the sandbox env.
@@ -76,8 +78,8 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
   `summarize`'s output to `summary.json` and fails on any failed or missing request; accuracy is reported only.
 
 ### Research clones
-- Clone Python sources for reading or golden export (decider, jevcompat, JevBench) only into `tmp/src/<name>` at the
-  pinned rev, and run them with a venv under `tmp/py/<name>`, never with a global interpreter.
+- Clone Python sources for reading, golden export or conversion (decider, jevcompat, JevBench, llama.cpp) only into
+  `tmp/src/<name>` at the pinned rev, and run them with a venv under `tmp/py/<name>`, never with a global interpreter.
 - Vendored outputs (for example `crates/ardana-core/tests/data/decider/*.json`) are committed with their upstream
   license notice; the clone and venv that produced them are not.
 - `cargo xtask export-decider` regenerates the decider goldens: it creates `tmp/py/decider-export` with a managed
@@ -86,6 +88,12 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
   `numpy`, `fastapi`, `jinja2` and `huggingface-hub` its `layout_cases.py` imports, runs
   `xtask/scripts/decider_layout_cases.py` against `tmp/src/decider` offline, and recreates the venv whenever
   `pyvenv.cfg` points outside `tmp/uv/python`. decider itself is imported from the clone, never installed into it.
+- A step that needs its own venv outside `fetch.toml` creates it with `python::pinned_venv` (a managed CPython, exact
+  `<name>==<version>` pins, recreated when `pyvenv.cfg` points outside `tmp/uv/python`): `export-decider`, and
+  `cargo xtask onnx convert`, which creates `tmp/py/onnx` on CPython 3.12, downloads checkpoints with its `hf` CLI,
+  then runs `xtask/scripts/onnx_export.py` and the llama.cpp clone's `convert_hf_to_gguf.py` (with the clone's
+  `gguf-py`, never installed) offline. Its `hf` sees no token in the sandbox; only `cargo xtask onnx publish` hands it
+  the user's, as `HF_TOKEN`.
 
 ### Checks
 - `cargo xtask fetch --check` must fail, naming the entry, when a tool is missing from `tmp/bin`, a venv lacks its

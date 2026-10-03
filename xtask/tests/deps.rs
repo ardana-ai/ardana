@@ -33,7 +33,7 @@ fn rejects_forbidden_edge() {
         ("ardana-llama", "ardana-api", Value::Null),
         ("ardana-registry", "ardana-llama", json!("dev")),
         ("ardana-server", "ardana-llama", json!("build")),
-        ("ardana-playground", "ardana-core", Value::Null),
+        ("ardana-playground", "ardana-registry", Value::Null),
     ] {
         let mut broken = workspace.clone();
         add_edge(&mut broken, from, to, kind);
@@ -63,4 +63,58 @@ fn rejects_forbidden_edge() {
         err.contains("missing workspace member ardana-llama"),
         "{err}"
     );
+}
+
+/// The page's own wasm carries no core: the playground reaches the API's types alone, and the core's tokenizer,
+/// planner and readout come to the tab in the engine module, which reads with the core and nothing else of the
+/// workspace below the API.
+#[test]
+fn only_the_engine_module_uses_core() {
+    let workspace = metadata(repo_root()).unwrap();
+    let uses = |name: &str| -> Vec<&str> {
+        let packages = workspace["packages"].as_array().unwrap();
+        let package = packages.iter().find(|p| p["name"] == name).unwrap();
+        package["dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|dep| dep["name"].as_str())
+            .filter(|dep| dep.starts_with("ardana"))
+            .collect()
+    };
+    assert_eq!(uses("ardana-playground"), ["ardana-api"]);
+    assert_eq!(uses("ardana-engine"), ["ardana-api", "ardana-core"]);
+    for (from, forbidden) in [
+        (
+            "ardana-playground",
+            &[
+                "ardana-core",
+                "ardana-engine",
+                "ardana-registry",
+                "ardana-server",
+                "ardana-llama",
+                "ardana",
+            ][..],
+        ),
+        (
+            "ardana-engine",
+            &[
+                "ardana-playground",
+                "ardana-registry",
+                "ardana-server",
+                "ardana-llama",
+                "ardana",
+            ][..],
+        ),
+    ] {
+        for to in forbidden {
+            let mut broken = workspace.clone();
+            add_edge(&mut broken, from, to, Value::Null);
+            let err = check_deps(&broken).unwrap_err().to_string();
+            assert!(
+                err.contains(&format!("forbidden dependency edge {from} -> {to}")),
+                "{err}"
+            );
+        }
+    }
 }

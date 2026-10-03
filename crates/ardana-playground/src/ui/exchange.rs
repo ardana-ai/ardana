@@ -1,10 +1,10 @@
 //! The raw exchange: a toggle block holding the exact JSON the last run sent and the exact body it received, with
-//! its status.
+//! its status. A run in this tab shows the request it answered and the body the API answers it with.
 
 use leptos::prelude::*;
 
 use super::icons::Icon;
-use crate::deck::Deck;
+use crate::deck::{Deck, Runs};
 
 #[component]
 pub fn Exchange(deck: Deck) -> impl IntoView {
@@ -16,7 +16,7 @@ pub fn Exchange(deck: Deck) -> impl IntoView {
         deck.last.with(|last| {
             last.as_ref().map(|run| match &run.exchange.response {
                 Ok((status, body)) => (format!("HTTP {status}"), body.clone()),
-                Err(err) => ("No response".to_string(), err.clone()),
+                Err(unanswered) => ("No response".to_string(), unanswered.reason.clone()),
             })
         })
     };
@@ -31,13 +31,31 @@ pub fn Exchange(deck: Deck) -> impl IntoView {
             </summary>
             <div class="exchange-grid">
                 <div class="exchange-side">
-                    <h3>"Sent · POST /v1/systemone"</h3>
+                    // Where the last run went, or before one, where Run would send (nowhere while the server lacks
+                    // the model).
+                    <h3>
+                        {move || {
+                            let runs = deck.last.with(|last| match last {
+                                Some(run) if run.in_tab() => Runs::Tab,
+                                Some(_) => Runs::Server,
+                                None => deck.runs(),
+                            });
+                            match runs {
+                                Runs::Server => "Sent · POST /v1/systemone",
+                                Runs::Tab => "Sent · in this tab",
+                                Runs::Cli => "Sent",
+                            }
+                        }}
+                    </h3>
                     <Show
                         when=move || sent().is_some()
-                        fallback=|| {
+                        fallback=move || {
                             view! {
                                 <p class="wire-empty">
-                                    "Nothing sent yet. Press Run to send the state and questions above."
+                                    {move || match deck.runs() {
+                                        Runs::Cli => "Nothing sent yet.",
+                                        _ => "Nothing sent yet. Press Run to send the state and questions above.",
+                                    }}
                                 </p>
                             }
                         }

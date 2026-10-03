@@ -2,7 +2,8 @@
 
 Covers the Rust language, the cargo workspace, error handling, tests, lints, formatting and the `cargo xtask` task
 runner for every Ardana crate: `crates/ardana` (binary), `crates/ardana-api`, `crates/ardana-core`,
-`crates/ardana-llama`, `crates/ardana-registry`, `crates/ardana-server`, `crates/ardana-playground` and `xtask`.
+`crates/ardana-llama`, `crates/ardana-registry`, `crates/ardana-server`, `crates/ardana-playground`,
+`crates/ardana-engine` and `xtask`.
 Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in their own guideline files.
 
 ## Versions
@@ -27,17 +28,31 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   so the dependency graph lives in one file that `cargo xtask check-deps` can read.
 - Respect the dependency direction enforced by `cargo xtask check-deps`: `ardana-api` depends on no workspace crate,
   `ardana-core` only on `ardana-api`, `ardana-llama` and `ardana-registry` on `ardana-core`, `ardana-server` never on
-  `ardana-llama`, `ardana-playground` only on `ardana-api`. Only the `ardana` binary wires `ardana-llama` into
-  `Runtimes`. A new runtime is a new crate plus one registration line, never a server or playground change.
-- Keep `ardana-api` and `ardana-playground` free of native-only dependencies; `ardana-api` must pass
-  `cargo check -p ardana-api --target wasm32-unknown-unknown`.
+  `ardana-llama`, `ardana-playground` on `ardana-api` alone (the page's own wasm carries no core), and `ardana-engine`,
+  the in-tab engine's reader that the page imports as a second wasm module, on `ardana-api` and `ardana-core` (it plans
+  and reads out with the core, Q9). Only the `ardana` binary wires `ardana-llama` into `Runtimes`. A new runtime is a
+  new crate plus one registration line, never a server or playground change; the playground's onnxruntime-web is no
+  `Runtime`.
+- Keep `ardana-api`, `ardana-core`, `ardana-playground` and `ardana-engine` free of native-only dependencies on wasm32:
+  a dependency that is native only on one side gets a `[target.'cfg(...)'.dependencies]` table (the tokenizer's regex
+  backend, `huggingface.md`); `cargo check -p ardana-api -p ardana-playground -p ardana-engine --target
+  wasm32-unknown-unknown` must pass.
+- Wire shapes both the server and the playground read or write live in `ardana-api` (the error bodies included), and
+  logic both run lives in `ardana-core` (`DecideError::status` and `body` answer a refused request for both, the tab's
+  through the engine module).
 - Current third-party pins: `anyhow` 1, `thiserror` 2 (library error enums), `indexmap` 2 with `serde` (ordered wire
   maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts) and
   `float_roundtrip` (floats parse to the exact `f64` Python's `json.loads` gives, which prompts re-render), `clap` 4
   with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
   `tokio` 1 (the `ardana` binary runs `pull` on a current-thread runtime and `serve` on a multi-thread one;
-  `ardana-server` adds `sync`, `signal`, `macros`), `axum` 0.8, `tower-http` 0.7 and `tower` 0.5 (dev) as
-  `axum.md` pins them, plus the library pins in their own guidelines.
+  `ardana-server` adds `sync`, `signal`, `macros`, `fs` and `io-util`; `ardana-registry` takes `rt` for its unit
+  tests only, a current-thread runtime under its async Hub lookups), `axum` 0.8, `tower-http` 0.7, `http-body` 1 and
+  `tower` 0.5 (dev) as `axum.md` pins them, plus the library pins in their own guidelines.
+- `[profile.release.package.brotli]` and `[profile.release.package.sha2]` set `opt-level = 3`: `ardana-server`'s build
+  script embeds the playground through memory-serve, which brotli-compresses (quality 11) and hashes every asset,
+  onnxruntime-web's 41 MB of WASM among them, and release builds compile a build script's dependencies unoptimised.
+  Optimised they take about two and a half minutes of a release build instead of more than four. A package override
+  only changes those crates where the release profile would not optimise them, as build dependencies.
 - Commit `Cargo.lock`: Ardana ships a binary, and the lockfile is also the source of the wasm-bindgen version that
   `xtask/fetch.toml` reads via `cargo-lock:wasm-bindgen`. Pass `--locked` in xtask steps that must not re-resolve.
 
@@ -115,8 +130,8 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 ## CI
 - `.github/workflows/ci.yml` runs on every pull request and every push to `main`, in parallel jobs: `fmt`
   (`cargo fmt --all --check`), `clippy` (`--workspace --all-targets --locked -- -D warnings`, then
-  `cargo check -p ardana-api -p ardana-playground --target wasm32-unknown-unknown`), project checks (`check-deps`,
-  `check-docs`, `dist generate --check`, `dist plan`), `test` on `ubuntu-24.04` and `macos-15`
+  `cargo check -p ardana-api -p ardana-playground -p ardana-engine --target wasm32-unknown-unknown`), project checks
+  (`check-deps`, `check-docs`, `dist generate --check`, `dist plan`), `test` on `ubuntu-24.04` and `macos-15`
   (`cargo xtask fetch --tests`, then `cargo test --workspace --locked`), a Windows build
   (`cargo build --workspace --exclude xtask`, as xtask is Unix only) and the playground build the release runs
   (`cargo install trunk --version 0.21.14 --locked`, `trunk build --release`).
@@ -169,14 +184,21 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 
 ## xtask
 - `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check|--tests]`, `build`, `check-deps`,
-  `check-docs`, `export-decider`, `e2e <suite>` (`smoke`, `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`,
-  `design`); keep its
+  `check-docs`, `export-decider`, `onnx convert <name>`, `onnx publish <name> [--dry-run]` (`onnx.md`), `e2e <suite>`
+  (`smoke`, `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`, `public`, `design`); keep its
   dependency set small so `cargo xtask` compiles quickly: downloads and HTTP probes go through `curl` and `git` run by
   `Sandbox::command`, not HTTP crates. Its one codec is `lz-str` (the `design` suite's Jev share links).
 - The API suites (`jevcompat`, `sdk`, `jevbench`) build `ardana` with `--release --locked` (llama.cpp in a debug build
-  is too slow for 231 JevBench items) and run it through `xtask/src/serve.rs#Server`, which kills the server on drop.
+  is too slow for 231 JevBench items) and run it through `xtask/src/serve.rs#Server`, which kills the server on drop;
+  `Server::start_public` starts `ardana serve --public` (over an empty Hub cache of its own when asked), and the
+  `public` suite probes it with `curl --path-as-is` through `Sandbox::command`, like every other HTTP probe.
 - Run every external tool through `Sandbox::command` (sandbox env, `PATH` prefixed with `tmp/bin`), and wrap `fetch`,
-  `build` and every `e2e` suite in `Sandbox::guarded`.
+  `build`, `export-decider`, `onnx` and every `e2e` suite in `Sandbox::guarded`. `sandbox::run` (output on the
+  terminal) and `sandbox::run_stdout` (output captured) fail on a non-zero exit with the command's `Debug` form, which
+  lists every variable set on it: never set a secret on a command run through them (`onnx publish` runs `hf` itself).
+- xtask links no workspace crate, which would bring their dependency trees along: `onnx` reads `library.toml` with its
+  own `serde` view, edits it line by line (comments stay) and checks what the registry reads by running the release
+  `ardana`.
 - Install cargo tools only through `Sandbox::cargo_install` (`CARGO_HOME=tmp/cargo`, root `tmp`); never
   `cargo install` into `~/.cargo/bin`.
 - Build the playground with `cargo xtask build`, never from a `build.rs`: a build script that runs trunk runs a nested

@@ -15,12 +15,24 @@
     <link data-trunk rel="copy-file" href="brand/favicon.ico" />
     <link data-trunk rel="copy-file" href="brand/favicon.svg" />
     <link data-trunk rel="copy-dir" href="fonts" />
+    <link data-trunk rel="copy-dir" href="ort" />
     <link data-trunk rel="css" href="styles/fonts.css" />
     <link data-trunk rel="css" href="styles/base.css" />
     <link data-trunk rel="css" href="styles/controls.css" />
     <link data-trunk rel="css" href="styles/shell.css" />
     <link data-trunk rel="css" href="styles/page.css" />
     <link data-trunk rel="rust" data-wasm-opt="z" />
+    <link
+      data-trunk
+      rel="rust"
+      href="../ardana-engine"
+      data-type="worker"
+      data-bindgen-target="web"
+      data-target-path="engine"
+      data-wasm-opt="z"
+    />
+    <link data-trunk rel="copy-file" href="src/engine.js" data-target-path="engine" />
+    <link rel="modulepreload" href="/engine/engine.js" />
   </head>
   <body></body>
 </html>

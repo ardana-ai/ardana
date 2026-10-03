@@ -123,11 +123,14 @@
   font-size: var(--text-14);
 }
 
-/* Segmented control: a native radio group; the picked option is an ink-outlined pill, the others gray words. */
+/* Segmented control: a native radio group; the picked option is an ink-outlined pill, the others gray words. With
+   enlarged text it wraps, its options under the legend and onto further rows, rather than run off a phone's screen. */
 .segmented {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
+  max-width: 100%;
 }
 
 /* The legend names the group in the label voice, regular weight, so it never reads as one more option. */
@@ -139,7 +142,9 @@
 
 .segmented-options {
   display: inline-flex;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: var(--space-1) 2px;
+  min-width: 0;
 }
 
 .segment {
@@ -288,11 +293,13 @@ textarea.field-input {
   color: var(--code-ink);
 }
 
-/* Tag: the landing's "default" pill, a hairline outline around a 12px gray word. */
+/* Tag: the landing's "default" pill, a hairline outline around a 12px gray word. Its words wrap only when they are
+   wider than their row (enlarged text on a phone), rather than widen the page. */
 .tag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 100%;
   padding: 2px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
@@ -300,7 +307,6 @@ textarea.field-input {
   font-size: var(--text-12);
   font-weight: 500;
   line-height: 1.4;
-  white-space: nowrap;
 }
 
 /* Tooltip: an ink card (paper in the dark scheme) on hover and focus, with an optional shortcut line. It describes;
@@ -311,9 +317,10 @@ textarea.field-input {
 
 /* Hidden tooltips take no layout at all (an absolutely positioned box off the page edge would scroll the page).
    The 6px gap to the control is a transparent border, so the pointer can cross onto the tooltip and it stays
-   (WCAG 1.4.13); Escape dismisses every tooltip through `.tips-off` on the root. */
+   (WCAG 1.4.13); Escape dismisses every tooltip through `.tips-off` on the root. Its words are drawn, never read out
+   (the empty alternative text): they would join the control's name, which its label or `aria-label` already says. */
 .tip::after {
-  content: attr(data-tip);
+  content: attr(data-tip) / "";
   display: none;
   position: absolute;
   left: 50%;
@@ -342,6 +349,12 @@ textarea.field-input {
   display: block;
 }
 
+/* The first name of a fact row, the row's one stop for Tab, says how to reach the others when the keyboard brings it
+   the focus. */
+.tip[data-keys]:focus-visible::after {
+  content: attr(data-tip) "\A" attr(data-keys) / "";
+}
+
 /* Hover shows a tooltip only where a pointer can hover: a tap on a phone leaves nothing behind over the page. */
 @media (hover: hover) {
   .tip:hover::after {
@@ -350,6 +363,13 @@ textarea.field-input {
 }
 
 .tips-off .tip::after {
+  display: none;
+}
+
+/* A held or busy Run sends nothing when pressed: its tooltip would say otherwise, at the pill's faded strength and over
+   the banner that says why. */
+.tip.run-key[aria-disabled="true"]::after,
+.tip.run-key[aria-busy="true"]::after {
   display: none;
 }
 
@@ -378,6 +398,18 @@ textarea.field-input {
 .dfn:focus-visible {
   outline-offset: 2px;
   border-radius: 3px;
+}
+
+/* While a run is in flight the banner stays under the top bar and the page brings a term just under it, so a term's
+   meaning opens downwards, never over the banner's progress or Stop; a term Tab brings up from below keeps the room
+   for it above the window's foot. */
+html:has(.banner.busy) .dfn.tip::after {
+  top: 100%;
+  bottom: auto;
+}
+
+html:has(.banner.busy) .dfn {
+  scroll-margin-bottom: 6em;
 }
 
 /* The copy key: the landing's command-box button. The glyph turns into a check for a moment once the text is on the
@@ -462,6 +494,34 @@ textarea.field-input {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* Under a coarse pointer (a finger) every control takes at least 44px by 44px (WCAG 2.5.5) and looks as it does under a
+   mouse: a small key or segment reaches past its drawn edges through a transparent box around it, and a field, which
+   has no box to lend, is drawn 44px tall. */
+@media (pointer: coarse) {
+  .button,
+  .copy-key {
+    position: relative;
+  }
+
+  .button::before,
+  .copy-key::before,
+  .segment::before {
+    content: "";
+    position: absolute;
+    inset: min(0px, (100% - 44px) / 2);
+  }
+
+  .field-input,
+  .select-input {
+    min-height: 44px;
+  }
+
+  /* Wrapped segments keep their 44px reach apart. */
+  .segmented-options {
+    row-gap: var(--space-4);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

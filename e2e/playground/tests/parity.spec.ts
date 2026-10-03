@@ -1,15 +1,18 @@
 // W7 cases, Jev playground parity: the builder, state modes, the docs share links, the share round trip, the presets
-// and the snippets, against the release `ardana` serving decider-2b (see playwright.config.ts).
+// and the snippets (with W3's ardana commands for a model this server does not run), against the release `ardana`
+// serving decider-2b (see playwright.config.ts).
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import LZString from 'lz-string';
 import {
+  ardanaCommand,
   channel,
   editorTexts,
   expectFiguresMatch,
   loadPreset,
+  pickInBrowser,
   pickModel,
   picker,
   pointer,
@@ -504,14 +507,56 @@ test('snippets', async ({ page, baseURL }, testInfo) => {
     }
   }
 
-  // The snippets follow the editors: a new state and model are in the next snippet.
+  // The snippets follow the editors: a new state is in the next snippet.
   await stateBox(page).fill('I was charged twice for order B-7.');
-  await pickModel(page, await otherModel(page));
   await language('curl').check();
-  const body = JSON.parse((await snippet.textContent())!.split("<<'JSON'\n")[1].split('\nJSON\n')[0]);
-  expect(body.state).toBe('I was charged twice for order B-7.');
-  expect(body.model).toBe(await otherModel(page));
+  const edited = JSON.parse((await snippet.textContent())!.split("<<'JSON'\n")[1].split('\nJSON\n')[0]) as Request;
+  expect(edited.state).toBe('I was charged twice for order B-7.');
+  expect(edited.model).toBe('decider-2b');
   await language('TypeScript').check();
   await expect(snippet).toContainText('state: "I was charged twice for order B-7."');
+
+  // R3.4, as amended: with a browser row picked, the snippets are the ardana CLI's commands for the same request, and
+  // on this local server, which ardana runs already, without ardana.ai's install line: `ardana pull decider-0.8b`
+  // first, since the server has not pulled it, then `ardana run`. Run as shown with the binary under test in a home of
+  // its own, offline, the pull takes decider-0.8b's GGUF from tmp/hf and the run answers every question.
+  await pickInBrowser(page, 'decider-0.8b');
+  await expect(language('curl')).toHaveCount(0);
+  await expect(page.getByTestId('install')).toHaveCount(0);
+  const pull = (await page.getByTestId('pull').textContent())!;
+  expect(pull).toBe('ardana pull decider-0.8b');
+  const command = await ardanaCommand(page);
+  expect(command.line).toBe(`ardana run decider-0.8b --request - <<'JSON'`);
+  const request = JSON.parse(command.body) as Request;
+  expect(request).toEqual({ ...edited, model: 'decider-0.8b' });
+  fs.writeFileSync(path.join(dir, 'pull.sh'), `${pull}\n`);
+  fs.writeFileSync(path.join(dir, 'ardana.sh'), command.text);
+  const shell = (script: string) =>
+    execFileSync('bash', [script], {
+      cwd: dir,
+      env: {
+        ...env,
+        PATH: `${path.dirname(process.env.ARDANA_BIN!)}:${process.env.PATH}`,
+        ARDANA_HOME: path.join(dir, 'home'),
+        HF_HUB_OFFLINE: '1',
+      },
+      encoding: 'utf8',
+      timeout: 300_000,
+    });
+  console.log(`snippets ${testInfo.project.name}: ${pull}\n${shell('pull.sh')}`);
+  const cli = shell('ardana.sh');
+  for (const spec of Object.values(request.questions) as { instructions: string }[]) {
+    expect(cli, 'ardana run titles each answer with its question').toContain(spec.instructions);
+  }
+  expect(cli.match(/^ {2}\* /gm), `one answer marked per choice question:\n${cli}`).toHaveLength(1);
+  console.log(`snippets ${testInfo.project.name}: ardana run decider-0.8b answered\n${cli}`);
+  await screenshot(page, testInfo, 'snippets', 'cli');
+
+  // A pulled model keeps curl, Python and TypeScript at the page origin.
+  await pickModel(page, 'decider-2b');
+  await expect(language('TypeScript')).toBeChecked();
+  await expect(snippet).toContainText(`baseURL: "${origin}"`);
+  await language('curl').check();
+  expect((await snippet.textContent())!.startsWith(`curl -sS ${origin}/v1/systemone `)).toBe(true);
   await screenshot(page, testInfo, 'snippets');
 });

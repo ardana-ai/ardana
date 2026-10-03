@@ -3,8 +3,10 @@
 //! and the `questions` JSON the blocks are read from.
 
 use ardana_api::{Answer, ChoiceAnswer, NoulAnswer, ScoreAnswer};
+use leptos::ev;
 use leptos::prelude::*;
 use serde_json::Value;
+use wasm_bindgen::JsCast;
 
 use super::builder::Program;
 use super::controls::Toggle;
@@ -92,14 +94,15 @@ pub fn Questions(deck: Deck) -> impl IntoView {
     }
 }
 
-/// The last run in one line: who answered, how long it took, what it cost in tokens, and whether the inputs have
-/// moved on since.
+/// The last run in one line: who answered, where, how long it took, what it cost in tokens, and whether the inputs
+/// have moved on since.
 #[component]
 fn LastRun(deck: Deck) -> impl IntoView {
     move || {
         deck.last.with(|last| {
             let run = last.as_ref()?;
             let ms = run.exchange.latency_ms;
+            let place = super::place(run.exchange.place);
             let latency = view! {
                 <span class="dot" aria-hidden="true">"·"</span>
                 <span data-testid="latency">
@@ -119,6 +122,7 @@ fn LastRun(deck: Deck) -> impl IntoView {
                     <p class="last-run" data-testid="answered-by">
                         "Answered by "
                         <Verbatim field="/model".to_string() value=model.clone() class="" />
+                        {place.map(|place| view! { <span data-testid="answered-in">{place}</span> })}
                         {latency}
                         <span class="dot" aria-hidden="true">"·"</span>
                         <span data-testid="tokens-in">
@@ -138,6 +142,10 @@ fn LastRun(deck: Deck) -> impl IntoView {
                     <p class="last-run">"Not answered: HTTP " {*status} {latency} {stale}</p>
                 }
                 .into_any(),
+                // A run in this tab that failed decoded nothing: it has no time to tell.
+                Err(unanswered) if unanswered.advice.is_some() => {
+                    view! { <p class="last-run">"Not answered in this tab" {stale}</p> }.into_any()
+                }
                 Err(_) => view! { <p class="last-run">"No response" {latency} {stale}</p> }.into_any(),
             })
         })
@@ -163,7 +171,8 @@ pub fn usage(
         })
 }
 
-/// The last run's error, as the API reported it.
+/// The last run's error, as the API reported it; for a run in this tab that got no answer, what failed and what to do
+/// next (its reason as the browser gave it is the raw exchange's).
 #[component]
 fn Fault(deck: Deck) -> impl IntoView {
     move || {
@@ -171,7 +180,16 @@ fn Fault(deck: Deck) -> impl IntoView {
             let run = last.as_ref()?;
             let (title, body) = match &run.reply {
                 Ok(Reply::Answered { .. }) => return None,
-                Err(err) => ("No response".to_string(), view! { <p>{err.clone()}</p> }.into_any()),
+                Err(unanswered) => match &unanswered.advice {
+                    Some(advice) => (
+                        "Not answered in this tab.".to_string(),
+                        view! { <p data-testid="fault-advice">{advice.clone()}</p> }.into_any(),
+                    ),
+                    None => (
+                        "No response · the request was not answered.".to_string(),
+                        view! { <p>{unanswered.reason.clone()}</p> }.into_any(),
+                    ),
+                },
                 Ok(Reply::Failed { status, detail }) => {
                     let body = match detail {
                         Detail::Validation(issues) => view! {
@@ -201,14 +219,15 @@ fn Fault(deck: Deck) -> impl IntoView {
                             view! { <pre class="code-block fault-raw">{text.clone()}</pre> }.into_any()
                         }
                     };
-                    (format!("HTTP {status}"), body)
+                    (format!("HTTP {status} · the request was not answered."), body)
                 }
             };
+            // The title takes the focus after a run on a phone (`ui::show_result`).
             Some(view! {
                 <div class="callout callout-danger" data-testid="fault">
                     <div class="callout-row">
                         <Icon name="alert" />
-                        <p class="fault-title">{title} " · the request was not answered."</p>
+                        <p class="fault-title" tabindex="-1">{title}</p>
                     </div>
                     {body}
                 </div>
@@ -293,6 +312,7 @@ fn Question(deck: Deck, id: String) -> impl IntoView {
     };
     let answer_id = id.clone();
     let edit_id = format!("{dom}-edit");
+    let program = format!("{dom}-program");
     view! {
         <li
             class="question"
@@ -303,7 +323,8 @@ fn Question(deck: Deck, id: String) -> impl IntoView {
             data-question=id.clone()
         >
             <div class="question-head">
-                <h3 class="question-id">{id.clone()}</h3>
+                // The first question's id takes the focus after a run on a phone (`ui::show_result`).
+                <h3 class="question-id" tabindex="-1">{id.clone()}</h3>
                 <div class="question-controls">
                     <Toggle
                         legend="Type"
@@ -318,7 +339,8 @@ fn Question(deck: Deck, id: String) -> impl IntoView {
                         id=edit_id
                         class="button button-sm"
                         aria-expanded=move || open.get().to_string()
-                        aria-controls=format!("{dom}-program")
+                        // The builder exists only while open: name it only then.
+                        aria-controls=move || open.get().then(|| program.clone())
                         aria-label=format!("Edit question {id}")
                         on:click=toggle_edit
                     >
@@ -415,16 +437,60 @@ fn number(field: String, value: f64, format: Format) -> AnyView {
     view! { <Number field=field value=value format=format class="readout" /> }.into_any()
 }
 
-/// A fact under the bars: its name with a one-line meaning in a tooltip, over its value.
-fn property(name: &'static str, meaning: &'static str, value: AnyView) -> impl IntoView {
+/// What the first name of a fact row adds to its tooltip when the keyboard brings it the focus.
+const FACT_KEYS: &str = "Left and Right arrows: the other facts";
+
+/// A fact under the bars: its name with a one-line meaning in a tooltip, over its value. The row's first name (`entry`)
+/// is the row's one stop for Tab, and says how to reach the others ([`step_facts`]).
+fn property(
+    name: &'static str,
+    meaning: &'static str,
+    value: AnyView,
+    entry: bool,
+) -> impl IntoView {
     view! {
         <div class="property">
             <dt>
-                <dfn class="dfn tip tip-start" data-tip=meaning tabindex="0">{name}</dfn>
+                <dfn
+                    class="dfn tip tip-start"
+                    data-tip=meaning
+                    data-keys=entry.then_some(FACT_KEYS)
+                    tabindex=if entry { "0" } else { "-1" }
+                >
+                    {name}
+                </dfn>
                 <span class="visually-hidden">": " {meaning}</span>
             </dt>
             <dd>{value}</dd>
         </div>
+    }
+}
+
+/// Left and Right (and Home and End) move the focus between the names of a fact row, which Tab enters once.
+fn step_facts(event: ev::KeyboardEvent) {
+    let Some(fact) = document()
+        .active_element()
+        .and_then(|name| name.closest(".property").ok().flatten())
+    else {
+        return;
+    };
+    let to = match event.key().as_str() {
+        "ArrowRight" => fact.next_element_sibling(),
+        "ArrowLeft" => fact.previous_element_sibling(),
+        "Home" => fact
+            .parent_element()
+            .and_then(|row| row.first_element_child()),
+        "End" => fact
+            .parent_element()
+            .and_then(|row| row.last_element_child()),
+        _ => return,
+    };
+    event.prevent_default();
+    if let Some(name) = to
+        .and_then(|fact| fact.query_selector("dfn").ok().flatten())
+        .and_then(|name| name.dyn_into::<web_sys::HtmlElement>().ok())
+    {
+        let _ = name.focus();
     }
 }
 
@@ -445,16 +511,17 @@ fn choice(id: &str, a: ChoiceAnswer) -> impl IntoView {
         .collect_view();
     view! {
         <ol class="bars">{rows}</ol>
-        <dl class="properties">
+        <dl class="properties" on:keydown=step_facts>
             {property(
                 "Answer",
                 "The most probable option.",
                 view! { <Verbatim field=field(&["choice"]) value=a.choice.clone() class="answer" /> }.into_any(),
+                true,
             )}
-            {property("Confidence", CONFIDENCE, number(field(&["confidence"]), a.confidence, Format::Fixed2))}
-            {a.x_p_max.map(|v| property("P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent)))}
+            {property("Confidence", CONFIDENCE, number(field(&["confidence"]), a.confidence, Format::Fixed2), false)}
+            {a.x_p_max.map(|v| property("P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent), false))}
             {a.x_certainty
-                .map(|v| property("Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2)))}
+                .map(|v| property("Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2), false))}
         </dl>
     }
 }
@@ -484,22 +551,24 @@ fn score(id: &str, a: ScoreAnswer) -> impl IntoView {
         .collect_view();
     view! {
         <ol class="bars">{rows}</ol>
-        <dl class="properties">
+        <dl class="properties" on:keydown=step_facts>
             {property(
                 "Score",
                 "The expected level: each level weighted by its probability, to two places.",
                 number(field(&["score"]), a.score, Format::Fixed2),
+                true,
             )}
-            {property("Confidence", "The score's confidence, as the API returned it.", number(field(&["confidence"]), a.confidence, Format::Fixed2))}
-            {a.x_p_max.map(|v| property("P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent)))}
+            {property("Confidence", "The score's confidence, as the API returned it.", number(field(&["confidence"]), a.confidence, Format::Fixed2), false)}
+            {a.x_p_max.map(|v| property("P max", P_MAX, number(field(&["x_p_max"]), v, Format::Percent), false))}
             {a.x_certainty
-                .map(|v| property("Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2)))}
+                .map(|v| property("Certainty", CERTAINTY, number(field(&["x_certainty"]), v, Format::Fixed2), false))}
             {a.x_fit_mass
                 .map(|v| {
                     property(
                         "Fit mass",
                         "The sum of the level fits before normalising (isolated levels only).",
                         number(field(&["x_fit_mass"]), v, Format::Fixed2),
+                        false,
                     )
                 })}
         </dl>

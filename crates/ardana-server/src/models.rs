@@ -5,6 +5,12 @@
 //! pulled yet (the library default, for `jev-*` and no model, while the registry is empty) pulls it first; requests
 //! for the same model share one pull, which finishes even when its requester goes away.
 //!
+//! A library model's browser variant is pulled the same way, into the hub cache only, by the first request for its
+//! files ([`Models::browser`]).
+//!
+//! A public server ([`ModelOptions::public`]) does nothing else: it lists the library alone, as models it has not
+//! pulled, never reads or writes the registry it was given, and pulls, loads and runs no model.
+//!
 //! Every model reads its requests through a [`Decider`] (tokenizer and profile, built on the first request and kept
 //! while its registry entry is unchanged), so a request is validated and sized before any weights load. Loaded weights live on one worker thread per model
 //! that decodes one request at a time from a FIFO channel. At most `max_loaded_models` hold weights at once, counting
@@ -16,6 +22,7 @@
 //! `max_queued_rows`.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -25,11 +32,14 @@ use std::time::{Duration, Instant, SystemTime};
 use ardana_api::{ModelInfo, ModelsResponse, SystemOneRequest, SystemOneResponse};
 use ardana_core::{DecideError, Decider, Limits, LoadOptions, LoadedModel, Plan, Runtimes};
 use ardana_registry::library::library;
-use ardana_registry::{Named, PullOptions, Registry, RegistryError, ResolvedModel};
+use ardana_registry::{
+    BrowserCache, BrowserModel, Named, PullOptions, Registry, RegistryError, ResolvedModel,
+};
 use serde_json::{Map, Value, json};
 use tokio::sync::{Notify, mpsc, oneshot, watch};
 
-use crate::error::{ApiError, ValidationItem};
+use crate::browser;
+use crate::error::ApiError;
 
 /// Every `jev-*` model name, `jev-latest` included, means the default model (Q7): the aliases TypeSafe SDKs and Jev
 /// clients send.
@@ -48,10 +58,14 @@ pub struct ModelOptions {
     pub max_loaded_models: usize,
     /// Scoring rows admitted and not yet answered, over all models, at least 1.
     pub max_queued_rows: usize,
+    /// A public playground (`ardana serve --public`): only the browser variants' files are served, no model is
+    /// pulled, loaded or run, and the registry is never read or written (the binary gives it an empty one, backed by
+    /// no file); the other options do not apply.
+    pub public: bool,
 }
 
 impl Default for ModelOptions {
-    /// Ollama's 5-minute keep-alive, one loaded model and decider's 4,096 queued rows.
+    /// Ollama's 5-minute keep-alive, one loaded model and decider's 4,096 queued rows, on a local server.
     fn default() -> Self {
         ModelOptions {
             default_model: None,
@@ -59,6 +73,7 @@ impl Default for ModelOptions {
             keep_alive: Duration::from_secs(300),
             max_loaded_models: 1,
             max_queued_rows: 4096,
+            public: false,
         }
     }
 }
@@ -80,7 +95,13 @@ pub struct Models {
     default: Option<String>,
     /// Per model, the reader built from its registry entry.
     deciders: Mutex<HashMap<String, (ResolvedModel, Arc<Decider>)>>,
-    pulls: Arc<Mutex<Pulls>>,
+    /// Library models being pulled into the registry, which holds them once pulled.
+    pulls: Pulls<()>,
+    /// The browser variants pulled, or being pulled, for the playground's in-tab engine.
+    browsers: Pulls<Arc<BrowserModel>>,
+    /// The hub cache, asked which browser variants it holds whole (`x_browser_pulled`); none where the Hugging Face
+    /// client cannot be built, as a pull could not run either.
+    browser_cache: Option<BrowserCache>,
     /// Per model, the turn a request holds from looking up its worker (loading it if needed) to queueing on it, so
     /// one model's requests queue in arrival order and it loads once.
     turns: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
@@ -112,14 +133,15 @@ impl Models {
         if opts.max_queued_rows == 0 {
             return Err(ModelsError::Zero("the queued-row limit"));
         }
+        // A public server answers no request with a model, so it has no default to look up.
         let default = match &opts.default_model {
-            Some(name) => Some(
+            Some(name) if !opts.public => Some(
                 match registry.named(name).map_err(ModelsError::DefaultModel)? {
                     Named::Pulled(model) => model.name.clone(),
                     Named::Library(pick) => pick.name(),
                 },
             ),
-            None => None,
+            _ => None,
         };
         let residents = Arc::new(Residents {
             count: AtomicUsize::new(0),
@@ -135,7 +157,9 @@ impl Models {
             opts,
             default,
             deciders: Mutex::new(HashMap::new()),
-            pulls: Arc::new(Mutex::new(HashMap::new())),
+            pulls: Pulls::forgotten(),
+            browsers: Pulls::kept(),
+            browser_cache: BrowserCache::from_env().ok(),
             turns: Mutex::new(HashMap::new()),
             loaded: Arc::new(tokio::sync::Mutex::new(Vec::new())),
             residents,
@@ -151,6 +175,11 @@ impl Models {
             .map_err(|err| ApiError::Internal(err.to_string()))
     }
 
+    /// Whether this is a public server, which runs no model ([`ModelOptions::public`]).
+    pub fn public(&self) -> bool {
+        self.opts.public
+    }
+
     /// The model `jev-*` names and requests without a model mean: `--default-model`, else the first registry entry,
     /// else the library default.
     fn default_name(&self, registry: &Registry) -> String {
@@ -161,8 +190,12 @@ impl Models {
     }
 
     /// The registry entry a request's `model` means, pulling a library model that is not pulled yet: `jev-*` and no
-    /// model are the default model (Q7); a name that is neither pulled nor in the library is a 404 listing both.
+    /// model are the default model (Q7); a name that is neither pulled nor in the library is a 404 listing both. A
+    /// public server resolves nothing: it is a 403 before the registry is read.
     pub async fn resolve(&self, requested: Option<&str>) -> Result<ResolvedModel, ApiError> {
+        if self.opts.public {
+            return Err(ApiError::RunsNoModel);
+        }
         let registry = self.registry()?;
         let name = match requested {
             Some(name) if !name.starts_with(JEV_PREFIX) => name.to_string(),
@@ -184,75 +217,101 @@ impl Models {
 
     /// Pulls the library model `name` into the registry, or waits for the pull already under way.
     async fn pull(&self, name: &str) -> Result<(), ApiError> {
-        let mut outcome = {
-            let mut pulls = lock(&self.pulls);
-            match pulls.get(name) {
-                Some(outcome) => outcome.clone(),
-                None => {
-                    let (done, outcome) = watch::channel(None);
-                    pulls.insert(name.to_string(), outcome.clone());
-                    let home = lock(&self.catalog).home();
-                    tokio::spawn(pull_task(
-                        name.to_string(),
-                        home,
-                        self.runtimes.clone(),
-                        self.pulls.clone(),
-                        done,
-                    ));
-                    outcome
+        let home = lock(&self.catalog).home();
+        let runtimes = self.runtimes.clone();
+        let pulling = name.to_string();
+        self.pulls
+            .get(name, &format!("model {name}"), || async move {
+                let outcome = pull_into(&pulling, &home, runtimes).await;
+                if let Err(err) = &outcome {
+                    eprintln!("ardana serve: pulling {pulling} failed: {err}");
                 }
-            }
-        };
-        let outcome = outcome
-            .wait_for(Option::is_some)
+                outcome
+            })
             .await
-            .map_err(|_| ApiError::Internal(format!("the pull of model {name} stopped")))?
-            .clone();
-        match outcome {
-            Some(Ok(())) => Ok(()),
-            Some(Err(err)) => Err(ApiError::Internal(err)),
-            None => unreachable!("wait_for returns a sent outcome"),
-        }
+    }
+
+    /// The browser variant of the library model `name` (one with a `[model.browser]` table), pulled into the hub
+    /// cache by the first request for it; requests for the same model share that pull.
+    pub async fn browser(&self, name: &str) -> Result<Arc<BrowserModel>, ApiError> {
+        let what = format!("the browser variant of {name}");
+        self.browsers
+            .get(name, &what, || browser::pull(name.to_string()))
+            .await
+    }
+
+    /// Forgets the browser variant of `name`, whose files went missing: the next request pulls it again.
+    pub(crate) fn forget_browser(&self, name: &str) {
+        self.browsers.forget(name);
     }
 
     /// `GET /v1/models`: every registry entry, described by its source reference and dated by its profile's release
     /// date, else the day it was pulled, then every library model not pulled yet, described by the reference it
-    /// pulls, with its download size. `x_pulled` tells them apart and `x_default` marks the default model.
-    pub fn list(&self) -> Result<ModelsResponse, ApiError> {
-        let registry = self.registry()?;
-        let default = self.default_name(&registry);
-        let pulled = registry.entries().iter().map(|m| ModelInfo {
-            name: m.name.clone(),
-            description: m.source.clone(),
-            release_date: m
-                .profile
-                .release_date
-                .clone()
-                .unwrap_or_else(|| m.pulled_at.clone()),
-            x_pulled: Some(true),
-            x_default: m.name == default,
-            x_size: None,
-        });
+    /// pulls, with its download size. `x_pulled` tells them apart and `x_default` marks the default model; `x_browser`
+    /// gives the download size of the browser variant of a library model that has one, pulled or not,
+    /// `x_browser_pulled` marks a browser variant the hub cache holds whole (a tab's request for its files pulls
+    /// nothing), and `x_browser_default` marks the library's browser default. A public server reads no registry: it
+    /// lists the library alone, as models it has not pulled, and has no default.
+    pub async fn list(&self) -> Result<ModelsResponse, ApiError> {
+        let registry = if self.opts.public {
+            None
+        } else {
+            Some(self.registry()?)
+        };
+        let default = registry.as_deref().map(|r| self.default_name(r));
+        let is_default = |name: &str| default.as_deref() == Some(name);
+        let pulled = registry
+            .iter()
+            .flat_map(|r| r.entries())
+            .map(|m| ModelInfo {
+                name: m.name.clone(),
+                description: m.source.clone(),
+                release_date: m
+                    .profile
+                    .release_date
+                    .clone()
+                    .unwrap_or_else(|| m.pulled_at.clone()),
+                x_pulled: Some(true),
+                x_default: is_default(&m.name),
+                x_size: None,
+                x_browser: browser_size(&m.name),
+                x_browser_pulled: false,
+                x_browser_default: browser_default(&m.name),
+            });
         let pullable = library()
             .models
             .iter()
-            .filter(|m| registry.entry(&m.name).is_err())
+            .filter(|m| registry.as_ref().is_none_or(|r| r.entry(&m.name).is_err()))
             .filter_map(|m| library().find(&m.name))
-            .map(|pick| ModelInfo {
-                name: pick.name(),
-                description: pick.reference(),
-                release_date: pick.model.release_date.clone(),
-                x_pulled: Some(false),
-                x_default: pick.name() == default,
-                x_size: pick.size(),
+            .map(|pick| {
+                let name = pick.name();
+                ModelInfo {
+                    description: pick.reference(),
+                    release_date: pick.model.release_date.clone(),
+                    x_pulled: Some(false),
+                    x_default: is_default(&name),
+                    x_size: pick.size(),
+                    x_browser: browser_size(&name),
+                    x_browser_pulled: false,
+                    x_browser_default: browser_default(&name),
+                    name,
+                }
             });
-        Ok(ModelsResponse {
-            models: pulled.chain(pullable).collect(),
-        })
+        let mut models: Vec<ModelInfo> = pulled.chain(pullable).collect();
+        if let Some(cache) = &self.browser_cache {
+            for model in models.iter_mut().filter(|m| m.x_browser.is_some()) {
+                model.x_browser_pulled = cache.holds(&model.name).await;
+            }
+        }
+        Ok(ModelsResponse { models })
     }
 
-    /// `GET /health`: `status` plus the loaded models (most recently used first) and every model's temperatures.
+    /// `GET /health`: `status` plus the loaded models (most recently used first) and every model's temperatures. A
+    /// public server, which has neither, names no model.
     pub async fn health(&self) -> Result<Value, ApiError> {
+        if self.opts.public {
+            return Ok(json!({"status": "ok"}));
+        }
         let temperatures: Map<String, Value> = self
             .registry()?
             .entries()
@@ -301,14 +360,13 @@ impl Models {
         let planner = decider.clone();
         let plan = tokio::task::spawn_blocking(move || planner.plan(&req))
             .await
-            .map_err(|err| ApiError::Internal(format!("planning the request failed: {err}")))?
-            .map_err(decide_error)?;
+            .map_err(|err| ApiError::Internal(format!("planning the request failed: {err}")))??;
         let admission = self.admit(plan.rows())?;
         let (_lease, reply) = self.enqueue(&model, &decider, plan, admission).await?;
         let answer = reply.await.map_err(|_| {
             ApiError::Internal(format!("the worker of model {} stopped", model.name))
         })?;
-        answer.map_err(decide_error)
+        Ok(answer?)
     }
 
     /// The model's reader, built on its first request and again when its registry entry changes.
@@ -457,11 +515,92 @@ impl Models {
     }
 }
 
-/// Library pulls in flight, by registry name; each sends its outcome once.
-type Pulls = HashMap<String, watch::Receiver<Option<PullOutcome>>>;
+/// Pulls by name, each shared by every request for its name: the first request starts one detached task, later ones
+/// wait for its outcome, and the pull is finished even when its requesters go away. A failed pull is forgotten, so
+/// the next request tries again; a pulled one is forgotten too where something else holds what it pulled (the registry,
+/// a library model), and kept where this is what holds it (a browser variant).
+pub(crate) struct Pulls<T> {
+    pulls: Arc<Mutex<HashMap<String, Outcome<T>>>>,
+    keep: bool,
+}
 
-/// How a pull ended: pulled (or found pulled), or why not.
-type PullOutcome = Result<(), String>;
+/// How a pull ended, once it has: what it pulled, or why not; every waiter watches it.
+type Outcome<T> = watch::Receiver<Option<Result<T, String>>>;
+
+impl<T: Clone + Send + Sync + 'static> Pulls<T> {
+    /// Pulls forgotten once done.
+    fn forgotten() -> Pulls<T> {
+        Pulls {
+            pulls: Arc::default(),
+            keep: false,
+        }
+    }
+
+    /// Pulls kept once pulled.
+    fn kept() -> Pulls<T> {
+        Pulls {
+            pulls: Arc::default(),
+            keep: true,
+        }
+    }
+
+    /// What the pull of `name` pulled: the pull under way (or kept), else a new one that `pull` makes; `what` names
+    /// the pull in an error.
+    async fn get<F>(&self, name: &str, what: &str, pull: impl FnOnce() -> F) -> Result<T, ApiError>
+    where
+        F: Future<Output = Result<T, String>> + Send + 'static,
+    {
+        let mut outcome = {
+            let mut pulls = lock(&self.pulls);
+            match pulls.get(name) {
+                Some(outcome) => outcome.clone(),
+                None => {
+                    let (done, outcome) = watch::channel(None);
+                    pulls.insert(name.to_string(), outcome.clone());
+                    tokio::spawn(finish(
+                        pull(),
+                        name.to_string(),
+                        self.pulls.clone(),
+                        self.keep,
+                        done,
+                    ));
+                    outcome
+                }
+            }
+        };
+        let outcome = outcome
+            .wait_for(Option::is_some)
+            .await
+            .map_err(|_| ApiError::Internal(format!("the pull of {what} stopped")))?
+            .clone();
+        match outcome {
+            Some(Ok(pulled)) => Ok(pulled),
+            Some(Err(err)) => Err(ApiError::Internal(err)),
+            None => unreachable!("wait_for returns a sent outcome"),
+        }
+    }
+
+    /// Forgets the pull of `name`, so the next request pulls again.
+    fn forget(&self, name: &str) {
+        lock(&self.pulls).remove(name);
+    }
+}
+
+/// Runs the pull of `name`, forgets it unless it pulled what is kept here, then sends its outcome to everyone waiting.
+async fn finish<T>(
+    pull: impl Future<Output = Result<T, String>>,
+    name: String,
+    pulls: Arc<Mutex<HashMap<String, Outcome<T>>>>,
+    keep: bool,
+    done: watch::Sender<Option<Result<T, String>>>,
+) {
+    let outcome = pull.await;
+    if !keep || outcome.is_err() {
+        lock(&pulls).remove(&name);
+    }
+    // Every waiter may have gone away; the pull is done all the same.
+    let _ = done.send(Some(outcome));
+}
 
 /// Locks `mutex`, whose data no panic leaves inconsistent.
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -497,25 +636,12 @@ impl Catalog {
     }
 }
 
-/// Pulls the library model `name` into the registry in `home` (unless it is there by now), then sends the outcome
-/// to everyone waiting on it and forgets the pull.
-async fn pull_task(
-    name: String,
-    home: PathBuf,
+/// Pulls the library model `name` into the registry in `home`, unless it is there by now.
+async fn pull_into(
+    name: &str,
+    home: &std::path::Path,
     runtimes: Arc<Runtimes>,
-    pulls: Arc<Mutex<Pulls>>,
-    done: watch::Sender<Option<PullOutcome>>,
-) {
-    let outcome = pull_into(&name, &home, runtimes).await;
-    if let Err(err) = &outcome {
-        eprintln!("ardana serve: pulling {name} failed: {err}");
-    }
-    lock(&pulls).remove(&name);
-    // Every waiter may have gone away; the model is pulled all the same.
-    let _ = done.send(Some(outcome));
-}
-
-async fn pull_into(name: &str, home: &std::path::Path, runtimes: Arc<Runtimes>) -> PullOutcome {
+) -> Result<(), String> {
     if Registry::open(home)
         .map_err(|err| err.to_string())?
         .entry(name)
@@ -558,17 +684,14 @@ async fn pull_into(name: &str, home: &std::path::Path, runtimes: Arc<Runtimes>) 
     Ok(())
 }
 
-/// A decide failure as an API error: bad input is 422, too much input 413, a runtime failure 500.
-fn decide_error(err: DecideError) -> ApiError {
-    match err {
-        DecideError::Invalid { loc, msg } => ApiError::Validation(vec![ValidationItem::new(
-            loc.into_iter().map(Value::String).collect(),
-            msg,
-            "value_error",
-        )]),
-        DecideError::Capacity(msg) => ApiError::TooLarge(msg),
-        DecideError::Runtime(err) => ApiError::Internal(format!("{err:#}")),
-    }
+/// The bytes a tab downloads to run the browser variant of the library model `name`, when it has one.
+fn browser_size(name: &str) -> Option<u64> {
+    library().browser(name).map(|(_, browser)| browser.size)
+}
+
+/// Whether `name` is the library's browser default, the browser model a playground offers first.
+fn browser_default(name: &str) -> bool {
+    library().browser_default.as_deref() == Some(name)
 }
 
 /// Queued rows reserved by one request, released when its job is decoded or discarded.

@@ -5,8 +5,8 @@
 use anyhow::{Context, Result, bail};
 
 use crate::fetch::{Hf, Manifest};
-use crate::python::{managed_venv, uv};
-use crate::sandbox::Sandbox;
+use crate::python::pinned_venv;
+use crate::sandbox::{Sandbox, run};
 
 /// The venv's Python and packages; decider 1.6.0 itself runs from the clone.
 const PYTHON: &str = "3.12";
@@ -44,16 +44,7 @@ pub fn export_decider(sandbox: &Sandbox) -> Result<()> {
     }
 
     let venv = sandbox.tmp().join("py/decider-export");
-    let python = venv.join("bin/python");
-    if !managed_venv(sandbox, &venv) {
-        run(uv(sandbox)
-            .args(["venv", "--quiet", "--clear", "--python", PYTHON])
-            .arg(&venv))?;
-    }
-    run(uv(sandbox)
-        .args(["pip", "install", "--quiet", "--python"])
-        .arg(&python)
-        .args(PACKAGES))?;
+    let python = pinned_venv(sandbox, &venv, PYTHON, PACKAGES)?;
     run(sandbox
         .command(&python)
         .current_dir(root)
@@ -63,12 +54,4 @@ pub fn export_decider(sandbox: &Sandbox) -> Result<()> {
         .arg(&decider)
         .arg(&tokenizer_dir)
         .arg(root.join(OUT_DIR)))
-}
-
-fn run(cmd: &mut std::process::Command) -> Result<()> {
-    let status = cmd.status().with_context(|| format!("running {cmd:?}"))?;
-    if !status.success() {
-        bail!("{:?} failed ({status})", cmd.get_program());
-    }
-    Ok(())
 }

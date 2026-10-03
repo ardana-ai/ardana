@@ -176,3 +176,44 @@ fn context_window_is_a_capacity_error_not_a_truncation() -> Result<()> {
     ));
     Ok(())
 }
+
+/// What the API answers for each refusal: the server and the playground's in-tab engine both send these bodies.
+#[test]
+fn refusals_answer_as_the_api() -> Result<()> {
+    let d = decider()?;
+    let err = d
+        .plan(&request(
+            json!("s"),
+            json!({"department": {"type": "choice", "instructions": "Which?", "criteria": ["billing"]}}),
+        ))
+        .expect_err("one option is refused");
+    assert_eq!(err.status(), 422);
+    assert_eq!(
+        serde_json::to_string(&err.body())?,
+        r#"{"detail":[{"loc":["body","questions","department"],"msg":"choice criteria: a map of 2..255 options","type":"value_error"}]}"#
+    );
+
+    let small = d.with_limits(Limits {
+        max_rows: 1,
+        ..Limits::default()
+    });
+    let err = small
+        .plan(&request(
+            json!("s"),
+            json!({"a": {"type": "noul", "instructions": "a?"}, "b": {"type": "noul", "instructions": "b?"}}),
+        ))
+        .expect_err("two rows are refused");
+    assert_eq!(err.status(), 413);
+    assert_eq!(
+        serde_json::to_string(&err.body())?,
+        r#"{"detail":{"error_type":"request_too_large","message":"too many questions: the request expands to 2 scoring rows, the limit is 1"}}"#
+    );
+
+    let err = DecideError::Runtime(anyhow::anyhow!("decode failed").context("model m"));
+    assert_eq!(err.status(), 500);
+    assert_eq!(
+        serde_json::to_string(&err.body())?,
+        r#"{"detail":{"error_type":"api_error","message":"model m: decode failed"}}"#
+    );
+    Ok(())
+}

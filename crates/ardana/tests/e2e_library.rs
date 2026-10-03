@@ -225,8 +225,8 @@ fn serve_picks_up_models_pulled_while_it_runs() -> Result<()> {
     assert_eq!(status, 404, "{body}");
     assert_eq!(
         body["detail"]["message"],
-        "no model named \"nope\"; pulled: qwen3.5-0.8b; library, pulled on first use: decider-2b, decider-4b, \
-         qwen3.5-0.8b, smollm3-3b"
+        "no model named \"nope\"; pulled: qwen3.5-0.8b; library, pulled on first use: decider-2b, decider-0.8b, \
+         decider-4b, qwen3.5-0.8b, smollm3-3b"
     );
     Ok(())
 }

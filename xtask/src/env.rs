@@ -60,6 +60,6 @@ fn utf8<'a>(name: &str, value: &'a std::ffi::OsStr) -> Result<&'a str> {
 }
 
 /// Single-quotes `value` for POSIX shells.
-fn quote(value: &str) -> String {
+pub(crate) fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
