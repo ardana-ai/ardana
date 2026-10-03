@@ -154,6 +154,26 @@ repo = "HuggingFaceTB/SmolLM3-3B"
 revision = "a07cc9a04f16550a088caea529712d1d335b0ac1"
 files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
 
+[[hf]]
+repo = "ardana-ai/decider-0.8b-ONNX"
+revision = "a2ef1fd2e7d5b3fb30ed99274428f738342949c9"
+files = ["chat_template.jinja", "decider_config.json", "model.onnx", "model.onnx.data", "tokenizer.json", "tokenizer_config.json"]
+
+[[hf]]
+repo = "ardana-ai/decider-0.8b-GGUF"
+revision = "fc65c88ee9cb7c0b6508759a8e3aba814f300868"
+files = ["chat_template.jinja", "decider-0.8b-Q8_0.gguf", "decider_config.json", "tokenizer.json", "tokenizer_config.json"]
+
+[[hf]]
+repo = "ardana-ai/decider-2b-ONNX"
+revision = "adfd8460421b51ec80469cd85e9202bbb1084f8d"
+files = ["chat_template.jinja", "decider_config.json", "model.onnx", "model.onnx.data", "tokenizer.json", "tokenizer_config.json"]
+
+[[hf]]
+repo = "ardana-ai/qwen3.5-0.8b-ONNX"
+revision = "86114e08890df9e145dc2e0ce9cf84b10e14dc39"
+files = ["chat_template.jinja", "model.onnx", "model.onnx.data", "tokenizer.json", "tokenizer_config.json"]
+
 [[hf_local]]
 repo = "meta-llama/Llama-3.2-3B-Instruct"
 revision = "0cb88a4f764b7a12671c53f0838cd831a0843b95"
