@@ -24,7 +24,7 @@
           "tmp/evals/design/browser-download-*.html"
         ],
         "createdAt": "2026-10-03T01:13:14.979Z",
-        "reason": "Agent (W2): DESIGN.md's Caret, the landing's busy caret after Run's label only while a run is in flight; the frozen browser-download state is a run in flight"
+        "reason": "User confirmed 2026-10-03: DESIGN.md's Caret, the landing's busy caret after Run's label only while a run is in flight (steady under reduced motion); the frozen browser-download state is a run in flight"
       }
     ]
   }
