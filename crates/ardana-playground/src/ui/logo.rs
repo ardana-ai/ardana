@@ -35,15 +35,18 @@ pub fn LogoSymbol() -> impl IntoView {
     view! { <svg class="logo-symbol" aria-hidden="true" focusable="false" inner_html=symbol></svg> }
 }
 
-/// The lockup, named "Ardana"; CSS sets its height (`.logo svg`).
+/// Where the lockup leads: the site, as the landing's own nav logo does.
+pub const HOME: &str = "https://ardana.ai";
+
+/// The lockup, a link to the site named "Ardana home" as on the landing; CSS sets its height (`.logo svg`).
 #[component]
 pub fn Logo(#[prop(optional)] class: &'static str) -> impl IntoView {
     let (view_box, _) = lockup();
     let drawn = format!(r##"<use href="#{SYMBOL}"></use>"##);
     view! {
-        <span class=format!("logo {class}") role="img" aria-label="Ardana">
+        <a class=format!("logo {class}") href=HOME aria-label="Ardana home">
             <svg viewBox=view_box aria-hidden="true" focusable="false" inner_html=drawn></svg>
-        </span>
+        </a>
     }
 }
 

@@ -343,7 +343,7 @@
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Instructions (65ch), option names, fact values, captions, field text, the state editor's placeholder; tabular numerals; the crumb at 500."
+        "purpose": "Instructions (65ch), option names, fact values, captions, field text, the state editor's placeholder; tabular numerals; the top bar's nav links."
       },
       "button": {
         "displayName": "Button",
@@ -464,7 +464,7 @@
       {
         "name": "phone",
         "value": "720px",
-        "purpose": "Page tightens; title 1.875rem, question ids and section headings 1.25rem; facts in two columns (the right column's tooltips open leftwards); the crumb and the stale-tag slot are removed; lockup 22px; Run at 14px sides fits its label; popover fixed."
+        "purpose": "Page tightens; title 1.875rem, question ids and section headings 1.25rem; facts in two columns (the right column's tooltips open leftwards); the top bar's nav links and the stale-tag slot are removed; lockup 22px; Run at 14px sides fits its label; popover fixed."
       },
       {
         "name": "smallest",

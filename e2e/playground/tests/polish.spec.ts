@@ -234,9 +234,23 @@ test('page_weight', async ({ page }, testInfo) => {
   await expect(logos).toHaveCount(2);
   for (const logo of await logos.all()) {
     await expect(logo.locator('use')).toHaveAttribute('href', '#ardana-lockup');
+    // Each lockup leads to the site, as the landing's nav logo does.
+    await expect(logo).toHaveAttribute('href', 'https://ardana.ai');
+    await expect(logo).toHaveAttribute('aria-label', 'Ardana home');
+  }
+  // The top bar's nav, the landing's: Home, then this page; a phone's bar keeps the lockup alone.
+  const links = page.getByRole('navigation', { name: 'Main' }).getByRole('link');
+  if (testInfo.project.use.viewport!.width > 720) {
+    await expect(links).toHaveText(['Home', 'Playground']);
+    await expect(links.first()).toHaveAttribute('href', 'https://ardana.ai');
+    await expect(links.last()).toHaveAttribute('aria-current', 'page');
+    await expect(links.last()).toHaveAttribute('href', './');
+  } else {
+    await expect(links).toHaveCount(0);
   }
   const shown = page.locator('.logo:visible');
   await expect(shown).toHaveCount(1);
+  await expect(shown).toHaveAccessibleName('Ardana home');
   const box = (await shown.boundingBox())!;
   expect(Math.round(box.height)).toBeGreaterThanOrEqual(18);
   expect(box.width / box.height).toBeCloseTo(610.71 / 106, 1);

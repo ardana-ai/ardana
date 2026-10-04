@@ -227,23 +227,30 @@
   margin-right: var(--space-3);
 }
 
-.topbar-crumb {
+/* The landing's nav links, 28px apart as there: Pencil Gray, ink for this page and under the pointer. */
+.topbar-nav {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 0 28px;
   min-width: 0;
   flex: 1 1 auto;
-  color: var(--ink);
   font-size: var(--text-15);
-  font-weight: 500;
 }
 
-.topbar-crumb-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.topbar-nav a {
+  color: var(--muted);
+  text-decoration: none;
   white-space: nowrap;
+  transition: color var(--fast) ease;
 }
 
-/* Share and Run never shrink; the stale tag gives way first, then the crumb. */
+.topbar-nav a:hover,
+.topbar-nav a[aria-current="page"] {
+  color: var(--ink);
+}
+
+/* Share and Run never shrink; the stale tag gives way first, then the nav wraps. */
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -482,8 +489,8 @@ html:has(.banner.busy) {
     display: none;
   }
 
-  /* The lockup names the page on a phone. */
-  .topbar-crumb {
+  /* The lockup names the page on a phone, and leads home. */
+  .topbar-nav {
     display: none;
   }
 
@@ -640,6 +647,18 @@ html:has(.banner.busy) {
 /* Under a coarse pointer the rows and the share link's box are 44px tall, and the banner's actions (Stop, "Show the
    command") reach 44px past their words within a 44px banner (WCAG 2.5.5); see controls.css. */
 @media (pointer: coarse) {
+  .logo,
+  .topbar-nav a {
+    position: relative;
+  }
+
+  .logo::before,
+  .topbar-nav a::before {
+    content: "";
+    position: absolute;
+    inset: min(0px, (100% - 44px) / 2);
+  }
+
   .row,
   .popover-row,
   .banner {
@@ -667,6 +686,7 @@ html:has(.banner.busy) {
   .shell.drawer-open .sidebar,
   .scrim,
   .row,
+  .topbar-nav a,
   .row .icon-back,
   .banner-action .icon,
   .workspace .button-icon,

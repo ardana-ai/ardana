@@ -1,4 +1,4 @@
-//! The sticky top bar: the sidebar opener and the logo (while the sidebar is away), the page's name, the stale tag,
+//! The sticky top bar: the sidebar opener and the logo (while the sidebar is away), the site's nav links, the stale tag,
 //! Share with its popover, and the ink Run pill. Under it, the banner that says where a run in this tab is (with Stop
 //! while the server pulls or the tab downloads), why Run is held (with the way to the ardana CLI's commands when the
 //! server does not run the model, and in the standalone build the browser default in this tab instead), or what a first
@@ -12,7 +12,7 @@ use wasm_bindgen::closure::Closure;
 
 use super::controls::CopyKey;
 use super::icons::Icon;
-use super::logo::Logo;
+use super::logo::{HOME, Logo};
 use super::{Shell, focus_later, reveal};
 use crate::deck::{Deck, Held, browser_value};
 use crate::engine::{self, Stage};
@@ -268,9 +268,11 @@ pub fn Topbar(deck: Deck, shell: Shell) -> impl IntoView {
                 <Icon name="panel" />
             </button>
             <Logo class="topbar-logo" />
-            <div class="topbar-crumb">
-                <span class="topbar-crumb-text">"Playground"</span>
-            </div>
+            // The landing's nav links: the site, then this page (`./` is `/` on a server and `/playground/` on the site).
+            <nav class="topbar-nav" aria-label="Main">
+                <a href=HOME>"Home"</a>
+                <a href="./" aria-current="page">"Playground"</a>
+            </nav>
             <div class="topbar-actions">
                 <p class="changed" class:on=move || deck.stale.get() data-testid="changed">
                     {move || {
