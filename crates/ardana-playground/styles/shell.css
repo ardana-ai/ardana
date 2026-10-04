@@ -409,8 +409,10 @@ html:has(.banner.busy) {
   background: var(--bar);
 }
 
-/* Under the picker, an "In browser" pick says where Run answers and what its first run downloads. */
-.model-note {
+/* Under the picker, an "In browser" pick says where Run answers and what its first run downloads; a list that did not
+   arrive says why, in the fault colour, under the note's alignment. */
+.model-note,
+.model-fault {
   margin: 6px 0 0;
   padding: 0 var(--space-3);
 }

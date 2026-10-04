@@ -1,20 +1,23 @@
 // The two hosts of the standalone suite (`cargo xtask e2e standalone`), offline, each on a free port of 127.0.0.1 and
 // so of an origin of its own:
 // - the site, the standalone playground's `dist` as static files under `/playground/`, with the cross-origin isolation
-//   headers the landing sends there (`static/_headers`);
+//   headers the landing sends there (`static/_headers`), and the library document at `/models.json` from the file given
+//   (read on every request, so the cases rewrite it; gone, it is a 404), as Cloudflare serves the landing's: an `ETag`,
+//   `max-age=0, must-revalidate` and a 304 for an `If-None-Match` that holds it (Q15), no isolation headers;
 // - a stand-in of Hugging Face serving the hub cache (`tmp/hf/hub`) as huggingface.co serves a repository's files,
 //   `/<org>/<repo>/resolve/<commit>/<file>`: CORS open to any origin, its headers exposed, the whole file with its
 //   length or the rest of it from `Range: bytes=<from>-` (206), never compressed; a request naming a referring page
 //   gets a 404 without CORS headers, as huggingface.co answers one from any page on *.workers.dev.
-// Usage: node standalone-hosts.mjs <dist> <hub cache>. Prints `{"site": <url>, "hub": <url>}` on one line once both
-// listen, then serves until it is stopped.
+// Usage: node standalone-hosts.mjs <dist> <hub cache> <library file>. Prints `{"site": <url>, "hub": <url>}` on one
+// line once both listen, then serves until it is stopped.
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
-const [dist, cache] = process.argv.slice(2);
-if (!dist || !cache) {
-  console.error('usage: node standalone-hosts.mjs <dist> <hub cache>');
+const [dist, cache, library] = process.argv.slice(2);
+if (!dist || !cache || !library) {
+  console.error('usage: node standalone-hosts.mjs <dist> <hub cache> <library file>');
   process.exit(2);
 }
 
@@ -40,8 +43,28 @@ function inside(root, relative) {
   return within && fs.statSync(file, { throwIfNoEntry: false })?.isFile() ? file : null;
 }
 
+/** The library document as the landing publishes it: the file as it is now, or a 404 once it is gone. */
+function serveLibrary(req, res) {
+  if (!fs.statSync(library, { throwIfNoEntry: false })?.isFile()) {
+    res.writeHead(404).end();
+    return;
+  }
+  const bytes = fs.readFileSync(library);
+  const etag = `"${createHash('sha1').update(bytes).digest('hex')}"`;
+  const headers = { etag, 'cache-control': 'max-age=0, must-revalidate' };
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, headers).end();
+    return;
+  }
+  res.writeHead(200, { ...headers, 'content-type': 'application/json', 'content-length': bytes.length }).end(bytes);
+}
+
 const site = http.createServer((req, res) => {
   const { pathname } = new URL(req.url, 'http://site');
+  if (pathname === '/models.json') {
+    serveLibrary(req, res);
+    return;
+  }
   if (pathname === PREFIX.slice(0, -1)) {
     res.writeHead(301, { location: PREFIX }).end();
     return;

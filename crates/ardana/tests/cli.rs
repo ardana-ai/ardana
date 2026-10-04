@@ -197,8 +197,8 @@ fn list_show_rm() -> Result<()> {
         assert!(!output.status.success(), "{args:?}");
         assert!(
             stderr.contains(&format!(
-                "no model named \"{name}\"; pulled: qwen3.5-0.8b; library, pulled on first use: decider-2b, \
-                 decider-0.8b, decider-4b, qwen3.5-0.8b, smollm3-3b"
+                "no model named \"{name}\"; pulled: qwen3.5-0.8b; the library at https://ardana.ai/models/ is \
+                 pulled on first use"
             )),
             "{stderr}"
         );
@@ -327,5 +327,198 @@ fn run_inline_questions() -> Result<()> {
         .map(|(id, a)| (id.as_str(), a["type"].as_str().unwrap_or_default()))
         .collect();
     assert_eq!(kinds, [("q1", "choice"), ("q2", "noul"), ("q3", "score")]);
+    Ok(())
+}
+
+/// The names of `names` that `text` holds as words of their own (not `decider-2b` inside `decider-2b-GGUF`).
+fn named_in<'a>(text: &str, names: &'a [String]) -> Vec<&'a str> {
+    let part = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-');
+    names
+        .iter()
+        .filter(|name| {
+            text.match_indices(name.as_str()).any(|(at, _)| {
+                let before = text[..at].chars().next_back().is_none_or(|c| !part(c));
+                let after = text[at + name.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !part(c));
+                before && after
+            })
+        })
+        .map(String::as_str)
+        .collect()
+}
+
+/// R2.1: no model list is compiled into `ardana`: the built binary holds no `weights` reference of the snapshot,
+/// neither a model's GGUF repository nor a browser variant's.
+#[test]
+fn the_binary_holds_no_library() -> Result<()> {
+    let binary =
+        String::from_utf8_lossy(&std::fs::read(env!("CARGO_BIN_EXE_ardana"))?).into_owned();
+    let models = common::snapshot()?;
+    let models = models["models"].as_array().context("models")?;
+    assert!(models.len() >= 12, "{}", models.len());
+    let mut checked = 0;
+    for model in models {
+        let references = [&model["weights"], &model["browser"]["weights"]];
+        for repo in references.iter().filter_map(|r| r.as_str()) {
+            let repo = repo.strip_prefix("hf.co/").unwrap_or(repo);
+            assert!(
+                !binary.contains(repo),
+                "{} holds {repo}",
+                env!("CARGO_BIN_EXE_ardana")
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked >= 15, "{checked} references checked");
+    Ok(())
+}
+
+/// R2.5: with no server at the library's URL and nothing cached, `pull` and `run` of a library model exit non-zero
+/// with an error naming the manifest's URL and the cause, and no panic.
+#[test]
+fn an_unreachable_library_is_an_error() -> Result<()> {
+    let ardana = Ardana::new("cli-unreachable-library")?;
+    for args in [
+        vec!["pull", "decider-2b"],
+        vec!["run", "decider-2b", "A state.", "--noul", "Is it?"],
+    ] {
+        let mut cmd = ardana.command(&args);
+        cmd.env("ARDANA_LIBRARY", "http://127.0.0.1:9/models.json");
+        let output = cmd.output()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        println!("{cmd:?} ({}):\n{stderr}", output.status);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?} prints no answer");
+        assert!(
+            stderr.contains("reading the library at http://127.0.0.1:9/models/decider-2b.json: "),
+            "{stderr}"
+        );
+        assert!(stderr.to_lowercase().contains("refused"), "{stderr}");
+        assert!(!stderr.contains("panicked"), "{stderr}");
+    }
+    assert!(!ardana.home.join("library").exists(), "nothing cached");
+    Ok(())
+}
+
+/// R2.7: under a URL source, `list`, `show`, `rm`, `ps`, `--help` and `pull --help` send no request; `show` of a
+/// name not pulled answers from the cached manifest; help and unknown-model texts name no library model but the
+/// default one and carry `https://ardana.ai/models/`.
+#[test]
+fn offline_commands_never_fetch() -> Result<()> {
+    let ardana = Ardana::new("cli-offline-commands")?;
+    // A listener at the library's URL that counts what reaches it.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let url = format!(
+        "http://127.0.0.1:{}/models.json",
+        listener.local_addr()?.port()
+    );
+    let connections = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = connections.clone();
+    std::thread::spawn(move || {
+        for _ in listener.incoming() {
+            counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    });
+    // The cache holds decider-2b's manifest, as an earlier pull would have left it.
+    let snapshot = common::snapshot()?;
+    let entry = snapshot["models"]
+        .as_array()
+        .context("models")?
+        .iter()
+        .find(|m| m["name"] == "decider-2b")
+        .context("decider-2b")?;
+    let cached = ardana.home.join("library/models/decider-2b.json");
+    std::fs::create_dir_all(cached.parent().context("models")?)?;
+    std::fs::write(
+        &cached,
+        serde_json::json!({"schema": 1, "model": entry}).to_string(),
+    )?;
+    let names = common::snapshot_names()?;
+    let others: Vec<String> = names
+        .iter()
+        .filter(|n| *n != "decider-2b")
+        .cloned()
+        .collect();
+    let page = "https://ardana.ai/models/";
+    let run = |args: &[&str]| -> Result<(Option<i32>, String, String)> {
+        let mut cmd = ardana.command(args);
+        cmd.env("ARDANA_LIBRARY", &url);
+        let output = cmd.output()?;
+        let stdout = String::from_utf8(output.stdout)?;
+        let stderr = String::from_utf8(output.stderr)?;
+        println!("{cmd:?} ({}):\n{stdout}{stderr}", output.status);
+        Ok((output.status.code(), stdout, stderr))
+    };
+
+    let (code, stdout, stderr) = run(&["list"])?;
+    assert_eq!(
+        (code, stdout.as_str()),
+        (Some(0), "NAME  SIZE  PULLED  SOURCE\n")
+    );
+    assert!(
+        stderr.contains("no models pulled yet; try `ardana pull decider-2b`")
+            && stderr.contains(page),
+        "{stderr}"
+    );
+    let (code, stdout, _) = run(&["show", "decider-2b"])?;
+    assert_eq!(code, Some(0));
+    assert!(
+        stdout.contains("1.3 GB to download")
+            && stdout
+                .contains("not pulled yet; `ardana pull decider-2b` or its first run downloads it"),
+        "{stdout}"
+    );
+    let (code, stdout, _) = run(&["show", "Decider-2B:Q4_K_M", "--json"])?;
+    assert_eq!(code, Some(0));
+    let shown: serde_json::Value = serde_json::from_str(&stdout)?;
+    assert_eq!(shown["name"], "decider-2b");
+    assert_eq!(shown["source"], "hf.co/Mapika/decider-2b-GGUF:Q4_K_M");
+    assert_eq!(shown["pulled"], false);
+    // A name the cache does not hold is unknown here, without a request; so is a name to remove.
+    let unknown = |name: &str| {
+        format!(
+            "no model named \"{name}\"; none pulled yet; the library at {page} is pulled on first use"
+        )
+    };
+    for (args, name) in [
+        (["show", "decider-4b"], "decider-4b"),
+        (["rm", "nope"], "nope"),
+        (["rm", "decider-2b"], "decider-2b"),
+    ] {
+        let (code, stdout, stderr) = run(&args)?;
+        assert_eq!((code, stdout.as_str()), (Some(1), ""), "{args:?}");
+        assert!(stderr.contains(&unknown(name)), "{args:?}: {stderr}");
+        // The error echoes the name asked for and names no other library model.
+        let unasked: Vec<String> = others.iter().filter(|n| *n != name).cloned().collect();
+        assert_eq!(named_in(&stderr, &unasked), [] as [&str; 0], "{stderr}");
+    }
+    let (code, _, stderr) = run(&["ps", "--port", "9"])?;
+    assert_eq!(code, Some(1));
+    assert!(stderr.contains("no ardana serve answers"), "{stderr}");
+    for help in [
+        vec!["--help"],
+        vec!["pull", "--help"],
+        vec!["run", "--help"],
+        vec!["show", "--help"],
+        vec!["list", "--help"],
+        vec!["rm", "--help"],
+        vec!["ps", "--help"],
+        vec!["serve", "--help"],
+    ] {
+        let (code, stdout, _) = run(&help)?;
+        assert_eq!(code, Some(0), "{help:?}");
+        assert_eq!(
+            named_in(&stdout, &others),
+            [] as [&str; 0],
+            "{help:?}:\n{stdout}"
+        );
+        if help.len() == 1 || matches!(help[0], "pull" | "run") {
+            assert!(stdout.contains(page), "{help:?}:\n{stdout}");
+        }
+    }
+    assert!(run(&["--help"])?.1.contains("ARDANA_LIBRARY"));
+    assert_eq!(connections.load(std::sync::atomic::Ordering::SeqCst), 0);
     Ok(())
 }

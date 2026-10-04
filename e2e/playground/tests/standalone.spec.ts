@@ -1,8 +1,11 @@
-// W2, the standalone playground (`cargo xtask e2e standalone`, tagged @standalone): the build of
+// W2 and W6, the standalone playground (`cargo xtask e2e standalone`, tagged @standalone): the build of
 // `cargo xtask build-playground --public-url /playground/ --hub <stand-in>` as static files under `/playground/`
-// (`ARDANA_BASE_URL`), with no server behind it, and a stand-in of Hugging Face on another origin serving `tmp/hf`
-// offline (`ARDANA_HUB_URL`). The page lists the library it baked, runs the browser variants in the tab from the
-// stand-in's ardana-ai repositories at the baked commits, and hands every other model to the ardana CLI.
+// (`ARDANA_BASE_URL`), with no server behind it, the library document served beside it at `/models.json` from the file
+// `ARDANA_SITE_LIBRARY` (a copy of the snapshot, which these cases rewrite and take away), and a stand-in of Hugging
+// Face on another origin serving `tmp/hf` offline (`ARDANA_HUB_URL`). The page bakes no library (Q13): it GETs
+// `/models.json` on load and whenever its tab comes back, lists what the document holds, runs the browser variants in
+// the tab from the stand-in's repositories at the commits the document pins, and hands every other model to the
+// ardana CLI.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,27 +33,38 @@ import {
   topAnswers,
   visibleText,
   type Json,
-  type ModelInfo,
   type Request,
 } from './helpers';
 
 const MODEL = 'decider-0.8b';
 const PAGE = '/playground/';
+const LIBRARY = '/models.json';
 const hub = process.env.ARDANA_HUB_URL!;
+/** The file the site serves at `/models.json`. */
+const served = process.env.ARDANA_SITE_LIBRARY!;
 
-/** What `cargo xtask build-playground` baked into the page: the library's models and its browser variants. */
-type Library = {
-  hub: string;
-  models: { models: ModelInfo[] };
-  browser: Record<string, { repository: string; commit: string }>;
+/** A library document (C1), the fields these cases read. */
+type Entry = {
+  name: string;
+  size: number;
+  min_version?: string;
+  browser?: { weights: string; commit: string; size: number };
+  [key: string]: Json | undefined;
 };
-const library = (): Library => JSON.parse(fs.readFileSync(path.join(root, 'tmp/playground/library.json'), 'utf8'));
+type Document = { schema: number; default: string; browser_default?: string; models: Entry[] };
 
-/** The names of the models `library.toml` lists, in its order. */
-const libraryNames = () =>
-  [...fs.readFileSync(path.join(root, 'crates/ardana-registry/src/library.toml'), 'utf8').matchAll(/^name = "(.+)"$/gm)].map(
-    (match) => match[1],
-  );
+/** The document the site serves now. */
+const document = (): Document => JSON.parse(fs.readFileSync(served, 'utf8')) as Document;
+/** The library snapshot (C5), which the served copy starts as. */
+const snapshot = (): Document =>
+  JSON.parse(fs.readFileSync(path.join(root, 'crates/ardana-registry/tests/data/models.json'), 'utf8')) as Document;
+/** Replaces the served document. */
+const serve = (library: Document) => fs.writeFileSync(served, JSON.stringify(library, null, 2));
+/** The picker's row of a library model: its name and the ardana CLI's download. */
+const row = (m: Entry) => `${m.name} · ${decimalSize(m.size)}`;
+/** The picker's "Library" rows, every model of the document in its order. */
+const libraryRows = (page: Page) =>
+  modelPicker(page).locator('optgroup[label="Library · runs with the ardana CLI"] option');
 
 type Response = { model: string; answers: Record<string, Record<string, Json>> };
 
@@ -72,6 +86,24 @@ function record(page: Page): { requests: string[]; failed: string[] } {
   });
   return { requests, failed };
 }
+
+/** Whether `url` is the page's own: a file under `/playground/`, or the library document beside it. */
+const own = (url: string) => new URL(url).pathname.startsWith(PAGE) || new URL(url).pathname === LIBRARY;
+/** How many times the page asked for the library document. */
+const libraryGets = (requests: string[]) => requests.filter((url) => new URL(url).pathname === LIBRARY).length;
+
+/**
+ * The tab comes back: headless Chrome keeps every page visible and focused (a tab switch sends nothing), so the case
+ * sends the page one of the events a tab switch sends, `focus` at the window or `visibilitychange` at the document.
+ */
+const comeBack = (page: Page, event: 'focus' | 'visibilitychange') =>
+  page.evaluate((event) => {
+    if (event === 'focus') {
+      window.dispatchEvent(new FocusEvent('focus'));
+    } else {
+      window.document.dispatchEvent(new Event('visibilitychange', { bubbles: true }));
+    }
+  }, event);
 
 /**
  * The server row of `model` (or a name the library lacks): Run is held and says the model runs with the ardana CLI on
@@ -98,31 +130,31 @@ async function expectInstall(page: Page, model: string, request: Request, reques
 }
 
 test.describe('standalone', { tag: '@standalone' }, () => {
+  // Each case starts from the snapshot's document, whatever the last one left served.
+  test.beforeEach(() => serve(snapshot()));
+
   test('standalone_first_run', async ({ page, baseURL }, testInfo) => {
     const origin = new URL(baseURL!).origin;
-    const { models, browser } = library();
-    expect(models.models.map((m) => m.name)).toEqual(libraryNames());
+    const { models } = document();
     const { requests, failed } = record(page);
 
-    // R2.2: the page lists every library model, the browser variants in the tab, and opens on decider-0.8b's row.
+    // R2.2, R6.2: one GET of /models.json; the page lists every entry of the document in its order, the browser
+    // variants in the tab, and opens on the browser default's row.
     await page.goto(PAGE);
     const picker = modelPicker(page);
     await expect(picker).toHaveValue(browserRow(MODEL));
+    expect(libraryGets(requests)).toBe(1);
     await expect(picker.locator('optgroup[label="Pulled"]')).toHaveCount(0);
     await expect(picker.locator('optgroup[label="In browser · runs in this tab"] option')).toHaveText(
-      models.models.filter((m) => m.x_browser !== undefined).map((m) => `${m.name} · ${decimalSize(m.x_browser!)}`),
+      models.filter((m) => m.browser).map((m) => `${m.name} · ${decimalSize(m.browser!.size)}`),
     );
-    expect(Object.keys(browser).sort()).toEqual(
-      models.models.filter((m) => m.x_browser !== undefined).map((m) => m.name).sort(),
-    );
-    await expect(picker.locator('optgroup[label="Library · runs with the ardana CLI"] option')).toHaveText(
-      models.models.map((m) => `${m.name} · ${decimalSize(m.x_size!)}`),
-    );
-    const size = models.models.find((m) => m.name === MODEL)!.x_browser!;
+    await expect(libraryRows(page)).toHaveText(models.map(row));
+    const size = models.find((m) => m.name === MODEL)!.browser!.size;
     await expect(page.getByTestId('model-note')).toHaveText(
       `Runs in this tab. The first run downloads ${decimalSize(size)}, which this browser keeps. ${IN_MEMORY}; only ` +
         'a reload frees all of it.',
     );
+    await expect(page.getByTestId('models-fault')).toHaveCount(0);
     expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
 
     // Its fonts, the engine module and onnxruntime-web (imported on the pick) come from under /playground/, and
@@ -136,7 +168,7 @@ test.describe('standalone', { tag: '@standalone' }, () => {
     expect(paths()).toContain(`${PAGE}engine/engine.js`);
     for (const url of requests) {
       expect(new URL(url).origin, url).toBe(origin);
-      expect(new URL(url).pathname.startsWith(PAGE), url).toBe(true);
+      expect(own(url), url).toBe(true);
     }
     expect(failed).toEqual([]);
     expect((await visibleText(page)).toLowerCase()).not.toContain('jev');
@@ -146,9 +178,9 @@ test.describe('standalone', { tag: '@standalone' }, () => {
   test('standalone_browser_run', async ({}, testInfo) => {
     test.setTimeout(900_000);
     expect(hub, 'xtask passes the stand-in of Hugging Face').toBeTruthy();
-    const variant = library().browser[MODEL];
+    const variant = document().models.find((m) => m.name === MODEL)!.browser!;
     const files = ['tokenizer.json', 'model.onnx', 'model.onnx.data'].map(
-      (file) => `${hub}/${variant.repository}/resolve/${variant.commit}/${file}`,
+      (file) => `${hub}/${variant.weights.replace(/^hf\.co\//, '')}/resolve/${variant.commit}/${file}`,
     );
     // The ardana CLI's own answer to the same request, from decider-0.8b's GGUF, offline over tmp/hf.
     const ticket = fixture('ticket.json');
@@ -183,8 +215,8 @@ test.describe('standalone', { tag: '@standalone' }, () => {
       await expect(modelPicker(page)).toHaveValue(browserRow(MODEL));
       await loadPreset(page, 'Ticket routing');
 
-      // R2.3: Run downloads the three files from the stand-in at the baked commit, and answers in the tab as the CLI
-      // does.
+      // R2.3, R6.3: Run downloads the three files from the stand-in at the document's commit, and answers in the tab
+      // with the document's profile as the CLI does.
       await runKey(page).click();
       await expect(page.getByTestId('answered-by')).toContainText(' in this tab on ', { timeout: 600_000 });
       await expect(page.getByTestId('fault')).toHaveCount(0);
@@ -229,8 +261,8 @@ test.describe('standalone', { tag: '@standalone' }, () => {
   });
 
   test('standalone_run_command', async ({ page }, testInfo) => {
-    const { models } = library();
-    const plain = models.models.filter((m) => m.x_browser === undefined).map((m) => m.name);
+    const { models } = document();
+    const plain = models.filter((m) => !m.browser);
     expect(plain.length).toBeGreaterThan(0);
     const { requests } = record(page);
     const ticket = fixture('ticket.json');
@@ -239,11 +271,10 @@ test.describe('standalone', { tag: '@standalone' }, () => {
     await page.goto(PAGE);
     await loadPreset(page, 'Ticket routing');
     for (const model of plain) {
-      await pickModel(page, model);
-      await expectInstall(page, model, ticket, requests);
-      const size = decimalSize(models.models.find((m) => m.name === model)!.x_size!);
+      await pickModel(page, model.name);
+      await expectInstall(page, model.name, ticket, requests);
       await expect(page.getByTestId('model-note')).toHaveText(
-        `Runs with the ardana CLI on your machine; its first run downloads ${size}.`,
+        `Runs with the ardana CLI on your machine; its first run downloads ${decimalSize(model.size)}.`,
       );
     }
     await screenshot(page, testInfo, 'standalone_run_command', 'library');
@@ -255,9 +286,9 @@ test.describe('standalone', { tag: '@standalone' }, () => {
       await page.goto(`${PAGE}${autorun}${shareHash({ ...ticket, model: unknown })}`);
       await expectInstall(page, unknown, ticket, requests);
       await expect(page.getByTestId('model-note')).toHaveText('Runs with the ardana CLI on your machine.');
-      // Loading the page fetched its own files alone.
+      // Loading the page fetched its own files and the library document alone.
       for (const url of requests.slice(sent)) {
-        expect(new URL(url).pathname.startsWith(PAGE), url).toBe(true);
+        expect(own(url), url).toBe(true);
       }
     }
     await screenshot(page, testInfo, 'standalone_run_command', 'unknown');
@@ -267,7 +298,7 @@ test.describe('standalone', { tag: '@standalone' }, () => {
     await page.getByTestId('run-note').getByRole('button', { name: `Run ${MODEL} in this tab instead` }).click();
     await expect(modelPicker(page)).toHaveValue(browserRow(MODEL));
     await expect(runKey(page)).toBeFocused();
-    const size = models.models.find((m) => m.name === MODEL)!.x_browser!;
+    const size = models.find((m) => m.name === MODEL)!.browser!.size;
     await expect(runKey(page)).toHaveAccessibleDescription(
       startsWith(`Run downloads ${MODEL} into this tab once: ${decimalSize(size)}, kept by this browser.`),
     );
@@ -298,5 +329,102 @@ test.describe('standalone', { tag: '@standalone' }, () => {
     await expect(fresh.getByTestId('channel')).toHaveCount(Object.keys(JSON.parse(questions)).length);
     await screenshot(fresh, testInfo, 'standalone_share');
     await context.close();
+  });
+
+  // R6.4: a model published in the document after the page loaded (no rebuild of this page, no reload of the tab) is
+  // in the picker when the tab comes back, after every entry before it, and runs as any library row does.
+  test('standalone_library_update', async ({ page }, testInfo) => {
+    const library = document();
+    const { requests, failed } = record(page);
+    await page.goto(PAGE);
+    await expect(modelPicker(page)).toHaveValue(browserRow(MODEL));
+    await expect(libraryRows(page)).toHaveText(library.models.map(row));
+    expect(libraryGets(requests)).toBe(1);
+    await page.evaluate(() => ((window as unknown as { kept?: string }).kept = 'kept'));
+
+    const added: Entry = {
+      ...library.models.find((m) => m.name === 'decider-4b')!,
+      name: 'decider-9b',
+      summary: 'Published while this tab was open.',
+      weights: 'hf.co/ardana-ai/decider-9b-GGUF',
+      size: 9_000_000_000,
+      tags: [{ tag: 'q4_k_m', size: 9_000_000_000 }],
+    };
+    serve({ ...library, models: [...library.models, added] });
+    await comeBack(page, 'focus');
+    await expect(libraryRows(page)).toHaveText([...library.models, added].map(row));
+    expect(libraryGets(requests)).toBe(2);
+    // No reload: the page kept what its script held, and the pick.
+    expect(await page.evaluate(() => (window as unknown as { kept?: string }).kept)).toBe('kept');
+    await expect(modelPicker(page)).toHaveValue(browserRow(MODEL));
+    await expect(page.getByTestId('models-fault')).toHaveCount(0);
+    await pickModel(page, added.name);
+    await expect(page.getByTestId('model-note')).toHaveText(
+      `Runs with the ardana CLI on your machine; its first run downloads ${decimalSize(added.size)}.`,
+    );
+    expect(failed).toEqual([]);
+    await screenshot(page, testInfo, 'standalone_library_update');
+  });
+
+  // R6.5: the document's GET failing before the page loads, and again while it is open. The page says the library is
+  // unavailable (under the picker, an alert; in the banner while nothing is picked yet, where Run is held), keeps its
+  // list, pick and editors, and lists the models after the next successful GET on the tab's return; an entry for a
+  // later ardana, or one that does not read, is left out (Q12).
+  test('standalone_library_unavailable', async ({ page }, testInfo) => {
+    const library = document();
+    const { requests } = record(page);
+    const unavailable = 'The model library is unavailable';
+    const fault = page.getByTestId('models-fault');
+
+    // Gone before the load: nothing to list, Run held, the editors at work.
+    fs.rmSync(served);
+    await page.goto(PAGE);
+    await expect(fault).toHaveText(`${unavailable}: GET ${LIBRARY} answered 404`);
+    await expect(fault).toHaveAttribute('role', 'alert');
+    await expect(modelPicker(page).locator('option')).toHaveCount(0);
+    await expect(runKey(page)).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByTestId('run-note')).toHaveText(unavailable);
+    await expect(runKey(page)).toHaveAccessibleDescription(unavailable);
+    await loadPreset(page, 'Ticket routing');
+    const state = await stateBox(page).inputValue();
+    expect(state.length).toBeGreaterThan(0);
+    expect(libraryGets(requests)).toBe(1);
+    await screenshot(page, testInfo, 'standalone_library_unavailable', 'first-load');
+
+    // Back, with an entry for a later ardana and one that does not read: the tab's return lists the models the page
+    // reads, in the document's order, opens on the browser default's row and frees Run; the editors keep their text.
+    const later: Entry = { ...library.models[1], name: 'decider-later', min_version: '99.0.0' };
+    const broken: Entry = { name: 'broken', size: 1, weights: 'hf.co/o/broken-GGUF' };
+    serve({ ...library, models: [library.models[0], later, ...library.models.slice(1), broken] });
+    await comeBack(page, 'focus');
+    await expect(fault).toHaveCount(0);
+    await expect(libraryRows(page)).toHaveText(library.models.map(row));
+    await expect(modelPicker(page)).toHaveValue(browserRow(MODEL));
+    await expect(runKey(page)).toHaveAttribute('aria-disabled', 'false');
+    await expect(page.getByTestId('run-note')).not.toContainText('library');
+    await expect(stateBox(page)).toHaveValue(state);
+    expect(libraryGets(requests)).toBe(2);
+
+    // Gone again while the page is open: the tab's return says so, and the page keeps its list, its pick and its
+    // editors; Run is Run.
+    fs.rmSync(served);
+    await comeBack(page, 'visibilitychange');
+    await expect(fault).toHaveText(`${unavailable}: GET ${LIBRARY} answered 404`);
+    await expect(libraryRows(page)).toHaveText(library.models.map(row));
+    await expect(modelPicker(page)).toHaveValue(browserRow(MODEL));
+    await expect(runKey(page)).toHaveAttribute('aria-disabled', 'false');
+    await expect(stateBox(page)).toHaveValue(state);
+    await screenshot(page, testInfo, 'standalone_library_unavailable');
+
+    // A document the page cannot read is unavailable too, and said with its reason; the next good one lists again.
+    fs.writeFileSync(served, '{"schema": 2, "default": "x", "models": []}');
+    await comeBack(page, 'focus');
+    await expect(fault).toHaveText(`${unavailable}: the library document is schema 2, which this ardana does not read; update ardana`);
+    await expect(libraryRows(page)).toHaveText(library.models.map(row));
+    serve(library);
+    await comeBack(page, 'visibilitychange');
+    await expect(fault).toHaveCount(0);
+    await expect(libraryRows(page)).toHaveText(library.models.map(row));
+    expect(libraryGets(requests)).toBe(5);
   });
 });

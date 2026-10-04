@@ -159,15 +159,17 @@ pub fn App() -> impl IntoView {
         }
     });
 
-    // The model list names the default model (the picker's first pick) and where each model runs. `?autorun=1` runs a
-    // share link once, after the list has loaded (a first run in this tab waits for a tap: `Deck::autorun`).
+    // The model list names the default model (the picker's first pick) and where each model runs; a list that does not
+    // arrive leaves the last one in place. `?autorun=1` runs a share link once, after the list has loaded (a first run
+    // in this tab waits for a tap: `Deck::autorun`).
     let autorun = StoredValue::new(autorun_requested());
     Effect::new(move |_| {
         let Some(listed) = models.get() else {
             return;
         };
-        if let Ok(list) = listed {
-            deck.set_models(list);
+        match listed {
+            Ok(list) => deck.set_models(list),
+            Err(_) => deck.unlisted.set(true),
         }
         if autorun.get_value() {
             autorun.set_value(false);
@@ -191,9 +193,10 @@ pub fn App() -> impl IntoView {
             }
         });
     });
-    // `ardana pull` or `ardana rm` may have changed the server's models since the list was fetched: list again after
-    // each run, and whenever the tab comes back (the window takes the focus again, or the page is shown again after
-    // another tab or a terminal), so a model pulled meanwhile is a server row that Run sends, without a reload.
+    // `ardana pull` or `ardana rm` may have changed the server's models since the list was fetched (and the standalone
+    // build's library document may name a new model, or be back after a failed GET): list again after each run, and
+    // whenever the tab comes back (the window takes the focus again, or the page is shown again after another tab or
+    // a terminal), so a model pulled meanwhile is a server row that Run sends, without a reload.
     Effect::new(move |previous: Option<usize>| {
         let run = deck
             .last

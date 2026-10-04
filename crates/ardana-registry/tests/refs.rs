@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use ardana_registry::refs::{HfFile, Ref, matches_quant};
+use ardana_registry::refs::{HfFile, Ref, companion_of, matches_quant};
 
 fn hf(org: &str, repo: &str, file: Option<HfFile>) -> Ref {
     Ref::Hf {
@@ -129,4 +129,15 @@ fn quants_match_case_insensitively() {
     assert!(!matches_quant("decider-2b-v11-Q4_K_M.gguf", "K_M"));
     assert!(!matches_quant("decider-2b-v11-Q4_K_M.gguf", "Q4_K"));
     assert!(!matches_quant("decider-2b-v11-Q4_K_M.bin", "Q4_K_M"));
+}
+
+#[test]
+fn companions_carry_the_model_file_name() {
+    let model = "gemma-4-E4B-it-Q4_0.gguf";
+    assert!(companion_of("mtp-gemma-4-E4B-it-Q4_0.gguf", model));
+    assert!(companion_of("dir/MMPROJ-gemma-4-E4B-it-Q4_0.gguf", model));
+    assert!(!companion_of(model, model));
+    assert!(!companion_of(model, "mtp-gemma-4-E4B-it-Q4_0.gguf"));
+    assert!(!companion_of("xgemma-4-E4B-it-Q4_0.gguf", model));
+    assert!(!companion_of("mtp-gemma-4-E4B-it-Q8_0.gguf", model));
 }

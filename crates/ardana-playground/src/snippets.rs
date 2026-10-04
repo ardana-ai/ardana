@@ -19,12 +19,13 @@ pub fn pull(model: &str) -> String {
     format!("ardana pull {model}")
 }
 
-/// The ardana CLI's command that answers `request` on the model it names: `ardana run <model> --request -`, with the
+/// The ardana CLI's command that answers `request` on the model it names (`<model>`, to be filled in, while it names
+/// none: the standalone build before anything is picked): `ardana run <model> --request -`, with the
 /// exact body Run sends on stdin, in a heredoc as the curl snippet carries it.
 pub fn cli(request: &SystemOneRequest) -> String {
     format!(
         "ardana run {} --request - <<'JSON'\n{}\nJSON\n",
-        request.model.as_deref().unwrap_or_default(),
+        request.model.as_deref().unwrap_or("<model>"),
         request::body(request)
     )
 }

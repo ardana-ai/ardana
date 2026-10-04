@@ -13,7 +13,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
 
-use ardana_registry::library::library;
+use ardana_registry::library::LibraryEntry;
 use ardana_registry::{BROWSER_FILES, BrowserModel, TOKENIZER_FILE};
 use axum::Json;
 use axum::body::{Body, Bytes};
@@ -41,7 +41,7 @@ pub(crate) async fn file(
     let Ok(Path((name, file))) = path else {
         return Err(ApiError::NotFound);
     };
-    if library().browser(&name).is_none()
+    if models.library().await.browser(&name).is_none()
         || (file != PROFILE && !BROWSER_FILES.contains(&file.as_str()))
     {
         return Err(ApiError::NotFound);
@@ -178,10 +178,11 @@ fn part(headers: &HeaderMap, etag: &str, len: u64) -> Part {
     Part::Range(first, last.map_or(len - 1, |last| last.min(len - 1)))
 }
 
-/// Pulls the browser variant of the library model `name`, logging what it pulled or why it could not; the server's
-/// [`crate::models::Pulls`] shares it among the requests for `name` and keeps what it pulled.
-pub(crate) async fn pull(name: String) -> Result<Arc<BrowserModel>, String> {
-    if let Some((_, browser)) = library().browser(&name) {
+/// Pulls the browser variant of the library model `model`, logging what it pulled or why it could not; the server's
+/// [`crate::models::Pulls`] shares it among the requests for the model and keeps what it pulled.
+pub(crate) async fn pull(model: LibraryEntry) -> Result<Arc<BrowserModel>, String> {
+    let name = model.name.clone();
+    if let Some(browser) = &model.browser {
         eprintln!(
             "ardana serve: pulling the browser variant of {name} ({}, {})",
             browser.weights,
@@ -189,10 +190,9 @@ pub(crate) async fn pull(name: String) -> Result<Arc<BrowserModel>, String> {
         );
     }
     let handle = tokio::runtime::Handle::current();
-    let pulling = name.clone();
     // The pull reads the tokenizer and the chat template synchronously: off the async workers.
     let outcome = tokio::task::spawn_blocking(move || {
-        handle.block_on(ardana_registry::pull_browser(&pulling, true))
+        handle.block_on(ardana_registry::pull_browser(&model, true))
     })
     .await
     .map_err(|err| format!("pulling the browser variant of {name} stopped: {err}"))

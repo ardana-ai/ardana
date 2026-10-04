@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 use xtask::env::{shell_exports, write_claude_settings};
-use xtask::sandbox::Sandbox;
+use xtask::sandbox::{SNAPSHOT, Sandbox};
 
 fn repo_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
@@ -21,7 +21,8 @@ fn env_map(sandbox: &Sandbox) -> BTreeMap<String, OsString> {
 }
 
 /// `.cargo/config.toml` `[env]` reaches plain `cargo test` processes with the
-/// same paths the sandbox gives tools, whatever the shell sets.
+/// same paths the sandbox gives tools, whatever the shell sets: the caches under
+/// `tmp/`, and the model library read from the snapshot (R2.2).
 #[test]
 fn cargo_env_points_into_tmp() {
     let tmp = repo_root().join("tmp");
@@ -37,6 +38,11 @@ fn cargo_env_points_into_tmp() {
         );
     }
     assert_eq!(std::env::temp_dir(), tmp.join("sys"));
+    let library = PathBuf::from(std::env::var_os("ARDANA_LIBRARY").expect("ARDANA_LIBRARY unset"));
+    assert_eq!(library, repo_root().join(SNAPSHOT));
+    assert!(library.is_file(), "{}", library.display());
+    assert_eq!(library.as_os_str(), env["ARDANA_LIBRARY"]);
+    assert_eq!(sandbox.snapshot(), library);
 }
 
 #[test]

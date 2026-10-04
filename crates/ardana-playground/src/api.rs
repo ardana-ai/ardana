@@ -1,23 +1,47 @@
 //! The one place the playground talks to the network. Served by `ardana serve`, it calls the public API on the page's
 //! own origin, `/v1/*` (Q15), and no other host or path. The standalone build (`cargo xtask build-playground`), which no
-//! server serves, carries the model list and the browser variants' profiles and commits instead, and fetches the
-//! browser files from their Hugging Face repositories at those commits.
+//! server serves, reads the model library document (C1) instead, from the URL its build named (`--library`, default
+//! `/models.json`), on every list, and fetches the browser files from their Hugging Face repositories at the commits
+//! the document pins (Q13).
 
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::fmt;
+use std::rc::Rc;
 
-use ardana_api::{Detail, ErrorBody, ModelsResponse, StandaloneLibrary};
+use ardana_api::{
+    BrowserEntry, Detail, ErrorBody, LibraryDocument, LibraryEntry, ModelInfo, ModelsResponse,
+};
 use js_sys::Uint8Array;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     AbortSignal, Headers, ReadableStreamDefaultReader, ReadableStreamReadResult, ReferrerPolicy,
-    Request, RequestInit, Response,
+    Request, RequestCache, RequestInit, Response,
 };
+
+/// The version of this page, which reads a library document as the `ardana` of the same version does (Q12).
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The prefix of a Hugging Face repository in the library document, `hf.co/<org>/<repo>`.
+const HF_PREFIX: &str = "hf.co/";
 
 #[derive(Debug, Clone)]
 pub struct ApiClient {
     /// The standalone build's library, in place of a server; none in the build `ardana serve` embeds.
-    library: Option<&'static StandaloneLibrary>,
+    library: Option<Library>,
+}
+
+/// Where the standalone build reads the library: its document and the Hub its browser files come from, both named by
+/// the build, and the browser variants the last document listed, which a run in the tab reads its files by.
+#[derive(Debug, Clone)]
+struct Library {
+    /// The document's URL (`cargo xtask build-playground --library`), on the page's origin or whole.
+    url: &'static str,
+    /// The Hugging Face the browser files come from (`--hub`): `https://huggingface.co`, or a stand-in.
+    hub: &'static str,
+    /// Each browser variant of the last document, by its model's name; shared by every clone of the client.
+    browser: Rc<RefCell<BTreeMap<String, BrowserEntry>>>,
 }
 
 /// One run as it happened: a `POST /v1/systemone` round trip, or the same request answered in this tab.
@@ -105,7 +129,7 @@ impl Backend {
 impl ApiClient {
     /// The page's client: the server that served it, or the standalone build's library.
     pub fn page() -> ApiClient {
-        ApiClient { library: baked() }
+        ApiClient { library: library() }
     }
 
     /// Whether this is the standalone build, which no server serves: a model runs in this tab or with the ardana CLI on
@@ -114,23 +138,46 @@ impl ApiClient {
         self.library.is_some()
     }
 
-    /// `GET /v1/models`; in the standalone build, the library's models.
+    /// `GET /v1/models`; in the standalone build, the library document fetched now and read as this version reads it
+    /// (Q12: an entry it cannot read is left out), listed as a server that has pulled none lists the library, with no
+    /// default model and every browser variant held. A document that does not arrive or read leaves the last list in
+    /// place and says the library is unavailable.
     pub async fn models(&self) -> Result<ModelsResponse, String> {
-        if let Some(library) = self.library {
-            return Ok(library.models.clone());
-        }
-        let (status, text) = self.fetch("GET", "/v1/models", None).await?;
+        let Some(library) = &self.library else {
+            let (status, text) = self.fetch("GET", "/v1/models", None, false).await?;
+            if status != 200 {
+                return Err(format!("GET /v1/models answered {status}: {text}"));
+            }
+            return serde_json::from_str(&text)
+                .map_err(|err| format!("GET /v1/models sent an unreadable list: {err}"));
+        };
+        let unavailable = |reason: String| format!("The model library is unavailable: {reason}");
+        let (status, text) = self
+            .fetch("GET", library.url, None, true)
+            .await
+            .map_err(unavailable)?;
         if status != 200 {
-            return Err(format!("GET /v1/models answered {status}: {text}"));
+            return Err(unavailable(format!(
+                "GET {} answered {status}",
+                library.url
+            )));
         }
-        serde_json::from_str(&text)
-            .map_err(|err| format!("GET /v1/models sent an unreadable list: {err}"))
+        let document =
+            LibraryDocument::parse(&text, VERSION).map_err(|err| unavailable(err.to_string()))?;
+        *library.browser.borrow_mut() = document
+            .models
+            .iter()
+            .filter_map(|entry| Some((entry.name.clone(), entry.browser.clone()?)))
+            .collect();
+        Ok(listed(&document))
     }
 
     /// `POST /v1/systemone` with `body`, timed with `performance.now()`.
     pub async fn systemone(&self, body: String) -> Exchange {
         let started = now();
-        let response = self.fetch("POST", "/v1/systemone", Some(&body)).await;
+        let response = self
+            .fetch("POST", "/v1/systemone", Some(&body), false)
+            .await;
         Exchange {
             latency_ms: now() - started,
             request: body,
@@ -141,19 +188,20 @@ impl ApiClient {
 
     /// `GET /v1/browser/<name>/profile`: the profile of a model's browser variant, as JSON text, and the version of its
     /// files (the `ETag`). The server pulls the variant on the first request for it, so this waits for that pull;
-    /// `signal` ends the wait. In the standalone build, the library's profile and the commit of the variant's files.
+    /// `signal` ends the wait. In the standalone build, the document's profile and the commit of the variant's files.
     pub async fn browser_profile(
         &self,
         name: &str,
         signal: &AbortSignal,
     ) -> Result<(String, String), Failed> {
-        if let Some(library) = self.library {
-            let variant = library.browser.get(name).ok_or_else(|| unknown(name))?;
-            return Ok((variant.profile.to_string(), variant.commit.clone()));
+        if let Some(library) = &self.library {
+            return library
+                .variant(name)
+                .map(|variant| (variant.profile.to_string(), variant.commit));
         }
         let path = browser_path(name, "profile");
         let response = self
-            .send("GET", &path, None, Some(signal), &[])
+            .send("GET", &path, None, Some(signal), &[], false)
             .await
             .map_err(Failed::Connection)?;
         let version = response
@@ -177,7 +225,7 @@ impl ApiClient {
     /// download where it is. From byte `from` on when the tab keeps the bytes before it, of the file at `version`:
     /// `Range: bytes=<from>-` with `If-Range: "<version>"`, which the server answers with the rest (206), or with the
     /// whole file (200) when its copy is no longer that version. In the standalone build, the file of the variant's
-    /// repository at that commit, `<hub>/<repository>/resolve/<version>/<file>`, which never changes: `Range` alone.
+    /// repository at that commit, `<hub>/<org>/<repo>/resolve/<version>/<file>`, which never changes: `Range` alone.
     pub async fn browser_file(
         &self,
         name: &str,
@@ -186,24 +234,28 @@ impl ApiClient {
         version: &str,
         signal: &AbortSignal,
     ) -> Result<Download, Failed> {
-        let path = match self.library {
+        let path = match &self.library {
             Some(library) => {
-                let variant = library.browser.get(name).ok_or_else(|| unknown(name))?;
+                let variant = library.variant(name)?;
+                let repository = variant
+                    .weights
+                    .strip_prefix(HF_PREFIX)
+                    .unwrap_or(&variant.weights);
                 let hub = library.hub.trim_end_matches('/');
-                format!("{hub}/{}/resolve/{version}/{file}", variant.repository)
+                format!("{hub}/{repository}/resolve/{version}/{file}")
             }
             None => browser_path(name, file),
         };
         let range = format!("bytes={from}-");
         let version = format!("\"{version}\"");
         // The Hub's `ETag` is no commit, and a request with `If-Range` would be no CORS-safelisted one there.
-        let headers: &[(&str, &str)] = match (from > 0, self.library) {
+        let headers: &[(&str, &str)] = match (from > 0, &self.library) {
             (false, _) => &[],
             (true, Some(_)) => &[("range", &range)],
             (true, None) => &[("range", &range), ("if-range", &version)],
         };
         let response = self
-            .send("GET", &path, None, Some(signal), headers)
+            .send("GET", &path, None, Some(signal), headers, false)
             .await
             .map_err(Failed::Connection)?;
         let status = response.status();
@@ -258,18 +310,22 @@ impl ApiClient {
         })
     }
 
+    /// The status and whole body of a request; `fresh` asks the browser's cache for nothing it has not revalidated.
     async fn fetch(
         &self,
         method: &str,
         path: &str,
         body: Option<&str>,
+        fresh: bool,
     ) -> Result<(u16, String), String> {
-        let response = self.send(method, path, body, None, &[]).await?;
+        let response = self.send(method, path, body, None, &[], fresh).await?;
         Ok((response.status(), text(&response, method, path).await?))
     }
 
     /// Sends a request to `path` (on the page's origin, or a whole URL) with `headers` and waits for the response's head;
-    /// `signal`, when given, can end the request.
+    /// `signal`, when given, can end the request. `fresh` sends it `cache: no-cache`: a copy the browser's cache holds
+    /// is used only once the host says it still stands (the library document, which changes under one URL; its host
+    /// answers an `If-None-Match` with a 304), never on the cache's own guess.
     async fn send(
         &self,
         method: &str,
@@ -277,10 +333,14 @@ impl ApiClient {
         body: Option<&str>,
         signal: Option<&AbortSignal>,
         headers: &[(&str, &str)],
+        fresh: bool,
     ) -> Result<Response, String> {
         let init = RequestInit::new();
         init.set_method(method);
         init.set_signal(signal);
+        if fresh {
+            init.set_cache(RequestCache::NoCache);
+        }
         // The standalone build asks the Hub alone, whose CDN refuses some referring pages (any on *.workers.dev: a 404
         // without CORS headers); it names none.
         if self.library.is_some() {
@@ -360,28 +420,57 @@ impl Download {
     }
 }
 
-/// The standalone build's library (`cargo xtask build-playground` writes it to the file `ARDANA_PLAYGROUND_LIBRARY`
-/// names); none in the build `ardana serve` embeds.
+impl Library {
+    /// The browser variant of `name` as the last document listed it.
+    fn variant(&self, name: &str) -> Result<BrowserEntry, Failed> {
+        self.browser.borrow().get(name).cloned().ok_or_else(|| {
+            Failed::Refused(format!(
+                "the model library names no browser files of {name}"
+            ))
+        })
+    }
+}
+
+/// Where the standalone build reads its library: the URLs `cargo xtask build-playground` named (`--library`, `--hub`),
+/// set for the build; none in the build `ardana serve` embeds.
 #[cfg(feature = "standalone")]
-fn baked() -> Option<&'static StandaloneLibrary> {
-    static LIBRARY: std::sync::OnceLock<StandaloneLibrary> = std::sync::OnceLock::new();
-    Some(LIBRARY.get_or_init(|| {
-        serde_json::from_str(include_str!(env!(
-            "ARDANA_PLAYGROUND_LIBRARY",
+fn library() -> Option<Library> {
+    Some(Library {
+        url: env!(
+            "ARDANA_PLAYGROUND_MODELS_URL",
             "the standalone playground is built by `cargo xtask build-playground`"
-        )))
-        .expect("cargo xtask build-playground writes the library it reads")
-    }))
+        ),
+        hub: env!(
+            "ARDANA_PLAYGROUND_HUB_URL",
+            "the standalone playground is built by `cargo xtask build-playground`"
+        ),
+        browser: Rc::default(),
+    })
 }
 
 #[cfg(not(feature = "standalone"))]
-fn baked() -> Option<&'static StandaloneLibrary> {
+fn library() -> Option<Library> {
     None
 }
 
-/// A browser variant the standalone build's library lacks.
-fn unknown(name: &str) -> Failed {
-    Failed::Refused(format!("this playground has no browser files of {name}"))
+/// `document`'s models as `GET /v1/models` lists the library on a server that has pulled none (`x_pulled: false`,
+/// the GGUF's size), with no default model (no server runs one here) and every browser variant held (the Hub holds it
+/// whole), in the document's order.
+fn listed(document: &LibraryDocument) -> ModelsResponse {
+    let info = |entry: &LibraryEntry| ModelInfo {
+        name: entry.name.clone(),
+        description: format!("{}:{}", entry.weights, entry.quant),
+        release_date: entry.release_date.clone(),
+        x_pulled: Some(false),
+        x_default: false,
+        x_size: Some(entry.size),
+        x_browser: entry.browser.as_ref().map(|browser| browser.size),
+        x_browser_pulled: entry.browser.is_some(),
+        x_browser_default: document.browser_default.as_deref() == Some(&entry.name),
+    };
+    ModelsResponse {
+        models: document.models.iter().map(info).collect(),
+    }
 }
 
 /// `/v1/browser/<name>/<file>`, the name percent-encoded.
@@ -429,6 +518,57 @@ pub fn js_error(value: JsValue) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R6.2: the standalone build lists the document's entries in its order, each as a server that has pulled none
+    /// would (its GGUF's size, its browser variant's bytes and held), the browser default marked and no default model.
+    #[test]
+    fn the_document_lists_as_a_server_would() {
+        let entry = |name: &str, browser: &str| {
+            format!(
+                r#"{{"name": "{name}", "kind": "decider", "summary": "S.", "base": "o/b", "params": "1B",
+                    "weights": "hf.co/o/{name}-GGUF", "commit": "{}", "quant": "Q4_K_M", "size": 10,
+                    "release_date": "2026-01-01", "tags": []{browser}}}"#,
+                "a".repeat(40)
+            )
+        };
+        let text = format!(
+            r#"{{"schema": 1, "default": "b", "browser_default": "a", "models": [{}, {}]}}"#,
+            entry(
+                "a",
+                r#", "browser": {"weights": "hf.co/o/a-ONNX", "commit": "c", "quant": "int4", "size": 2,
+                    "profile": {}}"#
+            ),
+            entry("b", "")
+        );
+        let document = LibraryDocument::parse(&text, VERSION).unwrap();
+        assert_eq!(
+            listed(&document).models,
+            [
+                ModelInfo {
+                    name: "a".into(),
+                    description: "hf.co/o/a-GGUF:Q4_K_M".into(),
+                    release_date: "2026-01-01".into(),
+                    x_pulled: Some(false),
+                    x_default: false,
+                    x_size: Some(10),
+                    x_browser: Some(2),
+                    x_browser_pulled: true,
+                    x_browser_default: true,
+                },
+                ModelInfo {
+                    name: "b".into(),
+                    description: "hf.co/o/b-GGUF:Q4_K_M".into(),
+                    release_date: "2026-01-01".into(),
+                    x_pulled: Some(false),
+                    x_default: false,
+                    x_size: Some(10),
+                    x_browser: None,
+                    x_browser_pulled: false,
+                    x_browser_default: false,
+                },
+            ]
+        );
+    }
 
     #[test]
     fn refusals_name_the_server_message() {

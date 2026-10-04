@@ -1,16 +1,18 @@
 //! Shared helpers of the `ardana` end-to-end tests: the Hub files `cargo xtask fetch` put into `tmp/hf`, the request
-//! fixtures, `ardana` in its own home, and the R2.7 and R3.5 answer checks.
+//! fixtures, the library snapshot and a loopback server publishing it, `ardana` in its own home, and the R2.7 and R3.5
+//! answer checks.
 #![allow(dead_code, reason = "each test file uses a different subset")]
 
 use std::ffi::OsStr;
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// A file of the pinned snapshot of `repo` (`org/name`) in `$HF_HOME/hub` (cargo's `[env]` points it at `tmp/hf`).
 pub fn hf_file(repo: &str, name: &str) -> Result<PathBuf> {
@@ -63,6 +65,51 @@ fn parse_run(cmd: &mut Command) -> Result<Value> {
     let stdout = String::from_utf8(output.stdout)?;
     println!("{cmd:?}:\n{stdout}");
     serde_json::from_str(&stdout).context("ardana run printed JSON")
+}
+
+/// The library snapshot (C5): the document cargo names as `ARDANA_LIBRARY` for every test.
+pub fn snapshot_path() -> Result<PathBuf> {
+    Ok(PathBuf::from(
+        std::env::var_os("ARDANA_LIBRARY").context("cargo sets ARDANA_LIBRARY")?,
+    ))
+}
+
+/// The snapshot's bytes.
+pub fn snapshot_bytes() -> Result<Vec<u8>> {
+    let path = snapshot_path()?;
+    std::fs::read(&path).with_context(|| format!("reading {}", path.display()))
+}
+
+/// The snapshot, parsed.
+pub fn snapshot() -> Result<Value> {
+    Ok(serde_json::from_slice(&snapshot_bytes()?)?)
+}
+
+/// The snapshot's model names, in its order.
+pub fn snapshot_names() -> Result<Vec<String>> {
+    Ok(snapshot()?["models"]
+        .as_array()
+        .context("models")?
+        .iter()
+        .filter_map(|m| m["name"].as_str().map(str::to_string))
+        .collect())
+}
+
+/// The snapshot with one more model, `name`: decider-2b's entry under that name over the repository
+/// `hf.co/test/<name>-GGUF`, without a browser variant.
+pub fn snapshot_with(name: &str) -> Result<Vec<u8>> {
+    let mut document = snapshot()?;
+    let models = document["models"].as_array_mut().context("models")?;
+    let mut added = models
+        .iter()
+        .find(|m| m["name"] == "decider-2b")
+        .context("decider-2b")?
+        .clone();
+    added["name"] = json!(name);
+    added["weights"] = json!(format!("hf.co/test/{name}-GGUF"));
+    added.as_object_mut().context("an entry")?.remove("browser");
+    models.push(added);
+    Ok(serde_json::to_vec_pretty(&document)?)
 }
 
 /// `$ARDANA_TMP/<name>`, emptied: each test's own scratch directory.
@@ -256,6 +303,158 @@ pub fn http(port: u16, request_line: &str, headers: &str, body: &str) -> Result<
         .with_context(|| format!("no status in {response:?}"))?;
     let body = response.split("\r\n\r\n").nth(1).unwrap_or_default();
     Ok((status, body.to_string()))
+}
+
+/// Polls `check` every 50 ms until it holds, for up to `timeout`.
+pub fn eventually(
+    what: &str,
+    timeout: Duration,
+    mut check: impl FnMut() -> Result<bool>,
+) -> Result<()> {
+    let started = Instant::now();
+    loop {
+        if check()? {
+            return Ok(());
+        }
+        ensure!(
+            started.elapsed() < timeout,
+            "timed out after {timeout:?} waiting until {what}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// A request a [`LibraryServer`] answered: its path and the headers a library GET is checked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Seen {
+    pub path: String,
+    pub if_none_match: Option<String>,
+    pub user_agent: Option<String>,
+}
+
+/// A loopback server publishing a library document as the landing does (C2): the index at `/models.json` with an
+/// `ETag` (a 304 when `If-None-Match` carries it), each model's manifest at `/models/<name>.json`, 404 elsewhere. The
+/// document can be replaced while it runs ([`LibraryServer::publish`], a new `ETag`), and every request is recorded.
+pub struct LibraryServer {
+    /// `http://127.0.0.1:<port>/models.json`, what `ARDANA_LIBRARY` names.
+    pub url: String,
+    published: Arc<Mutex<(Vec<u8>, u64)>>,
+    requests: Arc<Mutex<Vec<Seen>>>,
+}
+
+impl LibraryServer {
+    pub fn start(document: &[u8]) -> Result<LibraryServer> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let url = format!("http://{}/models.json", listener.local_addr()?);
+        let published = Arc::new(Mutex::new((document.to_vec(), 1)));
+        let requests: Arc<Mutex<Vec<Seen>>> = Arc::default();
+        let (current, seen) = (published.clone(), requests.clone());
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { return };
+                let _ = answer(stream, &current, &seen);
+            }
+        });
+        Ok(LibraryServer {
+            url,
+            published,
+            requests,
+        })
+    }
+
+    /// Publishes `document` in place of the one served so far, under a new `ETag`.
+    pub fn publish(&self, document: &[u8]) {
+        let mut published = self.published.lock().expect("the published document");
+        *published = (document.to_vec(), published.1 + 1);
+    }
+
+    /// The `ETag` of the document served now, as sent.
+    pub fn etag(&self) -> String {
+        etag(self.published.lock().expect("the published document").1)
+    }
+
+    pub fn requests(&self) -> Vec<Seen> {
+        self.requests.lock().expect("the request log").clone()
+    }
+
+    /// The index GETs seen so far, in order.
+    pub fn index_requests(&self) -> Vec<Seen> {
+        self.requests()
+            .into_iter()
+            .filter(|seen| seen.path == "/models.json")
+            .collect()
+    }
+}
+
+fn etag(version: u64) -> String {
+    format!("\"v{version}\"")
+}
+
+/// Answers the one request on `stream` from the document in `published`, recording it in `seen`.
+fn answer(
+    mut stream: TcpStream,
+    published: &Mutex<(Vec<u8>, u64)>,
+    seen: &Mutex<Vec<Seen>>,
+) -> Result<()> {
+    let mut head = Vec::new();
+    let mut byte = [0u8; 1];
+    while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte)? == 1 {
+        head.push(byte[0]);
+    }
+    let head = String::from_utf8_lossy(&head).into_owned();
+    let path = head
+        .lines()
+        .next()
+        .and_then(|line| line.split(' ').nth(1))
+        .unwrap_or_default()
+        .to_string();
+    let header = |name: &str| {
+        head.lines().find_map(|line| {
+            let (given, value) = line.split_once(':')?;
+            given
+                .eq_ignore_ascii_case(name)
+                .then(|| value.trim().to_string())
+        })
+    };
+    let request = Seen {
+        path: path.clone(),
+        if_none_match: header("if-none-match"),
+        user_agent: header("user-agent"),
+    };
+    seen.lock().expect("the request log").push(request.clone());
+    let (document, version) = published.lock().expect("the published document").clone();
+    let tag = etag(version);
+    let (status, headers, body) = if path == "/models.json" {
+        if request.if_none_match.as_deref() == Some(tag.as_str()) {
+            ("304 Not Modified", format!("ETag: {tag}\r\n"), Vec::new())
+        } else {
+            ("200 OK", format!("ETag: {tag}\r\n"), document)
+        }
+    } else {
+        let manifest = path
+            .strip_prefix("/models/")
+            .and_then(|file| file.strip_suffix(".json"))
+            .and_then(|name| {
+                let index: Value = serde_json::from_slice(&document).ok()?;
+                let entry = index["models"]
+                    .as_array()?
+                    .iter()
+                    .find(|m| m["name"] == name)?
+                    .clone();
+                serde_json::to_vec(&json!({"schema": 1, "model": entry})).ok()
+            });
+        match manifest {
+            Some(body) => ("200 OK", String::new(), body),
+            None => ("404 Not Found", String::new(), b"not found".to_vec()),
+        }
+    };
+    write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{headers}Connection: close\r\n\r\n",
+        body.len()
+    )?;
+    stream.write_all(&body)?;
+    Ok(())
 }
 
 /// Runs `cmd` and prints what it wrote.

@@ -10,6 +10,9 @@ use tokenizers::{AddedToken, Tokenizer};
 
 const QWEN35: &str = "Qwen/Qwen3.5-0.8B";
 const SMOLLM3: &str = "HuggingFaceTB/SmolLM3-3B";
+const GEMMA4_E2B: &str = "google/gemma-4-E2B-it";
+const GEMMA4_12B: &str = "google/gemma-4-12B-it";
+const QWEN38: &str = "Qwen/Qwen3.8-27B";
 const LLAMA32: &str = "meta-llama/Llama-3.2-3B-Instruct";
 
 /// The chat layout of the tokenizer and template files of `repo`'s pinned snapshot.
@@ -64,6 +67,36 @@ fn smollm3_layout() -> Result<()> {
     assert!(head.contains("Reasoning Mode: /no_think\n"), "{head}");
     assert!(head.contains("Today Date: 26 July 2024\n"), "{head}");
     assert!(head.ends_with("<|im_start|>user\n"), "{head}");
+    Ok(())
+}
+
+/// Gemma 4's templates print `bos_token` once and pass both start-up checks; the larger models' template opens a
+/// thought channel after the model turn, which is closed empty.
+#[test]
+fn gemma4_layout() -> Result<()> {
+    for (repo, want_tail) in [
+        (GEMMA4_E2B, "<turn|>\n<|turn>model\n"),
+        (
+            GEMMA4_12B,
+            "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+        ),
+    ] {
+        let (tok, head, tail) = layout(repo)?;
+        assert_eq!(decode(&tok, &head)?, "<bos><|turn>user\n", "{repo}");
+        assert_eq!(decode(&tok, &tail)?, want_tail, "{repo}");
+    }
+    Ok(())
+}
+
+/// Qwen3.8's template leaves a thinking block open like Qwen3.5's, closed empty.
+#[test]
+fn qwen38_layout() -> Result<()> {
+    let (tok, head, tail) = layout(QWEN38)?;
+    assert_eq!(decode(&tok, &head)?, "<|im_start|>user\n");
+    assert_eq!(
+        decode(&tok, &tail)?,
+        "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    );
     Ok(())
 }
 

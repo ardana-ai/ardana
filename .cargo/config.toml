@@ -3,12 +3,14 @@
 xtask = "run --quiet --package xtask --"
 
 # Every cargo-run process (build scripts, `cargo run`, `cargo test`) keeps its
-# caches and temp files inside the gitignored `tmp/` (Q21). These values must
+# caches and temp files inside the gitignored `tmp/` (Q21), and reads the model
+# library from the checked-in snapshot, never the network. These values must
 # match `xtask/src/sandbox.rs`; `xtask/tests/sandbox.rs` checks both.
 [env]
 HF_HOME = { value = "tmp/hf", relative = true, force = true }
 ARDANA_HOME = { value = "tmp/ardana", relative = true, force = true }
 ARDANA_TMP = { value = "tmp/ardana-tmp", relative = true, force = true }
+ARDANA_LIBRARY = { value = "crates/ardana-registry/tests/data/models.json", relative = true, force = true }
 TMPDIR = { value = "tmp/sys", relative = true, force = true }
 # memory-serve logs every embedded asset as a cargo warning unless quiet; only
 # `ardana-server`'s own warning (no playground dist) should show.

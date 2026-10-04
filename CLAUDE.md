@@ -31,7 +31,7 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   venvs, Hub models in `tmp/hf/hub`, `[[hf_local]]` copies of gated repos from the real `~/.cache/huggingface/hub`);
   `cargo xtask fetch --check` verifies them. It also runs `npm ci` in `e2e/playground` (`@playwright/test`,
   `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it before `cargo test`: plain tests read the library models' (decider-2b,
-  Qwen3.5, SmolLM3) tokenizers, configs and chat templates from `tmp/hf`. `cargo xtask fetch --tests` installs only
+  Qwen3.5, SmolLM3, Gemma 4, Qwen3.8) tokenizers, configs and chat templates from `tmp/hf`. `cargo xtask fetch --tests` installs only
   those files (every `[[hf]]` file but the GGUF and ONNX weights, no token), which is what CI runs; the gated Llama 3.2
   tokenizer serves only the `#[ignore]`d real-model tests, next to Ollama's `llama3.2`.
 - CI (`.github/workflows/ci.yml`) checks every pull request and push to `main`: `cargo fmt --check`, clippy with
@@ -43,14 +43,16 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   module and `engine.js` in `dist/engine/`), then the release `ardana`, which embeds it (memory-serve, `force-embed`)
   and serves it at `/`. Building `ardana-server` without a dist (or with `ARDANA_PLAYGROUND_DIST` at a directory
   without `index.html`) warns and embeds a placeholder page.
-- `cargo xtask build-playground --public-url <path> [--hub <url>]` builds the standalone playground, which no server
-  serves, into `tmp/playground/dist` and prints that path (`crates/ardana-playground/dist` stays as it is): trunk with
-  the playground's `standalone` feature and `--public-url`, the library baked in (every library model, no default, and
-  for each browser variant its profile and the commit `tmp/hf/hub` holds, read offline; a variant not held whole fails
-  the build, naming its model). Its "In browser" rows download `<hub>/ardana-ai/<name>-ONNX/resolve/<commit>/<file>`
-  (default `https://huggingface.co`), and every other model shows ardana.ai's install line and `ardana run`.
-  `npm run build-playground` in `../ardana-landing` runs it with `--public-url /playground/` and commits the result in
-  its `static/playground/`, served at ardana.ai/playground/.
+- `cargo xtask build-playground --public-url <path> [--hub <url>] [--library <url>]` builds the standalone
+  playground, which no server serves, into `tmp/playground/dist` and prints that path (`crates/ardana-playground/dist`
+  stays as it is): trunk with the playground's `standalone` feature and `--public-url`, and no library baked (Q13; the
+  build reads no snapshot and no hub cache). The page GETs `--library` (default `/models.json`, the C1 document) on
+  load and whenever its tab comes back, lists every entry its version reads (Q12) in the document's order with the
+  `browser_default` row first offered, and says the library is unavailable, keeping its last list, when a GET fails.
+  Its "In browser" rows download `<hub>/<org>/<repo>/resolve/<browser.commit>/<file>` (default
+  `https://huggingface.co`) and run with `browser.profile`; every other model shows ardana.ai's install line and
+  `ardana run`. `npm run build-playground` in `../ardana-landing` runs it with `--public-url /playground/` and commits
+  the result in its `static/playground/`, served at ardana.ai/playground/ beside ardana.ai/models.json.
 - Releases: dist 0.32.0 (`tmp/bin/dist`, from `cargo xtask fetch`) generates `.github/workflows/release.yml` from
   `dist-workspace.toml` and `.github/build-setup.yml` (the playground build each runner does first); after changing
   either run `tmp/bin/dist generate` (`generate --check` fails on drift). Releases start only by hand: the
@@ -65,16 +67,19 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
 - `cargo xtask check-deps`, `cargo xtask check-docs` check the workspace shape and these documents.
 - `cargo xtask export-decider` regenerates the vendored decider prompt goldens in
   `crates/ardana-core/tests/data/decider/` by running decider@23579f7 from `tmp/src/decider`.
-- `cargo xtask onnx convert <name>` builds a library model's browser variant from the checkpoint its `library.toml`
-  entry names as `source`: the int4 or int8 ONNX (onnxruntime-genai 0.17.1 model builder in the `tmp/py/onnx` venv it
-  creates) and, when the entry's `weights` is an ardana-ai repository (decider-0.8b), the GGUF (llama.cpp's
-  `convert_hf_to_gguf.py` from `tmp/src/llama.cpp`). It writes `hf.co/ardana-ai/<name>-ONNX` (and `-GGUF`) into
-  `tmp/hf/hub` as local snapshots, records their sizes in `library.toml` and reads them back offline with the release
-  `ardana pull`; a model without a `[model.browser]` table is refused. `cargo xtask onnx publish <name> [--dry-run]`
-  prints the model cards, the `hf repos create` and `hf upload` commands and the `[[hf]]` entries, then uploads the
-  snapshots to huggingface.co/ardana-ai with the user's token (`HF_TOKEN`, else the real `~/.cache/huggingface/token`)
-  and pins them in `xtask/fetch.toml`; a failed upload exits non-zero and changes nothing. Both run by hand only,
-  never in CI (`docs/guidelines/onnx.md`).
+- `cargo xtask onnx convert <name>` builds a library model's browser variant from the checkpoint its entry in the
+  library document, `../ardana-landing/src/lib/data/models.json` (the landing checkout beside this one; both steps stop
+  naming it when it is absent), names as `source`: the int4 or int8 ONNX (onnxruntime-genai 0.17.1 model builder in
+  the `tmp/py/onnx` venv it creates) and, when the entry's `weights` is an ardana-ai repository (decider-0.8b), the
+  GGUF (llama.cpp's `convert_hf_to_gguf.py` from `tmp/src/llama.cpp`). It writes `hf.co/ardana-ai/<name>-ONNX` (and
+  `-GGUF`) into `tmp/hf/hub` as local snapshots, records their commits, sizes and the browser profile in the document
+  and copies it to the library snapshot (the two stay byte-identical, in the landing's Prettier formatting), and reads
+  them back offline with the release `ardana pull` on that document; a model without a `browser` table is refused.
+  `cargo xtask onnx publish <name> [--dry-run]` prints the model cards, the `hf repos create` and `hf upload`
+  commands, the `[[hf]]` entries and the document entry, then uploads the snapshots to huggingface.co/ardana-ai with
+  the user's token (`HF_TOKEN`, else the real `~/.cache/huggingface/token`) and pins them in `xtask/fetch.toml`, the
+  document and the snapshot; a failed upload exits non-zero and changes nothing. Both run by hand only, never in CI
+  (`docs/guidelines/onnx.md`).
 - `cargo xtask e2e <suite>` runs an end-to-end suite: `smoke`, `rust` (`cargo test --workspace --
   --include-ignored`, the real-model tests included), or one of the API suites against a release `ardana serve` on
   decider-2b: `jevcompat` (jevcompat 0.1.0, open and with a key, every MUST must pass), `sdk` (typesafe-sdk 0.7.2
@@ -110,26 +115,42 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   over an empty Hub cache (the first run in the tab says the server pulls, then that the server could not provide the
   files); `@design` and `@standalone` tests left out; screenshots in `tmp/screens/<case>/`, reports in
   `tmp/playwright/`), `standalone` (`cargo xtask e2e standalone`: `cargo xtask build-playground --public-url
-  /playground/` with `--hub` at a stand-in of Hugging Face serving `tmp/hf` offline on another origin, the dist served
-  as static files under `/playground/` with the landing's isolation headers, both hosts from
-  `e2e/playground/standalone-hosts.mjs`; the `@standalone` cases at both viewports: `standalone_first_run` (the library
-  listed, decider-0.8b's "In browser" row, nothing under `/v1/`, fonts and onnxruntime-web from `/playground/`, no
-  failed request), `standalone_browser_run` (the three files from the stand-in at the baked commit, the ticket answered
-  as the release `ardana run` answers it, under 1 MB after a reload), `standalone_run_command` (a model without a
-  browser variant and a share link's unknown model: the install line and `ardana run`, Run sends nothing, and "Run
-  decider-0.8b in this tab instead" picks that row) and `standalone_share` (`<origin>/playground/#share/` round trip))
+  /playground/` with `--hub` at a stand-in of Hugging Face serving `tmp/hf` offline on another origin (the build
+  writes no `tmp/playground/library.json` and its dist names no repository of the snapshot), the dist served as
+  static files under `/playground/` with the landing's isolation headers and a copy of the snapshot at `/models.json`
+  (an `ETag` and `max-age=0, must-revalidate`, as Cloudflare serves the landing's; the cases rewrite and take away the
+  copy), both hosts from `e2e/playground/standalone-hosts.mjs`; the `@standalone` cases at both viewports:
+  `standalone_first_run` (one GET of `/models.json`, every entry listed in its order, decider-0.8b's "In browser" row,
+  nothing under `/v1/`, fonts and onnxruntime-web from `/playground/`, no failed request), `standalone_browser_run`
+  (the three files from the stand-in at the document's commit, the ticket answered as the release `ardana run`
+  answers it, under 1 MB after a reload), `standalone_run_command` (a model without a browser variant and a share
+  link's unknown model: the install line and `ardana run`, Run sends nothing, and "Run decider-0.8b in this tab
+  instead" picks that row), `standalone_share` (`<origin>/playground/#share/` round trip), `standalone_library_update`
+  (an entry added to the served document is in the picker when the tab comes back, with no reload) and
+  `standalone_library_unavailable` (the document gone before the load, and again while the page is open: the page
+  says the library is unavailable, keeps its list, pick and editors, and lists again on the tab's next return; an
+  entry for a later ardana or one that does not read is left out))
   and `design`
   (/impeccable context, then `impeccable detect` of the empty, loaded, results, 422 and `run-command` states at
   1280x800 and 390x844, and of the in-tab `browser-download` and `browser-results` states the `@design` Playwright
-  test freezes from a real run into `tmp/evals/design/<state>-<viewport>.html`,
-  reports in `tmp/evals/design/`, then the finish: a `.impeccable/critique/` record, `docs/design/audit.md` with
-  `P0: 0 · P1: 0`, clean scans, the hook enabled).
+  test freezes from a real run into `tmp/evals/design/<state>-<viewport>.html`, and of the standalone build's
+  `library-unavailable` state (`/models.json` a 404 from `e2e/playground/standalone-hosts.mjs`, the page at
+  `/playground/`), reports in `tmp/evals/design/`, then the finish: a `.impeccable/critique/` record,
+  `docs/design/audit.md` with `P0: 0 · P1: 0`, clean scans, the hook enabled).
 - `ardana pull <name|ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model
   in `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo), printing download progress on
-  stderr. A library name `<name>[:<quant>]` (`crates/ardana-registry/src/library.toml`: `decider-2b`, `decider-0.8b`,
-  `decider-4b`, `qwen3.5-0.8b`, `smollm3-3b`; the default model is `decider-2b`; decider-0.8b, decider-2b and
-  qwen3.5-0.8b also have a browser variant, `browser_default` decider-0.8b) stands for its `hf.co/` repository and is recorded
-  under that name (`decider-2b:q8_0` for another quant, matched case-insensitively); refs are
+  stderr. A library name `<name>[:<quant>]` stands for its `hf.co/` repository and is recorded under that name
+  (`decider-2b:q8_0` for another quant, matched case-insensitively). The library is one published document, never
+  compiled in: `ARDANA_LIBRARY` names its source (unset: `https://ardana.ai/models.json`, with each model's manifest at
+  `models/<name>.json` beside it; an `http(s)://…/models.json` URL: that index; a file path: that one document, no
+  network; `off`: no library), and the default model `decider-2b` is the one model name the binary keeps. `pull` and
+  `run` of a model not pulled GET its manifest every time (`User-Agent: ardana/<version>` and nothing else) and keep
+  the bytes at `$ARDANA_HOME/library/models/<name>.json`, which stands in when the GET fails; `list`, `show`, `rm`,
+  `ps` and help read that cache only, and help and error texts name no library model but point to
+  `https://ardana.ai/models/`. A document with unknown fields reads, an entry that does not read or whose
+  `min_version` is above the binary's is skipped, and another `schema` is refused with an error saying to update
+  `ardana`. A model's browser variant is its `browser` table (decider-0.8b, decider-2b and qwen3.5-0.8b today,
+  `browser_default` decider-0.8b); refs are
   `hf.co/<org>/<repo>[:<quant>]` (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]`
   (read in place from `$OLLAMA_MODELS`) and local GGUF paths. Downloads go to the standard HF cache (`$HF_HOME/hub`);
   `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list` (`ls`: name, size, pull date,
@@ -145,9 +166,18 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   both take `[--gpu-layers -1|0] [--n-ctx N]`. `--layout chat` reads the chat template next to the tokenizer, and
   without `--config` the model gets the stock profile.
 - `ardana serve` (alias `start`) `[--host 127.0.0.1] [--port 8000] [--api-key K] [--default-model NAME]
-  [--keep-alive 5m] [--max-loaded-models 1] [--max-queued-rows 4096]`, each flag also read from
-  `ARDANA_<FLAG>` (`ARDANA_PORT`, `ARDANA_API_KEY`, ...), serves the registry's models and the
-  library's: `POST /v1/systemone`, `GET /v1/models` (pulled models, then library models with `x_pulled: false` and
+  [--keep-alive 5m] [--library-refresh 1h] [--max-loaded-models 1] [--max-queued-rows 4096]`, each flag also read
+  from `ARDANA_<FLAG>` (`ARDANA_PORT`, `ARDANA_API_KEY`, `ARDANA_LIBRARY_REFRESH`, ...), serves the registry's models
+  and the library's. The library (`ARDANA_LIBRARY`, default `https://ardana.ai/models.json`) is read once on start and
+  once every `--library-refresh`, in the background, so binding never waits on the network: under a URL source one
+  index GET with `If-None-Match` on the `ETag` kept beside the cached index (`$ARDANA_HOME/library/models.json`,
+  `models.json.etag`), a 200 replacing what is served, a 304 or a failed GET keeping it (the cached index at start,
+  the pulled models alone when there is none; the failure logged once, naming the URL), so a model added to the
+  published document is listed and pulled without a restart; the first request after start waits for the first read.
+  A name the index lacks is asked of the library once by its manifest, a 404 remembered until the next refresh. A file
+  source is read again the same way; `ARDANA_LIBRARY=off` sends nothing and serves the pulled models alone, a request
+  without a model resolving to `decider-2b`. `ardana serve --help` states the URL, the interval and `off`. The routes:
+  `POST /v1/systemone`, `GET /v1/models` (pulled models, then library models with `x_pulled: false` and
   `x_size`; `x_default` marks the default, `x_browser` the bytes of a browser variant, `x_browser_pulled` a browser
   variant the hub cache holds whole, `x_browser_default` the library's `browser_default`),
   `GET /health`, and
@@ -170,11 +200,12 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   `models.toml` is reread when it changes, so a model `ardana pull` adds while `serve` runs is servable at once;
   models load on their first request and unload after `--keep-alive` idle.
 - Running Ardana by hand: under `cargo run` (and `cargo test`), `.cargo/config.toml` puts `ARDANA_HOME` in
-  `tmp/ardana` and `HF_HOME` in `tmp/hf`, so `cargo xtask build` then `cargo run --release -p ardana -- serve` serves
-  the sandbox: its playground opens on decider-0.8b's "In browser" row while nothing is pulled, and an API request
+  `tmp/ardana`, `HF_HOME` in `tmp/hf` and `ARDANA_LIBRARY` at the library snapshot, so `cargo xtask build` then
+  `cargo run --release -p ardana -- serve` serves the sandbox: its playground opens on decider-0.8b's "In browser" row while nothing is pulled, and an API request
   pulls decider-2b (from `tmp/hf` when `cargo xtask fetch` has put it there).
-  The release binary run directly (`target/release/ardana serve`) uses `~/.ardana` and the standard HF cache
-  (`$HF_HOME`, else `~/.cache/huggingface`), like any installed tool; do not do that from an agent session.
+  The release binary run directly (`target/release/ardana serve`) uses `~/.ardana`, the standard HF cache
+  (`$HF_HOME`, else `~/.cache/huggingface`) and the published library at ardana.ai, like any installed tool; do not do
+  that from an agent session.
 - Before reporting work: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cargo build --workspace`, `cargo test --workspace`, plus the item's Verify command.
 
@@ -184,7 +215,9 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   the gitignored `tmp/` at the repo root (plus the gitignored `e2e/playground/node_modules`); `rm -rf tmp
   e2e/playground/node_modules` fully resets. Nothing is written elsewhere under the home directory.
 - `.cargo/config.toml` `[env]` forces `HF_HOME`, `ARDANA_HOME`, `ARDANA_TMP` and `TMPDIR` into `tmp/` for every
-  cargo-run process, including tests.
+  cargo-run process, including tests, and points `ARDANA_LIBRARY` at the library snapshot
+  (`crates/ardana-registry/tests/data/models.json`, a byte-for-byte copy of the landing's `src/lib/data/models.json`),
+  so no test reads the library from ardana.ai; `Sandbox::env` hands every tool the same.
 - xtask runs every tool through `Sandbox` (`xtask/src/sandbox.rs`) with `HOME=tmp/home`, every tool cache in `tmp/`
   and `tmp/bin` first on `PATH`. `cargo xtask fetch`, `build`, `onnx` and every `e2e` suite run under the home guard, which
   fails the step when anything changes under the guarded home paths (`~/.cache/huggingface`, `~/.cargo/bin`, ...).
@@ -212,7 +245,7 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
 ## End-to-end verification
 
 - Every work item is verified end to end on real open models: official Hugging Face sources
-  (Mapika/decider-2b-GGUF Q4_K_M, ggml-org/Qwen3.5-0.8B-GGUF, ggml-org/SmolLM3-3B-GGUF) or the local Ollama store
+  (Mapika/decider-2b-GGUF Q4_K_M, ggml-org/Qwen3.5-0.8B-GGUF, ggml-org/SmolLM3-3B-GGUF, ggml-org/gemma-4-E2B-it-GGUF) or the local Ollama store
   (`llama3.2`), fetched into `tmp/hf` by `cargo xtask fetch`. Never replace a real model with an invented fixture, never
   assert against a mock for an end-to-end requirement, never report a check you did not run.
 

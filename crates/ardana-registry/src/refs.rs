@@ -1,6 +1,6 @@
 //! Model references (Q3): `hf.co/<org>/<repo>[:<quant>]`, `hf.co/<org>/<repo>:<file>.gguf`,
 //! `ollama:[<namespace>/]<name>[:<tag>]` and local paths. Library names (`decider-2b`) are resolved before these, by
-//! [`crate::library`].
+//! [`crate::library`]; the error of a bare name points to the library's page and names no model (Q11).
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,7 @@ pub const OLLAMA_NAMESPACE: &str = "library";
 /// The Ollama tag of a reference without one.
 pub const OLLAMA_TAG: &str = "latest";
 
-const GRAMMAR: &str = "use a library model <name>[:<quant>], hf.co/<org>/<repo>[:<quant>], \
+const GRAMMAR: &str = "use a library model <name>[:<quant>] (https://ardana.ai/models/), hf.co/<org>/<repo>[:<quant>], \
                        hf.co/<org>/<repo>:<file>.gguf, ollama:[<namespace>/]<name>[:<tag>] or a path to a local file";
 
 /// A parsed model reference.
@@ -87,7 +87,7 @@ impl Ref {
         if input.contains('/') || input.to_ascii_lowercase().ends_with(".gguf") {
             return Ok(Ref::Local(PathBuf::from(input)));
         }
-        let library = crate::library::library().names().join(", ");
+        let library = crate::library::MODELS_PAGE;
         if valid_name(input.split_once(':').map_or(input, |(name, _)| name)) {
             return Err(fail(format!(
                 "it is neither a library model ({library}), {HF_PREFIX}, {OLLAMA_PREFIX} nor a path (for an Ollama \
@@ -211,4 +211,17 @@ pub fn matches_quant(file: &str, quant: &str) -> bool {
     let quant = quant.to_lowercase();
     stem.strip_suffix(&quant)
         .is_some_and(|head| head.ends_with('-') || head.ends_with('.'))
+}
+
+/// Whether the GGUF at `file` is a companion of the model GGUF at `model`: the model's file name after a prefix, as
+/// in `mmproj-<model>.gguf`, `mtp-<model>.gguf` and `dflash-<model>.gguf`.
+pub fn companion_of(file: &str, model: &str) -> bool {
+    let name = |path: &str| {
+        Path::new(path)
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().to_lowercase())
+    };
+    let (file, model) = (name(file), name(model));
+    file.strip_suffix(&model)
+        .is_some_and(|prefix| prefix.ends_with('-'))
 }

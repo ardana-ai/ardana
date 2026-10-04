@@ -46,8 +46,10 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
   `tokio` 1 (the `ardana` binary runs `pull` on a current-thread runtime and `serve` on a multi-thread one;
   `ardana-server` adds `sync`, `signal`, `macros`, `fs` and `io-util`; `ardana-registry` takes `rt` for its unit
-  tests only, and xtask for `build-playground`: a current-thread runtime under its async Hub lookups), `axum` 0.8, `tower-http` 0.7, `http-body` 1 and
-  `tower` 0.5 (dev) as `axum.md` pins them, plus the library pins in their own guidelines.
+  tests only, and xtask for `build-playground`: a current-thread runtime under its async Hub lookups), `reqwest`
+  0.13.5 (the library document's GETs in `ardana-registry`, at the version hf-hub resolves, `huggingface.md`), `axum`
+  0.8, `tower-http` 0.7, `http-body` 1 and `tower` 0.5 (dev) as `axum.md` pins them, plus the library pins in their
+  own guidelines.
 - `[profile.release.package.brotli]` and `[profile.release.package.sha2]` set `opt-level = 3`: `ardana-server`'s build
   script embeds the playground through memory-serve, which brotli-compresses (quality 11) and hashes every asset,
   onnxruntime-web's 41 MB of WASM among them, and release builds compile a build script's dependencies unoptimised.
@@ -59,9 +61,10 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 ### `.cargo/config.toml`
 - Keep the alias `[alias] xtask = "run --quiet --package xtask --"` (quiet, so `eval "$(cargo xtask env)"` sees only
   the exports); do not add other aliases that hide real commands.
-- Set `HF_HOME`, `ARDANA_HOME`, `ARDANA_TMP` and `TMPDIR` in `[env]` with `relative = true` (resolved against the
-  directory holding `.cargo/`, i.e. the repo root) and `force = true` (overrides the shell). Cargo applies `[env]` to
-  build scripts, rustc, `cargo run` and `cargo test`, which is what keeps plain `cargo test` inside `tmp/`.
+- Set `HF_HOME`, `ARDANA_HOME`, `ARDANA_TMP`, `TMPDIR` and `ARDANA_LIBRARY` (the library snapshot,
+  `crates/ardana-registry/tests/data/models.json`) in `[env]` with `relative = true` (resolved against the directory
+  holding `.cargo/`, i.e. the repo root) and `force = true` (overrides the shell). Cargo applies `[env]` to build
+  scripts, rustc, `cargo run` and `cargo test`, which is what keeps plain `cargo test` inside `tmp/` and off ardana.ai.
 - Set the llama.cpp build baseline in `[env]` without `force`: `GGML_AVX`, `GGML_AVX2`, `GGML_FMA`, `GGML_F16C`
   (`ON`), `LLAMA_STATIC_CRT` (`1`) and `CMAKE_MSVC_RUNTIME_LIBRARY` (the static MSVC runtime), so local and release
   builds configure llama.cpp alike (`llama-cpp.md`, "Build").
@@ -109,11 +112,18 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Mark every test that needs a real model, network, the Ollama store or more than a few seconds with
   `#[ignore = "e2e: <what it needs>"]`. Plain `cargo test` stays fast and offline; `cargo xtask e2e rust` runs
   `cargo test --workspace -- --include-ignored` under the home guard.
-- End-to-end tests use the official models from `xtask/fetch.toml` (decider-2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B,
+- End-to-end tests use the official models from `xtask/fetch.toml` (decider-2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B, Gemma 4 E2B,
   Ollama `llama3.2`), resolved from `tmp/hf`; never replace a real model with an invented fixture.
 - Put test temp files under `$ARDANA_TMP` (or `std::env::temp_dir()`, which `[env]` points at `tmp/sys`); never under
   the real home. Tests that run `ardana pull` give each child its own `ARDANA_HOME` under `$ARDANA_TMP/<test>` (tests
-  run in parallel) and `HF_HUB_OFFLINE=1`, so they read `tmp/hf` and never the network.
+  run in parallel) and `HF_HUB_OFFLINE=1`, so they read `tmp/hf` and never the network; the library comes from the
+  snapshot through the inherited `ARDANA_LIBRARY`, and a test of a URL source sets its own at a loopback server
+  (`crates/ardana-registry/tests/library.rs`, `crates/ardana/tests/cli.rs`).
+- An integration test of a library call that reads the environment (a pull's hub cache and `HF_HUB_OFFLINE`) runs
+  itself again as a child, `std::env::current_exe()` with `<test> --exact` and the variables through `Command::env`,
+  and does its work in the child, which it tells by a variable naming that test's own scratch directory
+  (`library.rs` "library_pulls_read_the_pinned_commit"); a test that pulls online points `HF_ENDPOINT` at a loopback
+  stand-in of the Hub serving `tmp/hf` (`e2e_library.rs` "pull_reads_the_pinned_commit").
 - Prefer tests returning `anyhow::Result<()>` with `?` over chains of `unwrap()`.
 - Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice. The decider goldens in
   `crates/ardana-core/tests/data/decider/` are regenerated only by `cargo xtask export-decider`.
@@ -184,10 +194,10 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 
 ## xtask
 - `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check|--tests]`, `build`,
-  `build-playground --public-url <path> [--hub <url>]`, `check-deps`, `check-docs`, `export-decider`,
-  `onnx convert <name>`, `onnx publish <name> [--dry-run]` (`onnx.md`), `e2e <suite>` (`smoke`, `rust`, `jevcompat`,
-  `sdk`, `jevbench`, `playground`, `standalone`, `design`); keep its own dependency set small (the two workspace crates
-  below are the one exception): downloads and HTTP probes go through `curl` and `git` run by `Sandbox::command`, not
+  `build-playground --public-url <path> [--hub <url>] [--library <url>]`, `check-deps`, `check-docs`,
+  `export-decider`, `onnx convert <name>`, `onnx publish <name> [--dry-run]` (`onnx.md`), `e2e <suite>` (`smoke`,
+  `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`, `standalone`, `design`); keep its own dependency set small (the
+  workspace crate below is the one exception): downloads and HTTP probes go through `curl` and `git` run by `Sandbox::command`, not
   HTTP crates. Its one codec is `lz-str` (the `design` suite's Jev share links).
 - The API suites (`jevcompat`, `sdk`, `jevbench`) build `ardana` with `--release --locked` (llama.cpp in a debug build
   is too slow for 231 JevBench items) and run it through `xtask/src/serve.rs#Server`, which kills the server on drop.
@@ -195,11 +205,16 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   `build`, `export-decider`, `onnx` and every `e2e` suite in `Sandbox::guarded`. `sandbox::run` (output on the
   terminal) and `sandbox::run_stdout` (output captured) fail on a non-zero exit with the command's `Debug` form, which
   lists every variable set on it: never set a secret on a command run through them (`onnx publish` runs `hf` itself).
-- xtask links two workspace crates, for `build-playground` alone: `ardana-registry`, which reads each browser
-  variant from `tmp/hf/hub` as a server reads it (`BrowserCache::at`, `BrowserCache::variant`: its commit and profile),
-  and `ardana-api`, whose `StandaloneLibrary` the standalone playground reads back. Everything else stays out of
-  xtask's tree: `onnx` reads `library.toml` with its own `serde` view, edits it line by line (comments stay) and checks
-  what the registry reads by running the release `ardana`.
+- xtask links one workspace crate, `ardana-registry`, which reads the landing's document
+  (`../ardana-landing/src/lib/data/models.json`, `xtask/src/onnx.rs#DOCUMENT`) for `onnx`, and each browser variant
+  from `tmp/hf/hub` as a server reads it (`BrowserCache::at`, `BrowserCache::variant`: its commit and profile);
+  `build-playground` reads neither the snapshot (`xtask/src/sandbox.rs#SNAPSHOT`, which the sandbox hands every tool
+  as `ARDANA_LIBRARY`, Q21, and `e2e standalone` serves at `/models.json`) nor the hub cache, since the standalone
+  playground fetches the document at run time (Q13). Everything else stays out of xtask's
+  tree: `onnx` records what it built in the document as a `serde_json` value (`preserve_order`) written back in the
+  landing's Prettier formatting (`onnx.rs#format_document`, which must reproduce the document it read byte for byte
+  first), copies the result to the snapshot, and checks what the registry reads by running the release `ardana` with
+  `ARDANA_LIBRARY` at the document.
 - Install cargo tools only through `Sandbox::cargo_install` (`CARGO_HOME=tmp/cargo`, root `tmp`); never
   `cargo install` into `~/.cargo/bin`.
 - Build the playground with `cargo xtask build`, never from a `build.rs`: a build script that runs trunk runs a nested

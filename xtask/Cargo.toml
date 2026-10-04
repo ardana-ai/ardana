@@ -8,7 +8,6 @@ publish.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-ardana-api.workspace = true
 ardana-registry.workspace = true
 lz-str.workspace = true
 serde.workspace = true

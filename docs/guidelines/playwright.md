@@ -76,11 +76,15 @@ share-link decoding.
   tests tagged `@standalone` to `cargo xtask e2e standalone`, which runs `--grep @standalone --reporter list --output
   tmp/playwright/standalone-results`, so the playground suite's reports stay its own. `cargo xtask e2e standalone`
   starts `node e2e/playground/standalone-hosts.mjs` first, which prints the URLs of its two hosts (the standalone
-  `dist` under `/playground/` with the isolation headers the landing sends, and a stand-in of Hugging Face over
-  `tmp/hf/hub`, CORS open, `Range` answered with a 206, a request naming a referring page refused with a 404 as
-  huggingface.co refuses one from `*.workers.dev`), builds the playground with `--hub` at the stand-in, and
-  passes `ARDANA_BASE_URL` (the site), `ARDANA_HUB_URL` and `ARDANA_BIN` (the release `ardana`, whose `ardana run`
-  answers the tab is compared with). The R6.4 `placeholder_without_dist` case is a cargo build plus
+  `dist` under `/playground/` with the isolation headers the landing sends, and at `/models.json` the file xtask
+  copied the snapshot to (`tmp/playground/models.json`), read on every request and served as Cloudflare serves the
+  landing's: an `ETag`, `max-age=0, must-revalidate`, a 304 for an `If-None-Match` that holds it, a 404 once the file
+  is gone; and a stand-in of Hugging Face over `tmp/hf/hub`, CORS open, `Range` answered with a 206, a request naming
+  a referring page refused with a 404 as huggingface.co refuses one from `*.workers.dev`), builds the playground with
+  `--hub` at the stand-in (checking the build wrote no `tmp/playground/library.json` and its dist names no repository
+  of the snapshot), and passes `ARDANA_BASE_URL` (the site), `ARDANA_HUB_URL`, `ARDANA_SITE_LIBRARY` (that file, which
+  the cases rewrite and take away; each starts it over from the snapshot) and `ARDANA_BIN` (the release `ardana`,
+  whose `ardana run` answers the tab is compared with). The R6.4 `placeholder_without_dist` case is a cargo build plus
   `ardana-server`'s `playground` test in `tmp/e2e/placeholder/target`, run by xtask before Playwright.
 - `webServer`: either the config launches the binary that `cargo xtask build` produced (`command`, `url` pointing at
   `http://127.0.0.1:<port>/health`, `reuseExistingServer: false`, `timeout` covering startup, `stdout: 'pipe'`), or
@@ -152,14 +156,23 @@ share-link decoding.
   pull, which the list does not size) with and without `?autorun=1`, with no `POST /v1/systemone` from any; an "In
   browser" row shows the ardana command without the install line, after `ardana pull` for decider-0.8b (not pulled
   here) and alone for decider-2b (pulled); and decider-2b then runs on the server again.
-- The standalone build (`tests/standalone.spec.ts`, `@standalone`): the page at `/playground/` requests nothing under
-  `/v1/` and nothing from another origin until a run in the tab, every request under `/playground/` and none failed
-  (`requestfailed`, or a status of 400 and over), and lists `tmp/playground/library.json`, whose names are
-  `library.toml`'s; `standalone_browser_run` runs in a persistent profile of its own, as `browser_run` does, takes
-  `ardana run decider-0.8b --request - --json` (`ARDANA_BIN`, a home of its own, `HF_HUB_OFFLINE=1`) as the answer to
-  match, and expects exactly the three file URLs `<hub>/<repository>/resolve/<commit>/<file>` from the stand-in; after
-  a reload it sums the stand-in's `responseBodySize`s. The server rows hold Run behind ardana.ai's install line
-  (`INSTALL`), and nothing goes out when Run is pressed.
+- The standalone build (`tests/standalone.spec.ts`, `@standalone`): the page at `/playground/` GETs `/models.json`
+  once on load, requests nothing under `/v1/` and nothing from another origin until a run in the tab, every other
+  request under `/playground/` and none failed (`requestfailed`, or a status of 400 and over), and lists the served
+  document's entries in its order (the snapshot's at first, `crates/ardana-registry/tests/data/models.json`, which
+  `run_command` reads too for the models the server lacks); `standalone_browser_run` runs in a persistent profile of
+  its own, as `browser_run` does, takes `ardana run decider-0.8b --request - --json` (`ARDANA_BIN`, a home of its own,
+  `HF_HUB_OFFLINE=1`) as the answer to match, and expects exactly the three file URLs
+  `<hub>/<org>/<repo>/resolve/<browser.commit>/<file>` from the stand-in; after a reload it sums the stand-in's
+  `responseBodySize`s. The server rows hold Run behind ardana.ai's install line (`INSTALL`), and nothing goes out when
+  Run is pressed. `standalone_library_update` adds an entry to the served file and sends the tab's return (the
+  `focus` and `visibilitychange` events, as `pull_while_open` does), expecting the row with no reload (a value the
+  page's script held survives); `standalone_library_unavailable` removes the file before the load (the `models-fault`
+  alert under the picker, an empty picker with no note, Run held by "The model library is unavailable", Snippets'
+  `ardana run <model>`), serves it again with an entry for a later `ardana` and one that does not read (both left
+  out, the browser default's row picked, the editors kept), removes it again (the alert, the list and the pick kept,
+  Run free) and serves a `schema: 2` document (the alert with the schema reason), counting the document's GETs: one
+  per load and per return.
 - A pull while the page is open (`pull_while_open`): on one more empty server (`ARDANA_PULL_URL`, its home in
   `ARDANA_PULL_HOME`), so the other servers' lists stay as their cases expect, the case first undoes the other
   project's pull (`ardana rm`, entries only), picks qwen3.5-0.8b's server row (the pull shown, Run held), runs the shown
@@ -344,6 +357,11 @@ share-link decoding.
   `tmp/evals/design/<state>-<project>.html` and scans each by `file://` URL at its viewport. The download state holds a
   run in flight, so it shows DESIGN.md's busy caret; `.impeccable/config.json` waives `blinking-cursor` for those two
   files only, with that reason.
+- The standalone build's `library-unavailable` state (R6.8) is a URL state of another build: `cargo xtask e2e design`
+  starts the standalone suite's hosts (`standalone-hosts.mjs`), builds the standalone playground with `--hub` at the
+  stand-in, removes the file the site serves at `/models.json`, and scans `<site>/playground/` at both viewports. The
+  404 settles before detect's network idle, so the page shows what a tab without its library shows: the `models-fault`
+  alert under an empty picker and Run held by "The model library is unavailable".
 
 > Plan note: Playwright's HTML reporter errors when its `outputFolder` overlaps `outputDir`, so R6.7's layout under `tmp/playwright/` needs separate `results/` and `report/` folders.
 

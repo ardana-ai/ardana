@@ -25,11 +25,21 @@ variants").
 ## Rules
 
 ### The step
-- `library.toml` declares the work: a model's `source` (`hf.co/<org>/<repo>@<commit>`, the checkpoint) and its
-  `[model.browser]` table (`weights = "hf.co/ardana-ai/<name>-ONNX"`, `quant`). `cargo xtask onnx convert <name>`
-  builds them and records `size`, the bytes a browser downloads (`model.onnx`, `model.onnx.data`, `tokenizer.json`);
-  a model whose own `weights` is an ardana-ai repository also gets its GGUF built, and its `size` recorded. Never write
-  the sizes by hand; rerun the step. A model without a browser table is refused by name.
+- The library document (`../ardana-landing/src/lib/data/models.json`, the landing checkout beside this one, read as
+  `ardana` reads it) declares the work: a model's `source` (`hf.co/<org>/<repo>@<commit>`, the checkpoint) and its
+  `browser` table (`weights` `hf.co/ardana-ai/<name>-ONNX`, `quant`). `cargo xtask onnx convert <name>` builds them
+  and records the browser table's `commit` (the local snapshot's), `size` (the bytes a browser downloads:
+  `model.onnx`, `model.onnx.data`, `tokenizer.json`) and `profile` (what `GET /v1/browser/<name>/profile` answers,
+  read from the snapshot by `BrowserCache::variant`); a model whose own `weights` is an ardana-ai repository also gets
+  its GGUF built, and its `commit`, `size` and the `size` of the `tags` item of its quant recorded. Never write these
+  by hand; rerun the step. A model without a browser table is refused by name, and `convert` and `publish` stop,
+  naming the document, when the landing checkout is not there.
+- What the steps record changes those fields of the one entry and no other byte: the document is read as a
+  `serde_json` value and written back in the landing's Prettier formatting (tabs, width 100, every object one key a
+  line, an array on one line where it fits and else numbers filling the lines), and a document that does not read
+  back byte for byte in that formatting is refused rather than rewritten. The result goes to the document and to the
+  library snapshot (`crates/ardana-registry/tests/data/models.json`), which stay byte-identical; `npm run lint` in
+  the landing checks the formatting.
 - Browser variants exist for decider-0.8b (int4, the browser default), decider-2b (int4) and qwen3.5-0.8b (int8: at
   int4 the spike saw 4 of its 6 preset answers flip); decider-4b and smollm3-3b stay native-only.
 - The step runs under the home guard, by hand only: never in CI or from a test.
@@ -90,11 +100,11 @@ variants").
   (`*.onnx` in its default `.gitattributes`, or larger than 10 MB), else by its git blob id, as `cargo xtask fetch`
   names a download, so a later fetch of the published repository reuses the blobs.
 - The commit is local until `publish`: the git blob id of the snapshot's manifest (a `<blob> <file>` line per file,
-  sorted), so rebuilding the same files makes the same snapshot. After `publish`, `[[hf]]` pins the Hub's commit and
-  `cargo xtask fetch` moves `refs/main` to it.
+  sorted), so rebuilding the same files makes the same snapshot, and `convert` records it in the document. After
+  `publish`, `[[hf]]` and the document pin the Hub's commit and `cargo xtask fetch` moves `refs/main` to it.
 - `convert` reads both back offline through `ardana_registry`'s Hub: the release `ardana pull <name> --tokenizer
-  hf.co/ardana-ai/<name>-ONNX` in the scratch home `tmp/onnx/<name>/home`, whose entry must point into the snapshots
-  it wrote.
+  hf.co/ardana-ai/<name>-ONNX` in the scratch home `tmp/onnx/<name>/home`, with `HF_HUB_OFFLINE=1` and
+  `ARDANA_LIBRARY` at the document it just recorded, whose entry must point into the snapshots it wrote.
 
 ### Model cards
 - Front matter `license` (the source card's), `base_model: <source repo>`, `base_model_relation: quantized` and
@@ -151,14 +161,16 @@ variants").
 ### Publish and the token (Q12)
 - `publish` prints, for each repository, the card, the `hf repos create ardana-ai/<repo> --type model --public
   --exist-ok` and `hf upload ardana-ai/<repo> <snapshot> . --type model --commit-message <message> --format quiet`
-  commands and the `[[hf]]` entry it pins; `--dry-run` stops there.
+  commands and the `[[hf]]` entry it pins, then the document entry it pins; `--dry-run` stops there and writes
+  nothing.
 - The token is the user's: `HF_TOKEN`, else the real home's `~/.cache/huggingface/token` (`hf auth login`), read by
   xtask's own code, since the sandbox `HF_HOME` holds none. A child gets it only as `HF_TOKEN`, never in argv, and
   nothing prints it: `publish` never formats a `Command` with `{:?}`, whose output lists the variables set on it.
 - A failed upload blocks nothing: `publish` exits non-zero after the printed commands, and the local repositories
-  and `library.toml` stay valid offline. Rerun it, or run the commands by hand.
+  and the library document stay valid offline. Rerun it, or run the commands by hand.
 - After an upload, `publish` pins `[[hf]]` (`repo`, the Hub commit `hf upload` prints, every file but `README.md` and
-  `LICENSE`) in `xtask/fetch.toml`, replacing an older pin of the repository. `cargo xtask fetch --tests` leaves out
+  `LICENSE`) in `xtask/fetch.toml`, replacing an older pin of the repository, and the same commit in the document and
+  the snapshot: the browser table's `commit` for the ONNX repository, the model's own `commit` for the GGUF one. `cargo xtask fetch --tests` leaves out
   `.onnx`, `.onnx.data` and `.gguf` files, so CI downloads no weights.
 
 ## Sources

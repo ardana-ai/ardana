@@ -1,10 +1,12 @@
 //! Hugging Face repositories through `hf-hub`, in the standard hub cache (`$HF_HOME/hub`).
 //!
 //! `hf-hub` 1.0.0 does not read `HF_HUB_OFFLINE`, so [`offline`] reads it and every download passes
-//! `local_files_only`. Offline, a repository's files are those of its cached `main` snapshot and no metadata endpoint
-//! is called; [`Hub::cache_only`] reads a repository that way whatever the variable says (a browser variant is looked
-//! up in the cache first, and taken from there only when the cache holds all of it). A pull that asks for progress
-//! prints each download's bytes to stderr ([`FileReport`]).
+//! `local_files_only`. A repository is read at the commit a library entry pins (Q4), else at `main` (an `hf.co/`
+//! reference typed by the user). Offline, a repository's files are those of its cached snapshot of that commit (of
+//! `main`, the commit `refs/main` names) and no metadata endpoint is called; [`Hub::cache_only`] reads a repository
+//! that way whatever the variable says (a browser variant is looked up in the cache first, and taken from there only
+//! when the cache holds all of it). A pull that asks for progress prints each download's bytes to stderr
+//! ([`FileReport`]).
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -115,8 +117,14 @@ impl Hub {
         self.offline
     }
 
-    /// The `main` commit of `org/repo` and its files: from the Hub, or offline from the cached snapshot.
-    pub async fn snapshot(&self, org: &str, repo: &str) -> Result<Snapshot, RegistryError> {
+    /// `org/repo` at `commit` (a 40-hex commit), else at its `main` commit, and its files: from the Hub, or offline
+    /// from the cached snapshot of that commit.
+    pub async fn snapshot(
+        &self,
+        org: &str,
+        repo: &str,
+        commit: Option<&str>,
+    ) -> Result<Snapshot, RegistryError> {
         let id = format!("{}{org}/{repo}", crate::refs::HF_PREFIX);
         let hub_err = |err| RegistryError::Hub {
             repo: id.clone(),
@@ -126,6 +134,7 @@ impl Hub {
         let (commit, mut files) = if self.offline {
             let dir = match model
                 .snapshot_download()
+                .maybe_revision(commit)
                 .local_files_only(true)
                 .send()
                 .await
@@ -133,7 +142,10 @@ impl Hub {
                 Ok(dir) => dir,
                 Err(HFError::LocalEntryNotFound { .. }) => {
                     return Err(RegistryError::NotCached {
-                        what: id,
+                        what: match commit {
+                            Some(commit) => format!("{id} at commit {commit}"),
+                            None => id,
+                        },
                         cache: self.client.cache_dir().to_path_buf(),
                     });
                 }
@@ -147,10 +159,18 @@ impl Hub {
             list_files(&dir, &dir, &mut files)?;
             (commit, files)
         } else {
-            let info = model.info().send().await.map_err(hub_err)?;
+            let info = model
+                .info()
+                .maybe_revision(commit)
+                .send()
+                .await
+                .map_err(hub_err)?;
             let commit = info.sha.ok_or_else(|| RegistryError::Invalid {
                 what: id.clone(),
-                msg: "the Hub reported no commit for main".into(),
+                msg: format!(
+                    "the Hub reported no commit for {}",
+                    commit.unwrap_or("main")
+                ),
             })?;
             let files = info
                 .siblings

@@ -155,6 +155,26 @@ revision = "a07cc9a04f16550a088caea529712d1d335b0ac1"
 files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
 
 [[hf]]
+repo = "ggml-org/gemma-4-E2B-it-GGUF"
+revision = "b4243c156154b6dca9324415f8c7ccc098b4aed1"
+files = ["gemma-4-E2B-it-Q4_0.gguf"]
+
+[[hf]]
+repo = "google/gemma-4-E2B-it"
+revision = "3e22461f65e89153144f8adb70e3b8c2cc9845a7"
+files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
+
+[[hf]]
+repo = "google/gemma-4-12B-it"
+revision = "707f0a3b8a3c7ad586ed01e27eafbad8a27dd0f7"
+files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
+
+[[hf]]
+repo = "Qwen/Qwen3.8-27B"
+revision = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
+
+[[hf]]
 repo = "ardana-ai/decider-0.8b-ONNX"
 revision = "a2ef1fd2e7d5b3fb30ed99274428f738342949c9"
 files = ["chat_template.jinja", "decider_config.json", "model.onnx", "model.onnx.data", "tokenizer.json", "tokenizer_config.json"]

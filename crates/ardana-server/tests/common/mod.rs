@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, ensure};
 use ardana_core::{LoadOptions, LoadedModel, Runtime, Runtimes};
+use ardana_registry::library::{Library, LibraryClient, LibrarySource};
 use ardana_registry::{LayoutKind, Registry, ResolvedModel};
 use ardana_server::{ModelOptions, Models};
 use axum::Router;
@@ -198,9 +199,13 @@ pub fn hf_file(repo: &str, name: &str) -> Result<PathBuf> {
 /// fetch --tests` fetched no ONNX file (CI).
 pub async fn with_held_variants(mut listed: Value) -> Result<Value> {
     let cache = ardana_registry::BrowserCache::from_env()?;
+    let library = library()?;
     for model in listed["models"].as_array_mut().context("models")? {
         let name = model["name"].as_str().unwrap_or_default().to_string();
-        if model.get("x_browser").is_some() && cache.holds(&name).await {
+        if let Some((entry, _)) = library.browser(&name)
+            && model.get("x_browser").is_some()
+            && cache.holds(entry).await
+        {
             model["x_browser_pulled"] = Value::Bool(true);
         }
     }
@@ -273,11 +278,37 @@ pub fn fake_entry(dir: &Path, name: &str) -> Result<ResolvedModel> {
     })
 }
 
-/// [`Models`] over [`registry`] with the fake runtime.
+/// [`Models`] over [`registry`] with the fake runtime, reading the library snapshot (a file source).
 pub fn models(test: &str, names: &[&str], opts: ModelOptions) -> Result<(Arc<Fake>, Arc<Models>)> {
+    models_from(test, names, opts, LibrarySource::from_env())
+}
+
+/// [`Models`] over [`registry`] with the fake runtime, reading the library from `source`, cached in the registry's
+/// home.
+pub fn models_from(
+    test: &str,
+    names: &[&str],
+    opts: ModelOptions,
+    source: LibrarySource,
+) -> Result<(Arc<Fake>, Arc<Models>)> {
     let fake = Fake::new();
-    let models = Models::new(registry(test, names)?, fake.runtimes(), opts)?;
+    let registry = registry(test, names)?;
+    let home = registry
+        .path()
+        .parent()
+        .context("the registry's home")?
+        .to_path_buf();
+    let client = LibraryClient::new(source, &home);
+    let models = Models::new(registry, client, fake.runtimes(), opts)?;
     Ok((fake, Arc::new(models)))
+}
+
+/// The library snapshot (C5), which cargo's `[env]` names as `ARDANA_LIBRARY` for every test: what the server reads
+/// under a file source.
+pub fn library() -> Result<Library> {
+    let path = std::env::var_os(ardana_registry::library::LIBRARY_VAR)
+        .context("cargo sets ARDANA_LIBRARY")?;
+    Ok(Library::from_file(Path::new(&path))?)
 }
 
 /// A response: status, headers and the JSON body.

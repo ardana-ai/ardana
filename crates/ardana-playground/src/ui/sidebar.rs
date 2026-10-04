@@ -139,8 +139,14 @@ pub fn Sidebar(
 /// browser-capable has a row in each place (Q14).
 #[component]
 fn ModelSelect(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>) -> impl IntoView {
+    // A list that did not arrive: the reason, under the select, while the last list stays in place. In the standalone
+    // build the library document, asked for again when the tab comes back.
     let failure = move || match models.get() {
-        Some(Err(err)) => Some(view! { <p class="fault-line" role="alert">{err}</p> }),
+        Some(Err(err)) => Some(view! {
+            <p class="fault-line model-fault" role="alert" data-testid="models-fault">
+                {err}
+            </p>
+        }),
         _ => None,
     };
     // A picked model the list does not name (a share link's) is offered as it is.
@@ -202,16 +208,20 @@ fn ModelSelect(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>
             }
         });
     });
+    // Nothing picked yet (the standalone build before its list is in) is no model to speak of.
+    let note_text = Memo::new(move |_| match runs.get() {
+        Runs::Server => None,
+        Runs::Tab => Some(tab_note(deck.browser_size()?, engine::keeps_files())),
+        Runs::Cli => (!deck.model.with(String::is_empty))
+            .then(|| cli_note(deck.standalone, deck.pull_size())),
+    });
     let note = move || {
-        let text = match runs.get() {
-            Runs::Server => return None,
-            Runs::Tab => tab_note(deck.browser_size()?, engine::keeps_files()),
-            Runs::Cli => cli_note(deck.standalone, deck.pull_size()),
-        };
-        Some(view! {
-            <p class="field-note model-note" id="model-note" data-testid="model-note">
-                {text}
-            </p>
+        note_text.get().map(|text| {
+            view! {
+                <p class="field-note model-note" id="model-note" data-testid="model-note">
+                    {text}
+                </p>
+            }
         })
     };
     view! {
@@ -220,7 +230,7 @@ fn ModelSelect(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>
                 id="model"
                 class="select-input"
                 node_ref=select
-                aria-describedby=move || (runs.get() != Runs::Server).then_some("model-note")
+                aria-describedby=move || note_text.with(Option::is_some).then_some("model-note")
                 on:change=move |event| deck.pick(&event_target_value(&event))
             >
                 {options}

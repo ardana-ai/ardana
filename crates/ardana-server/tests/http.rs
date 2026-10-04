@@ -1,14 +1,22 @@
 //! R5.4 to R5.6 and R5.8 through the router: the API surface, model resolution, every error shape, and the
-//! `ardana serve` defaults. Requests are read with decider-2b's real tokenizer and profile; the weights are the fake
-//! runtime's, since these tests check what happens around a decode (the real model runs in `cargo xtask e2e
-//! jevcompat|sdk|jevbench`).
+//! `ardana serve` defaults; R4.4: a name the library's index lacks is asked of the library once. Requests are read
+//! with decider-2b's real tokenizer and profile; the weights are the fake runtime's, since these tests check what
+//! happens around a decode (the real model runs in `cargo xtask e2e jevcompat|sdk|jevbench`).
 
 mod common;
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use ardana_registry::library::LibrarySource;
 use ardana_server::{ModelOptions, ServeArgs, router};
+use axum::extract::{Path, Request};
+use axum::http::StatusCode;
+use axum::middleware::{self, Next};
+use axum::response::IntoResponse;
+use axum::routing::get as route_get;
+use axum::{Json, Router};
 use clap::{CommandFactory, Parser};
 use common::{Reply, eventually, get, models, post, send, with_held_variants};
 use serde_json::{Value, json};
@@ -87,6 +95,20 @@ async fn surface() -> Result<()> {
              "release_date": "2026-02-28", "x_pulled": false, "x_size": 563_036_064, "x_browser": 904_574_185},
             {"name": "smollm3-3b", "description": "hf.co/ggml-org/SmolLM3-3B-GGUF:Q4_K_M",
              "release_date": "2025-07-08", "x_pulled": false, "x_size": 1_915_305_312},
+            {"name": "gemma-4-e2b", "description": "hf.co/ggml-org/gemma-4-E2B-it-GGUF:Q4_0",
+             "release_date": "2026-03-02", "x_pulled": false, "x_size": 2_841_481_184_u64},
+            {"name": "gemma-4-e4b", "description": "hf.co/ggml-org/gemma-4-E4B-it-GGUF:Q4_0",
+             "release_date": "2026-03-02", "x_pulled": false, "x_size": 4_590_807_392_u64},
+            {"name": "gemma-4-12b", "description": "hf.co/ggml-org/gemma-4-12B-it-GGUF:Q4_0",
+             "release_date": "2026-05-23", "x_pulled": false, "x_size": 7_219_673_216_u64},
+            {"name": "gemma-4-26b-a4b", "description": "hf.co/ggml-org/gemma-4-26B-A4B-it-GGUF:Q4_0",
+             "release_date": "2026-03-11", "x_pulled": false, "x_size": 14_618_145_824_u64},
+            {"name": "gemma-4-31b", "description": "hf.co/ggml-org/gemma-4-31B-it-GGUF:Q4_0",
+             "release_date": "2026-03-11", "x_pulled": false, "x_size": 17_992_313_088_u64},
+            {"name": "qwen3.6-35b-a3b", "description": "hf.co/ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M",
+             "release_date": "2026-04-15", "x_pulled": false, "x_size": 20_419_565_568_u64},
+            {"name": "qwen3.8-27b", "description": "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
+             "release_date": "2026-08-05", "x_pulled": false, "x_size": 18_973_870_528_u64},
         ]}))
         .await?
     );
@@ -176,8 +198,7 @@ async fn model_resolution() -> Result<()> {
     assert_eq!(unknown.status, 404);
     assert_eq!(
         error_shape(&unknown, "not_found_error"),
-        "no model named \"gamma\"; pulled: alpha, beta; library, pulled on first use: decider-2b, decider-0.8b, \
-         decider-4b, qwen3.5-0.8b, smollm3-3b"
+        "no model named \"gamma\"; pulled: alpha, beta; the library at https://ardana.ai/models/ is pulled on first use"
     );
 
     let opts = ModelOptions {
@@ -200,8 +221,9 @@ async fn model_resolution() -> Result<()> {
     };
     let err = common::models("http-model-resolution-bad-default", &["alpha"], opts).unwrap_err();
     assert!(
-        err.to_string()
-            .contains("no model named \"gamma\"; pulled: alpha; library"),
+        err.to_string().contains(
+            "no model named \"gamma\"; pulled: alpha; the library at https://ardana.ai/models/"
+        ),
         "{err}"
     );
 
@@ -236,10 +258,17 @@ async fn model_resolution() -> Result<()> {
             ("decider-4b", false, true),
             ("qwen3.5-0.8b", false, false),
             ("smollm3-3b", false, false),
+            ("gemma-4-e2b", false, false),
+            ("gemma-4-e4b", false, false),
+            ("gemma-4-12b", false, false),
+            ("gemma-4-26b-a4b", false, false),
+            ("gemma-4-31b", false, false),
+            ("qwen3.6-35b-a3b", false, false),
+            ("qwen3.8-27b", false, false),
         ]
     );
 
-    // With nothing pulled, the library default is the default model and an unknown name lists the library.
+    // With nothing pulled, the library default is the default model and an unknown name points to the library.
     let (_, models) = common::models("http-model-resolution-empty", &[], ModelOptions::default())?;
     let app = router(models, None);
     let listed = get(&app, "/v1/models").await?.body;
@@ -248,15 +277,15 @@ async fn model_resolution() -> Result<()> {
     assert_eq!(listed["models"][0]["x_size"], 1_274_396_800_u64);
     assert_eq!(
         listed["models"].as_array().map(Vec::len),
-        Some(5),
+        Some(12),
         "{listed}"
     );
     let reply = post(&app, &ask(Some("gamma"))).await?;
     assert_eq!(reply.status, 404);
     assert!(
-        error_shape(&reply, "not_found_error").starts_with(
-            "no model named \"gamma\"; none pulled yet; library, pulled on first use: decider-2b,"
-        ),
+        error_shape(&reply, "not_found_error")
+            == "no model named \"gamma\"; none pulled yet; the library at https://ardana.ai/models/ is pulled on \
+                first use",
         "{reply:?}"
     );
     Ok(())
@@ -489,6 +518,98 @@ async fn errors() -> Result<()> {
     Ok(())
 }
 
+/// A loopback library (C2) publishing `index` at `/models.json` and each of its models' manifests at
+/// `/models/<name>.json`, 404 elsewhere; the paths it answered, in order.
+async fn library_server(index: Value) -> Result<(String, Arc<Mutex<Vec<String>>>)> {
+    let models: Arc<Vec<Value>> = Arc::new(index["models"].as_array().cloned().unwrap_or_default());
+    let paths: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen = paths.clone();
+    let manifest = move |Path(file): Path<String>| {
+        let models = models.clone();
+        async move {
+            let entry = file
+                .strip_suffix(".json")
+                .and_then(|name| models.iter().find(|m| m["name"] == name));
+            match entry {
+                Some(model) => Json(json!({"schema": 1, "model": model})).into_response(),
+                None => StatusCode::NOT_FOUND.into_response(),
+            }
+        }
+    };
+    let app = Router::new()
+        .route(
+            "/models.json",
+            route_get(move || async move { Json(index) }),
+        )
+        .route("/models/{file}", route_get(manifest))
+        .layer(middleware::from_fn(move |request: Request, next: Next| {
+            seen.lock()
+                .expect("the request log")
+                .push(request.uri().path().to_string());
+            next.run(request)
+        }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let url = format!("http://{}/models.json", listener.local_addr()?);
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    Ok((url, paths))
+}
+
+/// R4.4: under a URL source, a request naming a model the index lacks sends one manifest GET; on a 404 the answer is
+/// the unknown-model 404, and the same name (in any spelling) sends no further GET until the next index refresh. A
+/// reference is no library name and asks nothing.
+#[tokio::test]
+async fn unknown_names_ask_the_library_once() -> Result<()> {
+    let snapshot = common::library()?;
+    let index: Value = serde_json::from_str(&std::fs::read_to_string(
+        std::env::var_os("ARDANA_LIBRARY").context("cargo sets ARDANA_LIBRARY")?,
+    )?)?;
+    let (url, paths) = library_server(index).await?;
+    let (_, models) = common::models_from(
+        "http-unknown-names",
+        &["alpha"],
+        ModelOptions::default(),
+        LibrarySource::Url(url),
+    )?;
+    let app = router(models.clone(), None);
+    // The first requests wait for the index, which `ardana serve`'s refresh task reads; here the test reads it.
+    models.refresh_library().await;
+    let seen = || paths.lock().expect("the request log").clone();
+    assert_eq!(seen(), ["/models.json"]);
+    let listed = get(&app, "/v1/models").await?.body;
+    assert_eq!(
+        listed["models"].as_array().map(Vec::len),
+        Some(1 + snapshot.models.len())
+    );
+
+    let ask = |model: &str| json!({"model": model, "state": "s", "questions": {}});
+    let reply = post(&app, &ask("gamma")).await?;
+    assert_eq!(reply.status, 404);
+    assert_eq!(
+        error_shape(&reply, "not_found_error"),
+        "no model named \"gamma\"; pulled: alpha; the library at https://ardana.ai/models/ is pulled on first use"
+    );
+    assert_eq!(seen(), ["/models.json", "/models/gamma.json"]);
+    for again in ["gamma", "Gamma", "gamma:q8_0"] {
+        let reply = post(&app, &ask(again)).await?;
+        assert_eq!(reply.status, 404, "{again}");
+        assert_eq!(seen().len(), 2, "{again} asked again");
+    }
+    let reply = post(&app, &ask("hf.co/test/gamma-GGUF")).await?;
+    assert_eq!(reply.status, 404);
+    assert_eq!(seen().len(), 2, "a reference is asked of no library");
+
+    models.refresh_library().await;
+    assert_eq!(seen().len(), 3);
+    assert_eq!(seen()[2], "/models.json");
+    let reply = post(&app, &ask("gamma")).await?;
+    assert_eq!(reply.status, 404);
+    assert_eq!(seen()[3], "/models/gamma.json");
+    assert_eq!(seen().len(), 4);
+    Ok(())
+}
+
 /// The binary's `serve` flags, parsed as `ardana serve` parses them.
 #[derive(Debug, Parser)]
 struct Serve {
@@ -501,6 +622,7 @@ fn defaults() -> Result<()> {
     let args = Serve::try_parse_from(["serve"])?.args;
     assert_eq!(args.addr(), "127.0.0.1:8000");
     assert_eq!(args.keep_alive, Duration::from_secs(300));
+    assert_eq!(args.library_refresh, Duration::from_secs(3600));
     let opts = args.model_options();
     assert_eq!(
         (
@@ -523,6 +645,8 @@ fn defaults() -> Result<()> {
         "m",
         "--keep-alive",
         "30s",
+        "--library-refresh",
+        "10m",
         "--max-loaded-models",
         "2",
         "--max-queued-rows",
@@ -531,6 +655,7 @@ fn defaults() -> Result<()> {
     .args;
     assert_eq!(args.addr(), "0.0.0.0:9000");
     assert_eq!(args.api_key.as_deref(), Some("k"));
+    assert_eq!(args.library_refresh, Duration::from_secs(600));
     let opts = args.model_options();
     assert_eq!(opts.default_model.as_deref(), Some("m"));
     assert_eq!(
@@ -557,6 +682,14 @@ fn defaults() -> Result<()> {
     assert_eq!(
         api_key.get_env().and_then(|e| e.to_str()),
         Some("ARDANA_API_KEY")
+    );
+    let refresh = command
+        .get_arguments()
+        .find(|arg| arg.get_id() == "library_refresh")
+        .expect("a --library-refresh argument");
+    assert_eq!(
+        refresh.get_env().and_then(|e| e.to_str()),
+        Some(ardana_server::LIBRARY_REFRESH_VAR)
     );
 
     for (text, duration) in [

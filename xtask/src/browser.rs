@@ -4,11 +4,12 @@
 //! `insecure_origin` and `browser_resume`, one over an empty Hub cache for `browser_pull`, and one more empty one whose
 //! registry `pull_while_open` pulls into with `ardana pull`), driven by the Playwright cases in
 //! `e2e/playground` on the installed Chrome; plus the placeholder build of `ardana-server`. `standalone`: the standalone
-//! playground (`cargo xtask build-playground`) as static files under `/playground/`, its browser files from a stand-in
-//! of Hugging Face serving `tmp/hf` offline on another origin, driven by the `@standalone` Playwright cases. `design`:
-//! the /impeccable context of the playground, `impeccable detect` on its five URL states and its two in-tab states
-//! (frozen by the `@design` Playwright test) at 1280x800 and 390x844, and the finish (critique record, audit, clean
-//! scans, hook on).
+//! playground (`cargo xtask build-playground`) as static files under `/playground/`, the library document served
+//! beside it at `/models.json` from a copy of the snapshot the cases rewrite, its browser files from a stand-in of
+//! Hugging Face serving `tmp/hf` offline on another origin, driven by the `@standalone` Playwright cases. `design`:
+//! the /impeccable context of the playground, `impeccable detect` on its five URL states, its two in-tab states
+//! (frozen by the `@design` Playwright test) and the standalone build's library-unavailable state at 1280x800 and
+//! 390x844, and the finish (critique record, audit, clean scans, hook on).
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -65,6 +66,8 @@ pub const STANDALONE_CASES: &[&str] = &[
     "standalone_browser_run",
     "standalone_run_command",
     "standalone_share",
+    "standalone_library_update",
+    "standalone_library_unavailable",
 ];
 /// Playwright project name and viewport, as `playwright.config.ts` and `impeccable detect` use them.
 pub const VIEWPORTS: &[(&str, u32, u32)] = &[("desktop", 1280, 800), ("mobile", 390, 844)];
@@ -80,6 +83,8 @@ const STANDALONE_TAG: &str = "@standalone";
 const STANDALONE_URL: &str = "/playground/";
 /// The in-tab states the `@design` test freezes into `<state>-<project>.html` for `impeccable detect`.
 const FROZEN_STATES: &[&str] = &["browser-download", "browser-results"];
+/// The standalone build's state while its library document does not arrive, scanned at the page's URL.
+const LIBRARY_UNAVAILABLE: &str = "library-unavailable";
 const SURFACE: &str = "crates/ardana-playground";
 /// The six blocks of the surface brief's direction contract.
 const CONTRACT_BLOCKS: &[&str] = &[
@@ -175,13 +180,44 @@ pub fn playground(sandbox: &Sandbox) -> Result<()> {
     Ok(())
 }
 
-/// R2.6: the standalone playground built with its hub at a stand-in of Hugging Face, served as static files under
-/// `/playground/`, and the `@standalone` cases on it at both viewports; the release `ardana` gives `ardana run`'s own
+/// R2.6, R6.1: the standalone playground built with its hub at a stand-in of Hugging Face and its library at the
+/// default `/models.json` (R6.1: the build bakes no library: it writes no `tmp/playground/library.json`, and its dist
+/// names no repository of the snapshot), served as static files under `/playground/` with the snapshot's copy at
+/// `/models.json`, and the `@standalone` cases on it at both viewports; the release `ardana` gives `ardana run`'s own
 /// answers to compare the tab's with.
 pub fn standalone(sandbox: &Sandbox) -> Result<()> {
     let ardana = build_ardana(sandbox)?;
     let hosts = Hosts::start(sandbox)?;
-    playground::build_standalone(sandbox, STANDALONE_URL, &hosts.hub)?;
+    let dist =
+        playground::build_standalone(sandbox, STANDALONE_URL, &hosts.hub, playground::LIBRARY)?;
+    let baked = sandbox.tmp().join("playground/library.json");
+    if baked.exists() {
+        bail!("the standalone build wrote {}", baked.display());
+    }
+    let snapshot = std::fs::read_to_string(sandbox.snapshot())?;
+    let repositories: Vec<&str> = snapshot
+        .split('"')
+        .filter(|word| word.starts_with("hf.co/"))
+        .collect();
+    for file in files_under(&dist)? {
+        let bytes = std::fs::read(&file)?;
+        for repository in &repositories {
+            if bytes
+                .windows(repository.len())
+                .any(|w| w == repository.as_bytes())
+            {
+                bail!(
+                    "the standalone build baked {repository} into {}",
+                    file.display()
+                );
+            }
+        }
+    }
+    println!(
+        "e2e standalone: no library baked ({} files of {} name none of the snapshot's repositories)",
+        files_under(&dist)?.len(),
+        dist.display()
+    );
     clear_screens(sandbox, STANDALONE_CASES)?;
     let status = playwright(sandbox)
         .args([
@@ -195,6 +231,7 @@ pub fn standalone(sandbox: &Sandbox) -> Result<()> {
         .arg(sandbox.tmp().join("playwright/standalone-results"))
         .env("ARDANA_BASE_URL", &hosts.site)
         .env("ARDANA_HUB_URL", &hosts.hub)
+        .env("ARDANA_SITE_LIBRARY", &hosts.library)
         .env("ARDANA_BIN", &ardana)
         .env("ARDANA_REPO_ROOT", sandbox.repo_root())
         .status()
@@ -216,23 +253,29 @@ pub fn standalone(sandbox: &Sandbox) -> Result<()> {
 }
 
 /// The standalone suite's two hosts (`e2e/playground/standalone-hosts.mjs`), each of its own origin: the site serving
-/// `tmp/playground/dist` under `/playground/`, and the stand-in of Hugging Face serving `tmp/hf/hub`. Dropping it stops
-/// both.
+/// `tmp/playground/dist` under `/playground/` and, at `/models.json`, the file `library` (a copy of the snapshot the
+/// cases rewrite, add to and take away), and the stand-in of Hugging Face serving `tmp/hf/hub`. Dropping it stops both.
 struct Hosts {
     child: Child,
     site: String,
     hub: String,
+    library: PathBuf,
 }
 
 impl Hosts {
     fn start(sandbox: &Sandbox) -> Result<Hosts> {
         let dir = sandbox.repo_root().join(PLAYGROUND_DIR);
+        let library = sandbox.tmp().join("playground/models.json");
+        std::fs::create_dir_all(library.parent().unwrap())?;
+        std::fs::copy(sandbox.snapshot(), &library)
+            .with_context(|| format!("copying the snapshot to {}", library.display()))?;
         let mut child = sandbox
             .command("node")
             .current_dir(&dir)
             .arg(dir.join("standalone-hosts.mjs"))
             .arg(sandbox.tmp().join("playground/dist"))
             .arg(sandbox.tmp().join("hf/hub"))
+            .arg(&library)
             .stdout(Stdio::piped())
             .spawn()
             .context("starting the standalone hosts with node")?;
@@ -249,10 +292,14 @@ impl Hosts {
             let _ = child.kill();
             bail!("the standalone hosts did not start: {line:?}");
         };
-        println!("e2e standalone: the page at {site}{STANDALONE_URL}, the hub at {hub}");
+        println!(
+            "e2e standalone: the page at {site}{STANDALONE_URL}, its library at {site}/models.json ({}), the hub at {hub}",
+            library.display()
+        );
         Ok(Hosts {
             site: site.to_string(),
             hub: hub.to_string(),
+            library,
             child,
         })
     }
@@ -263,6 +310,20 @@ impl Drop for Hosts {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+/// Every file under `dir`, at any depth.
+fn files_under(dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
+        let path = entry?.path();
+        if path.is_dir() {
+            files.extend(files_under(&path)?);
+        } else {
+            files.push(path);
+        }
+    }
+    Ok(files)
 }
 
 /// Empties each case's `tmp/screens/<case>/`.
@@ -589,10 +650,11 @@ fn context(sandbox: &Sandbox) -> Vec<String> {
     problems
 }
 
-/// R6.2, R2.7, R3.6: `impeccable detect` exits 0 on the empty, loaded, results and 422 states, the run-command state
-/// (a model the server has not pulled) at both viewports, and on the in-tab download and results states the `@design`
-/// test freezes from a real run in the tab. Each JSON report lands in `tmp/evals/design/`; returns one line per failed
-/// scan.
+/// R6.2, R2.7, R3.6, R6.8: `impeccable detect` exits 0 on the empty, loaded, results and 422 states, the run-command
+/// state (a model the server has not pulled) at both viewports, on the in-tab download and results states the
+/// `@design` test freezes from a real run in the tab, and on the standalone build's library-unavailable state (its
+/// `/models.json` a 404, served by the standalone suite's hosts). Each JSON report lands in `tmp/evals/design/`;
+/// returns one line per failed scan.
 fn detect(sandbox: &Sandbox) -> Result<Vec<String>> {
     let ardana = playground::build(sandbox)?;
     let out = sandbox.tmp().join("evals/design");
@@ -679,6 +741,24 @@ fn detect(sandbox: &Sandbox) -> Result<Vec<String>> {
                 &mut failures,
             )?;
         }
+    }
+    // The standalone build with no library document: the page lists nothing, says the library is unavailable under
+    // the picker and holds Run; the network goes idle once the 404 is in, so the page's URL is the state.
+    let hosts = Hosts::start(sandbox)?;
+    playground::build_standalone(sandbox, STANDALONE_URL, &hosts.hub, playground::LIBRARY)?;
+    std::fs::remove_file(&hosts.library)
+        .with_context(|| format!("removing {}", hosts.library.display()))?;
+    let url = format!("{}{STANDALONE_URL}", hosts.site);
+    for (project, width, height) in VIEWPORTS {
+        scan(
+            sandbox,
+            &out,
+            LIBRARY_UNAVAILABLE,
+            project,
+            &format!("{width}x{height}"),
+            &url,
+            &mut failures,
+        )?;
     }
     Ok(failures)
 }

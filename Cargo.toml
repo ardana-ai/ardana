@@ -42,6 +42,9 @@ js-sys = "0.3"
 leptos = { version = "0.8", features = ["csr"] }
 lz-str = "0.2"
 memory-serve = "2.4"
+# The library document's GETs (`ardana-registry`), at the version hf-hub 1.0.0 resolves with the features it enables
+# (its defaults: rustls), so the lock gains no crate.
+reqwest = "=0.13.5"
 serde = { version = "1", features = ["derive"] }
 # `float_roundtrip`: every number keeps its exact value, as Python's `json.loads` reads it (prompts re-render state
 # floats, the playground shows response numbers).

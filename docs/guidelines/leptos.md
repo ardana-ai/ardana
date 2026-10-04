@@ -105,11 +105,20 @@ gates every UI change (Q23, Q27).
   the bytes as they arrive) using `ardana_api` request/response types; a browser file's failure says whether the
   connection or the server failed (`api::Failed`). `ApiClient::page()` builds it: served by `ardana serve`, it calls
   `/v1/*` paths on the page's own origin and nothing else, never a hard-coded host (Q15, R6.6). The standalone build
-  (below) has no server: `ApiClient::standalone`, the model list and the profiles come from the `StandaloneLibrary`
-  it bakes in (`api::baked`, the one `cfg(feature = "standalone")` of the crate), and `browser_file` fetches
+  (below) has no server: `ApiClient::standalone`, and `models()` GETs the library document (C1,
+  `ardana_api::LibraryDocument`) from the URL the build named (`api::library`, the one `cfg(feature = "standalone")`
+  of the crate: `ARDANA_PLAYGROUND_MODELS_URL` and `ARDANA_PLAYGROUND_HUB_URL`, read by `env!`) with
+  `cache: no-cache` (a cached copy only once the host says it stands), parses it as this version reads it
+  (`LibraryDocument::parse`, Q12: an entry it cannot read is left out), lists it as a server that has pulled none
+  would (`api::listed`: `x_pulled: false`, no default, every browser variant held) and keeps each entry's
+  `BrowserEntry` for `browser_profile` (its `profile` and `commit`) and `browser_file`, which fetches
   `<hub>/<org>/<repo>/resolve/<commit>/<file>` with `Range` alone (a commit's file never changes; `If-Range` would
   make the request a CORS preflight) and no referrer (`ReferrerPolicy::NoReferrer`: huggingface.co's CDN answers a
-  request from any page on `*.workers.dev` with a 404 that carries no CORS header). The page's own static files are loaded by their loaders, by paths relative to
+  request from any page on `*.workers.dev` with a 404 that carries no CORS header). A document that does not arrive
+  or read is `Err("The model library is unavailable: <reason>")`, and the page keeps its last list (`Deck::unlisted`;
+  the sidebar's `#models-fault` alert says the reason, and while nothing is picked yet Run is held by
+  `Held::Listing`, the select has no note and no `aria-describedby`, Snippets' lede is the "In browser" row's and its
+  command reads `ardana run <model> --request -`). The page's own static files are loaded by their loaders, by paths relative to
   the page or to the loader, never absolute, so one `dist` runs wherever it is served: trunk's loader fetches the wasm,
   and `engine.js` imports the engine module from beside itself (`engine/ardana-engine.js`, whose `init` fetches its
   WASM beside it) and onnxruntime-web from `../ort/1.30.0/` (`import.meta.url`), whose bundles fetch their WASM
@@ -242,7 +251,9 @@ gates every UI change (Q23, Q27).
   your machine" (`Held::Cli`), followed by the ink "Show the command" key, whose arrow leads to the commands
   (`ui::reveal("snippets")`: the block opens, scrolls under the top bar and its summary takes focus; the sidebar's
   section rows use the same function), and after `Held::Cli` by "Run <browser default> in this tab instead"
-  (`Deck::browser_default`), which picks that model's "In browser" row and focuses Run; quiet, "Add a question to
+  (`Deck::browser_default`), which picks that model's "In browser" row and focuses Run; quiet, in the standalone
+  build while nothing is picked yet, "Loading the model library" or "The model library is unavailable"
+  (`Held::Listing`, from `Deck::unlisted`); quiet, "Add a question to
   run"; else, quiet, what a run of the picked "In browser" row downloads while its files are not kept (`Deck::kept`,
   probed from Cache Storage whenever such a row is picked and after each run): "Run downloads <name> into this tab
   once: <size>, kept by this browser. Running it takes 3 to 4 times that in memory." (where the page has no Cache
@@ -335,17 +346,16 @@ gates every UI change (Q23, Q27).
   `wasm_opt = "version_133"`. Trunk uses a tool from `PATH` only when its version matches, otherwise it downloads.
   Bump the pin, `xtask/fetch.toml` (`cargo-lock:wasm-bindgen`) and `cargo xtask fetch` together whenever Cargo.lock's
   wasm-bindgen changes.
-- The standalone build: `cargo xtask build-playground --public-url <path> [--hub <url>]` runs trunk with
-  `--features standalone --public-url <path> --dist tmp/playground/dist` (the embedded `dist/` stays as it is), the
-  library it bakes in written first to `tmp/playground/library.json` and named by `ARDANA_PLAYGROUND_LIBRARY`
-  (`include_str!`): the library's models as a server that has pulled none lists them, with no default model and every
-  browser variant held, and for each browser variant its ardana-ai repository, the commit `refs/main` names in
-  `tmp/hf/hub` and its profile, read by `ardana_registry::BrowserCache` as a server reads it; a variant the cache does
-  not hold whole fails the build, naming its model. trunk prefixes the paths it writes with `<path>`; every other path
-  is relative. The page then runs no model on a server: every server row runs with the ardana CLI after ardana.ai's
-  install line, the browser default in the tab instead, and a share link keeps the page's path
-  (`<origin><path>#share/…`). `../ardana-landing`'s `npm run build-playground` runs it and serves the result at
-  `/playground/`.
+- The standalone build: `cargo xtask build-playground --public-url <path> [--hub <url>] [--library <url>]` runs
+  trunk with `--features standalone --public-url <path> --dist tmp/playground/dist` (the embedded `dist/` stays as it
+  is) and the two URLs the page reads at run time in its environment, `ARDANA_PLAYGROUND_HUB_URL` (default
+  `https://huggingface.co`) and `ARDANA_PLAYGROUND_MODELS_URL` (default `/models.json`), which `api::library` reads
+  with `env!` (cargo rebuilds the page when they change). No library is baked (Q13): the build reads no snapshot and
+  no hub cache, and `xtask/src/playground.rs` "the standalone build bakes no library" holds it to that. trunk prefixes
+  the paths it writes with `<path>`; every other path is relative. The page then lists the document it fetches, runs
+  no model on a server: every server row runs with the ardana CLI after ardana.ai's install line, the browser default
+  in the tab instead, and a share link keeps the page's path (`<origin><path>#share/…`). `../ardana-landing`'s
+  `npm run build-playground` runs it and serves the result at `/playground/`, beside `/models.json`.
 - Build locally only with `cargo xtask build`, which runs `trunk build --release --offline` through `Sandbox::command`
   (`PATH` starts with `tmp/bin`, `HOME` under `tmp/`). `--offline` turns a missing or mismatched tool into an error
   instead of a download into `~/Library/Caches/dev.trunkrs.trunk`, which the home guard would flag.

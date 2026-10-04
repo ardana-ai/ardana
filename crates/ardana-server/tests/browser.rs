@@ -1,6 +1,7 @@
 //! R2.1: the browser variants of library models behind `GET /v1/browser/<name>/<file>`, `x_browser` in `/v1/models`,
-//! and the cross-origin isolation headers (Q13) on every response. `browser_routes` needs no browser files;
-//! `browser_files` serves the real ones `cargo xtask onnx convert` builds into `tmp/hf`.
+//! and the cross-origin isolation headers (Q13) on every response; R3.4: a variant is read at the commit its library
+//! entry names. `browser_routes` needs no browser files; `browser_files` serves the real ones `cargo xtask onnx
+//! convert` builds into `tmp/hf`.
 
 mod common;
 
@@ -13,6 +14,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, ensure};
 use ardana_core::Layout;
 use ardana_registry::LayoutKind;
+use ardana_registry::library::{LibraryDocument, LibrarySource};
 use ardana_server::{ModelOptions, router};
 use axum::Router;
 use axum::body::Body;
@@ -101,8 +103,48 @@ async fn browser_routes() -> Result<()> {
             ("decider-4b", None),
             ("qwen3.5-0.8b", Some(904_574_185)),
             ("smollm3-3b", None),
+            ("gemma-4-e2b", None),
+            ("gemma-4-e4b", None),
+            ("gemma-4-12b", None),
+            ("gemma-4-26b-a4b", None),
+            ("gemma-4-31b", None),
+            ("qwen3.6-35b-a3b", None),
+            ("qwen3.8-27b", None),
         ]
     );
+
+    // R3.4: the cache holds a variant only at the commit the library names; a document naming one it lacks lists every
+    // variant as not pulled.
+    let mut moved = common::library()?;
+    for model in &mut moved.models {
+        if let Some(browser) = &mut model.browser {
+            browser.commit = "1111111111111111111111111111111111111111".into();
+        }
+    }
+    let document = common::scratch("browser-routes-moved-library")?.join("models.json");
+    std::fs::write(
+        &document,
+        serde_json::to_vec(&LibraryDocument {
+            schema: 1,
+            default: moved.default,
+            browser_default: moved.browser_default,
+            models: moved.models,
+        })?,
+    )?;
+    let (_, elsewhere) = common::models_from(
+        "browser-routes-moved",
+        &["decider-2b"],
+        ModelOptions::default(),
+        LibrarySource::File(document),
+    )?;
+    let listed = get(&router(elsewhere, None), "/v1/models").await?;
+    let pulled: Vec<&Value> = listed.body["models"]
+        .as_array()
+        .context("models")?
+        .iter()
+        .filter(|m| m.get("x_browser_pulled").is_some())
+        .collect();
+    assert!(pulled.is_empty(), "{pulled:?}");
 
     // Every other name and file is the API's 404, before any pull; other methods are its 405.
     for uri in [
@@ -237,15 +279,21 @@ async fn browser_files() -> Result<()> {
         "every request shares one pull"
     );
     let model = pulled[0].clone();
-    let commit = std::fs::read_to_string(
-        browser_file(repo, "model.onnx")?
-            .ancestors()
-            .nth(3)
-            .context("the repository directory")?
-            .join("refs/main"),
-    )?;
-    assert_eq!(model.commit, commit.trim());
+    // R3.4: the files of the commit the library entry names.
+    let library = common::library()?;
+    let (_, browser) = library
+        .browser("decider-0.8b")
+        .context("decider-0.8b has a browser variant")?;
+    assert_eq!(model.commit, browser.commit);
     assert_eq!(model.reference, format!("hf.co/{repo}"));
+    let snapshot = PathBuf::from(std::env::var_os("HF_HOME").context("HF_HOME is not set")?)
+        .join("hub/models--ardana-ai--decider-0.8b-ONNX/snapshots")
+        .join(&browser.commit);
+    let files: Vec<PathBuf> = ardana_registry::BROWSER_FILES
+        .iter()
+        .map(|file| snapshot.join(file))
+        .collect();
+    assert_eq!(model.files, files);
 
     // The files, from the hub cache, as stored: never compressed, with their length, the commit as their ETag.
     let mut total = 0;

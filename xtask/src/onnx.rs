@@ -1,32 +1,34 @@
 //! `cargo xtask onnx convert|publish <name>`: a library model's browser variant, ONNX weights for onnxruntime-web, and
-//! the GGUF ardana-ai hosts for it, both built from the checkpoint `library.toml` names as the model's `source` (Q6,
-//! `docs/guidelines/onnx.md`); never in CI.
+//! the GGUF ardana-ai hosts for it, both built from the checkpoint the library document (C1,
+//! `../ardana-landing/src/lib/data/models.json`) names as the model's `source` (Q6, `docs/guidelines/onnx.md`); never
+//! in CI.
 //!
 //! `convert` downloads the checkpoint into `tmp/hf`, exports the ONNX with `xtask/scripts/onnx_export.py` in the
 //! `tmp/py/onnx` venv it creates, converts the GGUF with llama.cpp's `convert_hf_to_gguf.py` when the model's `weights`
 //! is an ardana-ai repository, writes each repository into the sandbox Hub cache as the snapshot `publish` uploads,
-//! records the sizes it built in `library.toml` and reads both repositories back offline with the release
-//! `ardana pull`. `publish` prints its `hf` commands, the model cards and the `[[hf]]` entries, then (without
-//! `--dry-run`) uploads the snapshots to huggingface.co/ardana-ai with the user's token and pins them in
-//! `xtask/fetch.toml`.
+//! records the commits, sizes and profile it built in the document and its snapshot (C5,
+//! `crates/ardana-registry/tests/data/models.json`), which hold the same bytes (Q14), and reads both repositories back
+//! offline with the release `ardana pull`, reading the document (`ARDANA_LIBRARY`). `publish` prints its `hf`
+//! commands, the model cards, the `[[hf]]` entries and the document entry, then (without `--dry-run`) uploads the
+//! snapshots to huggingface.co/ardana-ai with the user's token and pins them in `xtask/fetch.toml` and the document.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
-use serde::Deserialize;
+use ardana_registry::BrowserCache;
+use ardana_registry::library::{Library, LibraryEntry};
+use serde_json::Value;
 
 use crate::env::quote;
 use crate::fetch::{Hf, Manifest, blob_name, link_snapshot, remove_if_present};
 use crate::python::pinned_venv;
-use crate::sandbox::{Sandbox, run};
+use crate::sandbox::{SNAPSHOT, Sandbox, run};
 use crate::serve::build_ardana;
 
 /// The Hugging Face organisation that hosts what `convert` builds.
 const ORG: &str = "ardana-ai";
-/// The model library, which names what to build and records the sizes built.
-pub(crate) const LIBRARY: &str = "crates/ardana-registry/src/library.toml";
 /// The step's venv, relative to the repo root, its Python and its pins: the model builder and what it runs on, and
 /// the Hub client whose `hf` downloads checkpoints and uploads repositories. llama.cpp's converter runs in it too.
 const VENV: &str = "tmp/py/onnx";
@@ -71,31 +73,55 @@ const UNPINNED: [&str; 2] = [CARD, "LICENSE"];
 /// as `cargo xtask fetch` does.
 const LFS_SIZE: u64 = 10_000_000;
 
-/// The part of `library.toml` the step reads; `ardana-registry` validates the whole file.
-#[derive(Debug, Deserialize)]
-struct LibraryFile {
-    #[serde(rename = "model")]
-    models: Vec<LibraryModel>,
+/// The library document (C1) in the landing checkout beside this one, relative to the repo root: what `onnx` reads and
+/// records into (Q14), formatted by the landing's Prettier (`../ardana-landing/prettier.config.js`).
+const DOCUMENT: &str = "../ardana-landing/src/lib/data/models.json";
+/// That Prettier's line width, and the columns it counts for a tab.
+const PRINT_WIDTH: usize = 100;
+const TAB_WIDTH: usize = 2;
+
+/// The library document and its snapshot (C5), which `onnx` writes together so they hold the same bytes.
+struct Documents {
+    landing: PathBuf,
+    snapshot: PathBuf,
 }
 
-#[derive(Debug, Deserialize)]
-struct LibraryModel {
-    name: String,
-    weights: String,
-    quant: String,
-    source: Option<String>,
-    browser: Option<BrowserTable>,
+impl Documents {
+    /// The document beside the repo root `root`; an error naming [`DOCUMENT`] when that checkout is not there.
+    fn find(root: &Path) -> Result<Documents> {
+        let landing = root.join(DOCUMENT);
+        if !landing.is_file() {
+            bail!(
+                "{DOCUMENT} is missing ({}): `cargo xtask onnx` records into the landing's library document, so \
+                 check out ardana-landing beside this repository",
+                landing.display()
+            );
+        }
+        Ok(Documents {
+            landing,
+            snapshot: root.join(SNAPSHOT),
+        })
+    }
+
+    fn read(&self) -> Result<String> {
+        std::fs::read_to_string(&self.landing)
+            .with_context(|| format!("reading {}", self.landing.display()))
+    }
+
+    /// Writes `text` as the document and as its snapshot.
+    fn write(&self, text: &str) -> Result<()> {
+        for path in [&self.landing, &self.snapshot] {
+            std::fs::write(path, text).with_context(|| format!("writing {}", path.display()))?;
+        }
+        Ok(())
+    }
 }
 
-#[derive(Debug, Deserialize)]
-struct BrowserTable {
-    weights: String,
-    quant: String,
-}
-
-/// What `library.toml` says to build for one model.
+/// What the library document says to build for one model.
 #[derive(Debug)]
 struct Target {
+    /// The model's document entry.
+    entry: LibraryEntry,
     name: String,
     /// The checkpoint, `org/repo` at a commit.
     source: Hf,
@@ -107,33 +133,26 @@ struct Target {
 }
 
 impl Target {
-    fn load(repo_root: &Path, name: &str) -> Result<Target> {
-        let path = repo_root.join(LIBRARY);
-        let text = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
-        let library: LibraryFile =
-            toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
-        let Some(model) = library
-            .models
-            .iter()
-            .find(|m| m.name.eq_ignore_ascii_case(name))
-        else {
-            let names: Vec<&str> = library.models.iter().map(|m| m.name.as_str()).collect();
+    /// The model `name` as the library document at `path` describes it, read as `ardana` reads it.
+    fn load(path: &Path, name: &str) -> Result<Target> {
+        let library = Library::from_file(path)
+            .with_context(|| format!("reading the library document {}", path.display()))?;
+        let Some(model) = library.find(name).map(|pick| pick.model) else {
             bail!(
                 "no library model {name}; the library has {}",
-                names.join(", ")
+                library.names().join(", ")
             );
         };
         let Some(browser) = &model.browser else {
             bail!(
-                "library model {} has no browser variant: {LIBRARY} gives it no [model.browser] table (weights, \
-                 quant)",
+                "library model {} has no browser variant: {DOCUMENT} gives it no browser table (weights, commit, \
+                 quant, size, profile)",
                 model.name
             );
         };
         let source = model.source.as_deref().with_context(|| {
             format!(
-                "library model {} names no `source` checkpoint in {LIBRARY}",
+                "library model {} names no `source` checkpoint in {DOCUMENT}",
                 model.name
             )
         })?;
@@ -172,6 +191,7 @@ impl Target {
             None => None,
         };
         Ok(Target {
+            entry: model.clone(),
             name: model.name.clone(),
             source,
             onnx: onnx.to_string(),
@@ -202,7 +222,8 @@ fn hosted(repo: &str) -> bool {
 
 pub fn convert(sandbox: &Sandbox, name: &str) -> Result<()> {
     let root = sandbox.repo_root();
-    let target = Target::load(root, name)?;
+    let documents = Documents::find(root)?;
+    let target = Target::load(&documents.landing, name)?;
     // The GGUF's converter is checked before the long export.
     let gguf_job = match &target.gguf {
         Some((repo, quant)) => Some((repo, quant, llama_cpp(sandbox)?)),
@@ -275,19 +296,19 @@ pub fn convert(sandbox: &Sandbox, name: &str) -> Result<()> {
         gguf = Some((hf, size));
     }
 
-    let library = root.join(LIBRARY);
-    let text = std::fs::read_to_string(&library)?;
-    let recorded = record_sizes(
-        &text,
+    let profile = browser_profile(sandbox, &target, &onnx)?;
+    let recorded = record_build(
+        &documents.read()?,
         &target.name,
-        browser_size,
-        gguf.as_ref().map(|(_, size)| *size),
+        (&onnx, browser_size, profile),
+        gguf.as_ref().map(|(hf, size)| (hf, *size)),
     )?;
-    std::fs::write(&library, recorded)?;
-    println!("onnx: recorded the sizes in {LIBRARY}");
+    documents.write(&recorded)?;
+    println!("onnx: recorded the build in {DOCUMENT} and {SNAPSHOT}");
     read_back(
         sandbox,
         &target,
+        &documents.landing,
         &work.join("home"),
         &onnx,
         gguf.as_ref().map(|(hf, _)| hf),
@@ -502,65 +523,197 @@ fn gguf_card(
     )
 }
 
-/// `library.toml` with the sizes `convert` built for `name`: its browser variant's, and the model's own when it
-/// built the GGUF. Every other line stays as it is; a browser table without `size` gets it after its last line.
-fn record_sizes(text: &str, name: &str, browser: u64, gguf: Option<u64>) -> Result<String> {
-    let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
-    let name_line = format!("name = \"{name}\"");
-    let at = lines
-        .iter()
-        .position(|line| line.trim() == name_line)
-        .with_context(|| format!("{LIBRARY} has no line {name_line}"))?;
-    let start = lines[..at]
-        .iter()
-        .rposition(|line| line.trim() == "[[model]]")
-        .with_context(|| format!("{name_line} is in no [[model]] table"))?;
-    let end = lines[at..]
-        .iter()
-        .position(|line| line.trim() == "[[model]]")
-        .map_or(lines.len(), |offset| at + offset);
-    let browser_at = (start..end)
-        .find(|&i| lines[i].trim() == "[model.browser]")
-        .with_context(|| format!("the {name} model has no [model.browser] table"))?;
-    let size = |n: u64| format!("size = {}", grouped(n));
-    if let Some(gguf) = gguf {
-        let i = (start..browser_at)
-            .find(|&i| lines[i].starts_with("size = "))
-            .with_context(|| format!("the {name} model has no size"))?;
-        lines[i] = size(gguf);
+/// The profile a server sends for the browser variant of `target` that `convert` wrote as `onnx`
+/// (`GET /v1/browser/<name>/profile`), read from the sandbox Hub cache as a server reads it.
+fn browser_profile(sandbox: &Sandbox, target: &Target, onnx: &Hf) -> Result<Value> {
+    let mut entry = target.entry.clone();
+    if let Some(browser) = &mut entry.browser {
+        browser.commit = onnx.revision.clone();
     }
-    match (browser_at..end).find(|&i| lines[i].starts_with("size = ")) {
-        Some(i) => lines[i] = size(browser),
-        None => {
-            let last = (browser_at..end)
-                .rev()
-                .find(|&i| !lines[i].trim().is_empty())
-                .unwrap_or(browser_at);
-            lines.insert(last + 1, size(browser));
-        }
-    }
-    Ok(lines.join("\n") + "\n")
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .context("starting a runtime for the hub cache")?;
+    let cache = BrowserCache::at(&sandbox.tmp().join("hf/hub"))?;
+    let variant = runtime.block_on(cache.variant(&entry)).with_context(|| {
+        format!(
+            "reading the browser variant of {} from hf.co/{}@{}",
+            target.name, onnx.repo, onnx.revision
+        )
+    })?;
+    Ok(serde_json::to_value(&variant.profile)?)
 }
 
-/// `1_234_567`, as `library.toml` writes byte counts.
-fn grouped(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::new();
-    for (i, digit) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push('_');
+/// `text`, a library document, with what `convert` built for the model `name`: its browser variant's commit, size and
+/// profile, and, when it built the GGUF, the model's commit and size and the size of the tag of its quant.
+fn record_build(
+    text: &str,
+    name: &str,
+    (onnx, browser_size, profile): (&Hf, u64, Value),
+    gguf: Option<(&Hf, u64)>,
+) -> Result<String> {
+    edit_entry(text, name, |entry| {
+        *field(entry, &["browser", "commit"])? = onnx.revision.as_str().into();
+        *field(entry, &["browser", "size"])? = browser_size.into();
+        *field(entry, &["browser", "profile"])? = profile;
+        if let Some((hf, size)) = gguf {
+            *field(entry, &["commit"])? = hf.revision.as_str().into();
+            *field(entry, &["size"])? = size.into();
+            let tag = field(entry, &["quant"])?
+                .as_str()
+                .unwrap_or_default()
+                .to_lowercase();
+            let item = field(entry, &["tags"])?
+                .as_array_mut()
+                .and_then(|tags| tags.iter_mut().find(|item| item["tag"] == tag.as_str()))
+                .with_context(|| format!("the {name} model has no tag {tag}"))?;
+            *field(item, &["size"])? = size.into();
         }
-        out.push(digit);
+        Ok(())
+    })
+}
+
+/// `text`, a library document, with the entry of the model `name` changed by `change`. The document must be in the
+/// formatting [`format_document`] writes, so every other byte stays as it was.
+fn edit_entry(
+    text: &str,
+    name: &str,
+    change: impl FnOnce(&mut Value) -> Result<()>,
+) -> Result<String> {
+    let mut document: Value = serde_json::from_str(text).context("parsing the library document")?;
+    if format_document(&document) != text {
+        bail!(
+            "the library document is not formatted as `onnx` writes it (the landing's Prettier, every object one \
+             key a line), so writing it would change more than the {name} entry"
+        );
     }
+    change(entry_of(&mut document, name)?)?;
+    Ok(format_document(&document))
+}
+
+/// The entry of the model `name` in `document`.
+fn entry_of<'a>(document: &'a mut Value, name: &str) -> Result<&'a mut Value> {
+    document
+        .get_mut("models")
+        .and_then(Value::as_array_mut)
+        .and_then(|models| models.iter_mut().find(|entry| entry["name"] == name))
+        .with_context(|| format!("the library document has no model {name}"))
+}
+
+/// The field at `path` of `entry`, which must have it.
+fn field<'a>(entry: &'a mut Value, path: &[&str]) -> Result<&'a mut Value> {
+    path.iter().try_fold(entry, |value, key| {
+        value
+            .get_mut(*key)
+            .with_context(|| format!("the entry has no {}", path.join(".")))
+    })
+}
+
+/// `value` as the landing's Prettier formats the document: every object with keys one key a line (Prettier keeps an
+/// object expanded as the document has it), an array on one line when it fits, else its numbers filling the lines
+/// and anything else one item a line; a newline at the end.
+fn format_document(value: &Value) -> String {
+    let mut out = String::new();
+    write_json(&mut out, value, 0, 0, 0);
+    out.push('\n');
     out
 }
 
+/// Writes `value` nested `depth` deep, starting at `column`, with `trail` columns after it on its line (a comma).
+fn write_json(out: &mut String, value: &Value, depth: usize, column: usize, trail: usize) {
+    let indent = |out: &mut String, depth: usize| out.extend(std::iter::repeat_n('\t', depth));
+    let inner = (depth + 1) * TAB_WIDTH;
+    match value {
+        Value::Object(map) if !map.is_empty() => {
+            out.push_str("{\n");
+            for (i, (key, item)) in map.iter().enumerate() {
+                let comma = i + 1 < map.len();
+                let key = format!("{}: ", Value::from(key.as_str()));
+                indent(out, depth + 1);
+                out.push_str(&key);
+                write_json(
+                    out,
+                    item,
+                    depth + 1,
+                    inner + width(&key),
+                    usize::from(comma),
+                );
+                if comma {
+                    out.push(',');
+                }
+                out.push('\n');
+            }
+            indent(out, depth);
+            out.push('}');
+        }
+        Value::Array(items) => match flat(value) {
+            Some(flat) if column + width(&flat) + trail <= PRINT_WIDTH => out.push_str(&flat),
+            _ => {
+                out.push_str("[\n");
+                if items.iter().all(Value::is_number) {
+                    indent(out, depth + 1);
+                    let mut at = inner;
+                    for (i, item) in items.iter().enumerate() {
+                        let text = if i + 1 < items.len() {
+                            format!("{item},")
+                        } else {
+                            item.to_string()
+                        };
+                        if i > 0 && at + 1 + width(&text) <= PRINT_WIDTH {
+                            out.push(' ');
+                            at += 1;
+                        } else if i > 0 {
+                            out.push('\n');
+                            indent(out, depth + 1);
+                            at = inner;
+                        }
+                        out.push_str(&text);
+                        at += width(&text);
+                    }
+                    out.push('\n');
+                } else {
+                    for (i, item) in items.iter().enumerate() {
+                        let comma = i + 1 < items.len();
+                        indent(out, depth + 1);
+                        write_json(out, item, depth + 1, inner, usize::from(comma));
+                        if comma {
+                            out.push(',');
+                        }
+                        out.push('\n');
+                    }
+                }
+                indent(out, depth);
+                out.push(']');
+            }
+        },
+        _ => out.push_str(&value.to_string()),
+    }
+}
+
+/// `value` on one line, as Prettier prints it where it fits; `None` for what it always breaks, an object with keys.
+fn flat(value: &Value) -> Option<String> {
+    match value {
+        Value::Object(map) => map.is_empty().then(|| "{}".to_string()),
+        Value::Array(items) => {
+            let items: Option<Vec<String>> = items.iter().map(flat).collect();
+            Some(format!("[{}]", items?.join(", ")))
+        }
+        _ => Some(value.to_string()),
+    }
+}
+
+/// The columns Prettier counts for `text`, which holds no tab.
+fn width(text: &str) -> usize {
+    text.chars().count()
+}
+
 /// Reads both repositories back offline through `ardana_registry`'s Hub: the release `ardana pull`s the model into the
-/// scratch `home` with the ONNX repository's tokenizer; its entry must point into the snapshots just written (the GGUF
-/// one when `convert` built it, else the library's GGUF from `cargo xtask fetch`).
+/// scratch `home` with the ONNX repository's tokenizer, reading the library `document`, which holds the commits just
+/// written; its entry must point into the snapshots just written (the GGUF one when `convert` built it, else the
+/// library's GGUF from `cargo xtask fetch`).
 fn read_back(
     sandbox: &Sandbox,
     target: &Target,
+    document: &Path,
     home: &Path,
     onnx: &Hf,
     gguf: Option<&Hf>,
@@ -570,6 +723,7 @@ fn read_back(
     run(sandbox
         .command(&ardana)
         .env("ARDANA_HOME", home)
+        .env("ARDANA_LIBRARY", document)
         .env("HF_HUB_OFFLINE", "1")
         .args(["pull", &target.name, "--tokenizer", &tokenizer]))
     .context(
@@ -609,8 +763,53 @@ fn read_back(
 
 pub fn publish(sandbox: &Sandbox, name: &str, dry_run: bool) -> Result<()> {
     let root = sandbox.repo_root();
-    let target = Target::load(root, name)?;
+    let documents = Documents::find(root)?;
+    let target = Target::load(&documents.landing, name)?;
+    let (uploads, plan) = plan(sandbox, &target, &documents.read()?)?;
+    println!("{plan}");
+    if dry_run {
+        println!("publish: dry run, nothing uploaded");
+        return Ok(());
+    }
+    let token = token(sandbox)?;
+    for (create, upload, mut pin) in uploads {
+        let failed = || {
+            format!(
+                "publishing hf.co/{} failed; the commands above publish it by hand",
+                pin.repo
+            )
+        };
+        create.run(sandbox, &token).with_context(failed)?;
+        let url = upload.run(sandbox, &token).with_context(failed)?;
+        pin.revision = url
+            .trim()
+            .rsplit_once("/commit/")
+            .map(|(_, commit)| commit.to_string())
+            .filter(|commit| commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()))
+            .with_context(|| format!("`{upload}` printed no commit: {}", url.trim()))?;
+        let path = root.join("xtask/fetch.toml");
+        let text = std::fs::read_to_string(&path)?;
+        let document = pin_document(&documents.read()?, &target, &pin)?;
+        std::fs::write(&path, pin_entry(&text, &pin))?;
+        documents.write(&document)?;
+        println!(
+            "publish: pinned hf.co/{}@{} in xtask/fetch.toml, {DOCUMENT} and {SNAPSHOT}",
+            pin.repo, pin.revision
+        );
+    }
+    Ok(())
+}
+
+/// One repository `publish` uploads: the `hf repos create` and `hf upload` commands and the `[[hf]]` entry it pins.
+type Upload = (HfCommand, HfCommand, Hf);
+
+/// What `publish` uploads for `target` and what it prints first: each repository's card, commands and `[[hf]]` entry,
+/// then the entry it pins in the library `document`, its commits those `hf upload` prints.
+fn plan(sandbox: &Sandbox, target: &Target, document: &str) -> Result<(Vec<Upload>, String)> {
+    let root = sandbox.repo_root();
     let mut uploads = Vec::new();
+    let mut report = String::new();
+    let mut pinned = document.to_string();
     for repo in target.repos() {
         let local = local_snapshot(sandbox, repo)
             .with_context(|| format!("run `cargo xtask onnx convert {}` first", target.name))?;
@@ -657,42 +856,34 @@ pub fn publish(sandbox: &Sandbox, name: &str, dry_run: bool) -> Result<()> {
                 .cloned()
                 .collect(),
         };
-        println!(
+        report.push_str(&format!(
             "publish: hf.co/{repo}\n\nThe model card it uploads ({CARD}):\n\n{card}\nThe commands, from the repository \
-             root:\n\n  {create}\n  {upload}\n\nThe [[hf]] entry it pins in xtask/fetch.toml:\n\n{}\n",
+             root:\n\n  {create}\n  {upload}\n\nThe [[hf]] entry it pins in xtask/fetch.toml:\n\n{}\n\n",
             hf_entry(&pin)
-        );
+        ));
+        pinned = pin_document(&pinned, target, &pin)?;
         uploads.push((create, upload, pin));
     }
-    if dry_run {
-        println!("publish: dry run, nothing uploaded");
-        return Ok(());
-    }
-    let token = token(sandbox)?;
-    for (create, upload, mut pin) in uploads {
-        let failed = || {
-            format!(
-                "publishing hf.co/{} failed; the commands above publish it by hand",
-                pin.repo
-            )
-        };
-        create.run(sandbox, &token).with_context(failed)?;
-        let url = upload.run(sandbox, &token).with_context(failed)?;
-        pin.revision = url
-            .trim()
-            .rsplit_once("/commit/")
-            .map(|(_, commit)| commit.to_string())
-            .filter(|commit| commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()))
-            .with_context(|| format!("`{upload}` printed no commit: {}", url.trim()))?;
-        let path = root.join("xtask/fetch.toml");
-        let text = std::fs::read_to_string(&path)?;
-        std::fs::write(&path, pin_entry(&text, &pin))?;
-        println!(
-            "publish: pinned hf.co/{}@{} in xtask/fetch.toml",
-            pin.repo, pin.revision
-        );
-    }
-    Ok(())
+    let mut pinned: Value = serde_json::from_str(&pinned)?;
+    report.push_str(&format!(
+        "The entry it pins in {DOCUMENT} and {SNAPSHOT}:\n\n{}",
+        format_document(entry_of(&mut pinned, &target.name)?)
+    ));
+    Ok((uploads, report))
+}
+
+/// The library `document` with `hf`, which `publish` uploaded for `target`, as a commit of its entry: the browser
+/// variant's for the ONNX repository, the model's own for the GGUF one.
+fn pin_document(document: &str, target: &Target, hf: &Hf) -> Result<String> {
+    let path: &[&str] = if hf.repo == target.onnx {
+        &["browser", "commit"]
+    } else {
+        &["commit"]
+    };
+    edit_entry(document, &target.name, |entry| {
+        *field(entry, path)? = hf.revision.as_str().into();
+        Ok(())
+    })
 }
 
 /// The snapshot `convert` wrote for `repo`: the commit in `refs/main` and the files under it.
@@ -827,44 +1018,260 @@ fn pin_entry(text: &str, hf: &Hf) -> String {
 mod tests {
     use super::*;
 
-    const LIBRARY_TEXT: &str = "# sizes are bytes\ndefault = \"a\"\n\n[[model]]\nname = \"a\"\nsize = 1\n\n\
-                                [model.browser]\nweights = \"hf.co/ardana-ai/a-ONNX\"\nquant = \"int4\"\nsize = 2\n\n\
-                                [[model]]\nname = \"b\"\nsize = 3\n\n[model.browser]\nquant = \"int8\"\n\n\
-                                [[model]]\nname = \"c\"\nsize = 4\n";
+    fn repo_root() -> &'static Path {
+        Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
+    }
 
-    #[test]
-    fn records_the_built_sizes() {
-        let recorded = record_sizes(LIBRARY_TEXT, "a", 1_101_201_408, Some(811_843_552)).unwrap();
-        assert_eq!(
-            recorded,
-            LIBRARY_TEXT
-                .replace(
-                    "name = \"a\"\nsize = 1\n",
-                    "name = \"a\"\nsize = 811_843_552\n"
-                )
-                .replace(
-                    "quant = \"int4\"\nsize = 2\n",
-                    "quant = \"int4\"\nsize = 1_101_201_408\n"
-                )
-        );
-        // Without a GGUF the model's own size stays; a browser table without a size gets one.
-        let recorded = record_sizes(LIBRARY_TEXT, "b", 891_355_136, None).unwrap();
-        assert_eq!(
-            recorded,
-            LIBRARY_TEXT.replace(
-                "quant = \"int8\"\n\n[[model]]",
-                "quant = \"int8\"\nsize = 891_355_136\n\n[[model]]"
-            )
-        );
-        for (name, err) in [("c", "no [model.browser] table"), ("d", "has no line")] {
-            let message = record_sizes(LIBRARY_TEXT, name, 1, None)
-                .unwrap_err()
-                .to_string();
-            assert!(message.contains(err), "{message}");
+    /// The library snapshot (C5), a copy of the landing's document, so in its formatting.
+    fn snapshot_text() -> String {
+        std::fs::read_to_string(repo_root().join(SNAPSHOT)).unwrap()
+    }
+
+    /// A model of the snapshot as `onnx` reads it.
+    fn snapshot_target(name: &str) -> Target {
+        Target::load(&repo_root().join(SNAPSHOT), name).unwrap()
+    }
+
+    /// A fresh directory under the test's temp dir (`tmp/sys` under cargo).
+    fn scratch(test: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("onnx-{test}-{}", std::process::id()));
+        remove_if_present(&dir).unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn hf(repo: &str, revision: &str) -> Hf {
+        Hf {
+            repo: repo.into(),
+            revision: revision.into(),
+            files: Vec::new(),
         }
-        assert_eq!(grouped(0), "0");
-        assert_eq!(grouped(999), "999");
-        assert_eq!(grouped(1_000), "1_000");
+    }
+
+    /// R5.1: recording a build changes only the entry's browser commit, size and profile and, with a GGUF, its commit,
+    /// size and the size of its quant's tag; every other byte, and the landing's Prettier formatting, stay.
+    #[test]
+    fn records_the_build_in_the_document() {
+        let text = snapshot_text();
+        let document: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(format_document(&document), text, "the snapshot round-trips");
+
+        let target = snapshot_target("decider-0.8b");
+        let browser = target.entry.browser.as_ref().unwrap();
+        let (onnx, gguf) = (
+            hf(&target.onnx, &"c".repeat(40)),
+            hf("ardana-ai/x", &"d".repeat(40)),
+        );
+        // A chat profile whose head fills more than one line, as Prettier fills an array of numbers.
+        let head: Vec<u32> = (0..30).map(|i| 248_000 + i * 7).collect();
+        let profile = serde_json::json!({
+            "name": "decider-0.8b-v2",
+            "layout": {"kind": "chat", "head": head, "tail": [248046, 198]},
+            "temperature": 1.0,
+            "temperature_by_type": {"choice": 1.5},
+            "isolated_levels": false,
+            "release_date": "2026-10-01"
+        });
+        let recorded =
+            record_build(&text, "decider-0.8b", (&onnx, 5, profile), Some((&gguf, 7))).unwrap();
+        let at = text.find("\"name\": \"decider-0.8b\"").unwrap();
+        let start = at + text[at..].find("\"profile\": {").unwrap();
+        let end = start + text[start..].find("\n\t\t\t\t}").unwrap() + 6;
+        let size = target.entry.size.to_string();
+        assert_eq!(
+            text.matches(&size).count(),
+            2,
+            "the model's size and its tag's"
+        );
+        let expected = format!("{}{PROFILE}{}", &text[..start], &text[end..])
+            .replace(&target.entry.commit, &gguf.revision)
+            .replace(&browser.commit, &onnx.revision)
+            .replace(&size, "7")
+            .replace(&format!("\"size\": {},", browser.size), "\"size\": 5,");
+        assert_eq!(recorded, expected);
+
+        // Without a GGUF only the browser variant's fields change.
+        let target = snapshot_target("qwen3.5-0.8b");
+        let browser = target.entry.browser.as_ref().unwrap();
+        let profile = browser.profile.clone();
+        let recorded = record_build(&text, "qwen3.5-0.8b", (&onnx, 5, profile), None).unwrap();
+        let expected = text
+            .replace(&browser.commit, &onnx.revision)
+            .replace(&format!("\"size\": {},", browser.size), "\"size\": 5,");
+        assert_eq!(recorded, expected);
+
+        let err = record_build(&text, "decider-4b", (&onnx, 5, Value::Null), None).unwrap_err();
+        assert_eq!(err.to_string(), "the entry has no browser.commit");
+        let err = record_build(&text, "nope", (&onnx, 5, Value::Null), None).unwrap_err();
+        assert_eq!(err.to_string(), "the library document has no model nope");
+        // A document in another formatting is refused rather than rewritten.
+        let collapsed = text.replacen(
+            "{\n\t\t\t\t\t\t\"kind\": \"plain\"\n\t\t\t\t\t}",
+            "{ \"kind\": \"plain\" }",
+            1,
+        );
+        assert_ne!(collapsed, text);
+        let err =
+            record_build(&collapsed, "qwen3.5-0.8b", (&onnx, 5, Value::Null), None).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("not formatted as `onnx` writes it"),
+            "{err}"
+        );
+    }
+
+    /// The profile `records_the_build_in_the_document` records, as the landing's Prettier 3.9.9 formats it at its depth
+    /// (`npx prettier --check` of the recorded document passes): the head filling lines of at most 100 columns.
+    const PROFILE: &str = "\"profile\": {\n\t\t\t\t\t\"name\": \"decider-0.8b-v2\",\n\t\t\t\t\t\"layout\": {\n\
+                           \t\t\t\t\t\t\"kind\": \"chat\",\n\t\t\t\t\t\t\"head\": [\n\
+                           \t\t\t\t\t\t\t248000, 248007, 248014, 248021, 248028, 248035, 248042, 248049, 248056, 248063,\n\
+                           \t\t\t\t\t\t\t248070, 248077, 248084, 248091, 248098, 248105, 248112, 248119, 248126, 248133,\n\
+                           \t\t\t\t\t\t\t248140, 248147, 248154, 248161, 248168, 248175, 248182, 248189, 248196, 248203\n\
+                           \t\t\t\t\t\t],\n\t\t\t\t\t\t\"tail\": [248046, 198]\n\t\t\t\t\t},\n\
+                           \t\t\t\t\t\"temperature\": 1.0,\n\t\t\t\t\t\"temperature_by_type\": {\n\
+                           \t\t\t\t\t\t\"choice\": 1.5\n\t\t\t\t\t},\n\t\t\t\t\t\"isolated_levels\": false,\n\
+                           \t\t\t\t\t\"release_date\": \"2026-10-01\"\n\t\t\t\t}";
+
+    /// R5.2: without the landing checkout beside the repository, `convert` and `publish` stop before anything else,
+    /// naming the document.
+    #[test]
+    fn needs_the_landing_checkout() {
+        let base = scratch("needs-landing");
+        let root = base.join("ardana");
+        let sandbox = Sandbox::new(&root, &base).unwrap();
+        for result in [
+            convert(&sandbox, "decider-0.8b"),
+            publish(&sandbox, "decider-0.8b", true),
+        ] {
+            let err = format!("{:#}", result.unwrap_err());
+            assert!(
+                err.starts_with("../ardana-landing/src/lib/data/models.json is missing"),
+                "{err}"
+            );
+        }
+        assert!(!root.join("tmp/onnx").exists(), "convert built nothing");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    /// R5.4: `publish --dry-run` prints each repository's `[[hf]]` entry and then the document entry it pins, its
+    /// commits those `hf upload` prints, and writes no file.
+    #[test]
+    fn a_dry_run_prints_the_entry_and_writes_nothing() {
+        let base = scratch("dry-run");
+        let root = base.join("ardana");
+        let landing = base.join("ardana-landing/src/lib/data/models.json");
+        let copies = [
+            (repo_root().join(SNAPSHOT), root.join(SNAPSHOT)),
+            (repo_root().join(SNAPSHOT), landing.clone()),
+            (
+                repo_root().join("xtask/fetch.toml"),
+                root.join("xtask/fetch.toml"),
+            ),
+        ];
+        for (from, to) in &copies {
+            std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+            std::fs::copy(from, to).unwrap();
+        }
+        let sandbox = Sandbox::new(&root, &base).unwrap();
+        let target = snapshot_target("decider-0.8b");
+        // The local snapshots `convert` would have written.
+        for repo in target.repos() {
+            let snapshot = snapshot_dir(&sandbox, &hf(repo, "local"));
+            std::fs::create_dir_all(&snapshot).unwrap();
+            for file in [CARD, "LICENSE", "model.onnx", TOKENIZER] {
+                std::fs::write(snapshot.join(file), file).unwrap();
+            }
+            let refs = hf(repo, "local").repo_dir(&sandbox).join("refs");
+            std::fs::create_dir_all(&refs).unwrap();
+            std::fs::write(refs.join("main"), "local").unwrap();
+        }
+        let before: Vec<Vec<u8>> = copies
+            .iter()
+            .map(|(_, to)| std::fs::read(to).unwrap())
+            .collect();
+
+        publish(&sandbox, "decider-0.8b", true).unwrap();
+        let after: Vec<Vec<u8>> = copies
+            .iter()
+            .map(|(_, to)| std::fs::read(to).unwrap())
+            .collect();
+        assert!(before == after, "the dry run wrote a file");
+
+        let (uploads, report) = plan(&sandbox, &target, &snapshot_text()).unwrap();
+        let repos: Vec<&str> = uploads
+            .iter()
+            .map(|(_, _, pin)| pin.repo.as_str())
+            .collect();
+        assert_eq!(repos, target.repos());
+        for (_, _, pin) in &uploads {
+            assert!(report.contains(&hf_entry(pin)), "{report}");
+            assert_eq!(pin.files, ["model.onnx", TOKENIZER]);
+        }
+        let placeholder = "<the commit `hf upload` prints>";
+        let entry = report
+            .split_once(&format!(
+                "The entry it pins in {DOCUMENT} and {SNAPSHOT}:\n\n"
+            ))
+            .map(|(_, entry)| entry)
+            .unwrap_or_else(|| panic!("{report}"));
+        let mut document: Value = serde_json::from_str(&snapshot_text()).unwrap();
+        let expected = entry_of(&mut document, "decider-0.8b").unwrap();
+        expected["commit"] = placeholder.into();
+        expected["browser"]["commit"] = placeholder.into();
+        assert_eq!(serde_json::from_str::<Value>(entry).unwrap(), *expected);
+        assert!(
+            entry.contains(&format!("\n\t\"commit\": \"{placeholder}\",\n")),
+            "{entry}"
+        );
+        assert!(
+            entry.contains(&format!("\n\t\t\"commit\": \"{placeholder}\",\n")),
+            "{entry}"
+        );
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    /// R5.5: what `publish` pins after its uploads, in `xtask/fetch.toml` and the document, agrees: the browser
+    /// variant's commit is its ONNX repository's revision, and the model's own its GGUF repository's when ardana-ai
+    /// hosts it; nothing else in the document changes.
+    #[test]
+    fn publish_pins_the_document() {
+        let text = snapshot_text();
+        let fetch = std::fs::read_to_string(repo_root().join("xtask/fetch.toml")).unwrap();
+        for name in ["decider-0.8b", "qwen3.5-0.8b"] {
+            let target = snapshot_target(name);
+            let (mut pinned_fetch, mut pinned) = (fetch.clone(), text.clone());
+            let mut expected = text.clone();
+            for (repo, revision) in target.repos().into_iter().zip(["1", "2"]) {
+                let pin = Hf {
+                    files: vec!["model.onnx".into()],
+                    ..hf(repo, &revision.repeat(40))
+                };
+                pinned_fetch = pin_entry(&pinned_fetch, &pin);
+                pinned = pin_document(&pinned, &target, &pin).unwrap();
+                let old = match &target.gguf {
+                    Some((gguf, _)) if gguf == repo => &target.entry.commit,
+                    _ => &target.entry.browser.as_ref().unwrap().commit,
+                };
+                expected = expected.replace(old, &pin.revision);
+            }
+            assert_eq!(pinned, expected);
+            let manifest: Manifest = toml::from_str(&pinned_fetch).unwrap();
+            let revision = |repo: &str| {
+                manifest
+                    .hf
+                    .iter()
+                    .find(|hf| hf.repo == repo)
+                    .map(|hf| hf.revision.clone())
+                    .unwrap()
+            };
+            let mut document: Value = serde_json::from_str(&pinned).unwrap();
+            let entry = entry_of(&mut document, name).unwrap();
+            assert_eq!(entry["browser"]["commit"], revision(&target.onnx));
+            match &target.gguf {
+                Some((gguf, _)) => assert_eq!(entry["commit"], revision(gguf)),
+                None => assert_eq!(entry["commit"], target.entry.commit.as_str()),
+            }
+        }
     }
 
     #[test]

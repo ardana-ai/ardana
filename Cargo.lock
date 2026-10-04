@@ -232,6 +232,7 @@ dependencies = [
  "anyhow",
  "ardana-core",
  "hf-hub",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -5074,7 +5075,6 @@ name = "xtask"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "ardana-api",
  "ardana-registry",
  "lz-str",
  "serde",

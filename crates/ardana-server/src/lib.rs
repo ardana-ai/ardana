@@ -36,6 +36,9 @@ pub use models::{ModelOptions, Models, ModelsError};
 /// request is refused by its token count (413 naming the limit), not by its byte count.
 pub const BODY_LIMIT: usize = 32 << 20;
 
+/// The variable `--library-refresh` also reads (Q9).
+pub const LIBRARY_REFRESH_VAR: &str = "ARDANA_LIBRARY_REFRESH";
+
 /// `ardana serve` options.
 #[derive(Debug, Clone, PartialEq, Eq, Args)]
 pub struct ServeArgs {
@@ -70,6 +73,11 @@ pub struct ServeArgs {
     #[arg(long, env = "ARDANA_KEEP_ALIVE",
         hide_env_values = true, default_value = "5m", value_parser = parse_duration)]
     pub keep_alive: Duration,
+    /// How often the model library is read again from ARDANA_LIBRARY, e.g. 10m, 1h; a read that fails keeps the copy
+    /// at hand
+    #[arg(long, env = LIBRARY_REFRESH_VAR,
+        hide_env_values = true, default_value = "1h", value_parser = parse_duration)]
+    pub library_refresh: Duration,
     /// How many models stay loaded at once; one more unloads the least recently used
     #[arg(
         long,

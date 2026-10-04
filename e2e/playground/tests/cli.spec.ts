@@ -4,6 +4,7 @@
 // sends nothing for a model the server would have to pull, autorun included. `run_command` runs on the release
 // `ardana serve` holding decider-2b, `pull_while_open` on an empty server of its own (the playground suite).
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
@@ -18,6 +19,7 @@ import {
   pickInBrowser,
   pickModel,
   picker as modelPicker,
+  root,
   run,
   runKey,
   screenshot,
@@ -32,6 +34,14 @@ import {
 async function listed(page: Page, origin = ''): Promise<ModelInfo[]> {
   return ((await (await page.request.get(`${origin}/v1/models`)).json()) as { models: ModelInfo[] }).models;
 }
+
+/** The names of the models the library snapshot (C5) lists, in its order: the library the servers under test read. */
+const snapshotNames = (): string[] =>
+  (
+    JSON.parse(fs.readFileSync(path.join(root, 'crates/ardana-registry/tests/data/models.json'), 'utf8')) as {
+      models: { name: string }[];
+    }
+  ).models.map((m) => m.name);
 
 /**
  * On a local server, the server row of `model`, which it has not pulled: Run is held and says how the model gets onto
@@ -52,8 +62,9 @@ async function expectPull(page: Page, model: string, request: Request, requests:
 }
 
 test('run_command', async ({ page }, testInfo) => {
+  // This server has pulled decider-2b alone: every other library model is one it lacks.
   const lacked = (await listed(page)).filter((m) => m.x_pulled === false);
-  expect(lacked.map((m) => m.name)).toEqual(['decider-0.8b', 'decider-4b', 'qwen3.5-0.8b', 'smollm3-3b']);
+  expect(lacked.map((m) => m.name)).toEqual(snapshotNames().filter((name) => name !== 'decider-2b'));
   const requests: string[] = [];
   page.on('request', (r) => requests.push(r.url()));
 

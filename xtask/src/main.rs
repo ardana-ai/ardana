@@ -11,19 +11,24 @@ const USAGE: &str = "usage: cargo xtask <step>
   fetch [--check]  install, or verify, the xtask/fetch.toml entries into tmp/
   fetch --tests    install only the Hub files plain `cargo test` reads (CI)
   build            build the playground dist with trunk, then the release ardana
-  build-playground --public-url <path> [--hub <url>]
+  build-playground --public-url <path> [--hub <url>] [--library <url>]
                    build the standalone playground, served as static files at
-                   <path>, into tmp/playground/dist; its browser files come
-                   from <url> (default https://huggingface.co)
+                   <path>, into tmp/playground/dist; it reads the library
+                   document from --library (default /models.json) at run time
+                   and its browser files from --hub (default
+                   https://huggingface.co)
   check-deps       check the workspace members and dependency direction
   check-docs       check CLAUDE.md, AGENTS.md and docs/guidelines
   export-decider   export decider's prompt layout cases into crates/ardana-core/tests/data/decider
   onnx convert <name>
                    build a library model's browser ONNX (and the GGUF ardana-ai
-                   hosts) into tmp/hf and record its sizes in library.toml
+                   hosts) into tmp/hf and record it in
+                   ../ardana-landing/src/lib/data/models.json and its snapshot
+                   (crates/ardana-registry/tests/data/models.json)
   onnx publish <name> [--dry-run]
                    upload them to huggingface.co/ardana-ai and pin them in
-                   xtask/fetch.toml, or only print the commands
+                   xtask/fetch.toml and both documents, or only print the
+                   commands
   e2e <suite>      run an end-to-end suite";
 
 fn main() -> ExitCode {
@@ -54,14 +59,17 @@ fn run() -> Result<()> {
         ["fetch", "--check"] => fetch::check(&sandbox()?)?,
         ["fetch", "--tests"] => sandbox()?.guarded("fetch --tests", fetch::fetch_tests)?,
         ["build"] => sandbox()?.guarded("build", playground::build).map(drop)?,
-        ["build-playground", "--public-url", public_url, hub @ ..] => {
-            let hub = match hub {
-                [] => playground::HUB,
-                ["--hub", hub] => hub,
-                _ => bail!("{USAGE}"),
-            };
+        ["build-playground", "--public-url", public_url, options @ ..] => {
+            let (mut hub, mut library) = (playground::HUB, playground::LIBRARY);
+            for option in options.chunks(2) {
+                match option {
+                    ["--hub", url] => hub = url,
+                    ["--library", url] => library = url,
+                    _ => bail!("{USAGE}"),
+                }
+            }
             let dist = sandbox()?.guarded("build-playground", |s| {
-                playground::build_standalone(s, public_url, hub)
+                playground::build_standalone(s, public_url, hub, library)
             })?;
             println!("{}", dist.display());
         }

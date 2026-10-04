@@ -121,7 +121,7 @@ llama.cpp.
 ## Testing
 - Unit tests in `ardana-core` use fake `LoadedModel`s; tests that load a GGUF are `#[ignore]` and run through
   `cargo xtask e2e rust` against the official models in `tmp/hf` (decider-2b Q4_K_M, Qwen3.5-0.8B Q4_0,
-  SmolLM3-3B Q4_K_M) or the local Ollama `llama3.2` blob, never an invented fixture.
+  SmolLM3-3B Q4_K_M, Gemma 4 E2B Q4_0) or the local Ollama `llama3.2` blob, never an invented fixture.
 - Run the decider-2b ticket check at default offload and at `--gpu-layers 0` and compare argmaxes (R2.7).
 
 ## Sources

@@ -14,8 +14,10 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use ardana_api::{SystemOneRequest, SystemOneResponse, human_size};
 use ardana_core::{DecideError, Decider, Layout, Limits, LoadOptions, LoadedModel, Runtimes};
-use ardana_registry::library::{LibraryPick, library};
-use ardana_registry::{LayoutKind, Named, PullOptions, Registry, ResolvedModel};
+use ardana_registry::library::{
+    DEFAULT_MODEL, LibraryClient, LibraryPick, LibrarySource, MODELS_PAGE,
+};
+use ardana_registry::{LayoutKind, Named, PullOptions, Registry, RegistryError, ResolvedModel};
 use clap::{ArgAction, ArgMatches, Args, Parser, Subcommand, ValueEnum};
 use serde_json::json;
 use tokenizers::Tokenizer;
@@ -248,12 +250,14 @@ pub fn run(cli: Cli, matches: &ArgMatches) -> Result<()> {
     }
 }
 
-/// `ardana serve`: the registry's models behind the API until Ctrl-C or SIGTERM.
+/// `ardana serve`: the registry's models behind the API until Ctrl-C or SIGTERM, with the library read from its
+/// source on start and every `--library-refresh` (Q9), in the background, so binding never waits on the network.
 fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
     let registry = Registry::open_default()?;
     let names = registry.names();
     let models = Arc::new(ardana_server::Models::new(
         registry,
+        LibraryClient::from_env()?,
         runtimes(),
         args.model_options(),
     )?);
@@ -262,18 +266,21 @@ fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
         .build()
         .context("starting the async runtime")?;
     runtime.block_on(async {
+        tokio::spawn(models.clone().keep_library_fresh(args.library_refresh));
         let addr = args.addr();
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .with_context(|| format!("binding {addr}"))?;
         let local = listener.local_addr().context("reading the bound address")?;
-        let served = if names.is_empty() {
+        let served = if !names.is_empty() {
+            format!("models {}", names.join(", "))
+        } else if let LibrarySource::Off = models.library_source() {
+            format!("no models pulled yet; `ardana pull <name>` adds one ({MODELS_PAGE})")
+        } else {
             format!(
                 "no models pulled yet; the first request pulls {} or the library model it names",
-                library().default
+                models.default_model()
             )
-        } else {
-            format!("models {}", names.join(", "))
         };
         eprintln!(
             "ardana serve: listening on http://{local} ({served}{})",
@@ -291,7 +298,7 @@ fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
     })
 }
 
-/// `ardana pull`: resolve the library name or reference and record it in the registry.
+/// `ardana pull`: resolve the library name (its manifest fetched, Q8) or reference and record it in the registry.
 fn pull(args: &PullArgs) -> Result<()> {
     let opts = PullOptions {
         name: args.name.clone(),
@@ -299,22 +306,50 @@ fn pull(args: &PullArgs) -> Result<()> {
         layout: args.layout.map(LayoutKind::from),
         progress: true,
     };
-    let (model, _) = pull_into_registry(&args.reference, &opts)?;
+    let client = LibraryClient::from_env()?;
+    let runtimes = runtimes();
+    let pulled = block_on(async {
+        let library = client.lookup(&args.reference).await?;
+        ardana_registry::pull(&args.reference, &opts, &runtimes, &library).await
+    })?;
+    let (model, _) = record(pulled?)?;
     println!("pulled {} ({}, {})", model.name, model.source, size(&model));
     Ok(())
 }
 
-/// Pulls `reference` (download progress on stderr) and records it in the registry, read again after the download.
-fn pull_into_registry(reference: &str, opts: &PullOptions) -> Result<(ResolvedModel, Registry)> {
+/// Runs `future` on a runtime of this command's own.
+fn block_on<F: Future>(future: F) -> Result<F::Output> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("starting the async runtime")?;
-    let model = runtime.block_on(ardana_registry::pull(reference, opts, &runtimes()))?;
+    Ok(runtime.block_on(future))
+}
+
+/// Records a pulled model in the registry, read again after the download.
+fn record(model: ResolvedModel) -> Result<(ResolvedModel, Registry)> {
     let mut registry = Registry::open_default()?;
     registry.insert(model.clone());
     registry.save()?;
     Ok((model, registry))
+}
+
+/// What `name` means in `registry`: a pulled entry under its exact name, with the library untouched; else the library's
+/// answer for it (Q8: under a URL source the model's manifest, fetched now, the cached copy standing in when the GET
+/// fails), which may be an entry pulled under another spelling.
+fn named<'a>(registry: &'a Registry, name: &str) -> Result<Named<'a>> {
+    if let Ok(model) = registry.entry(name) {
+        return Ok(Named::Pulled(model));
+    }
+    // A pulled model sends nothing under any spelling (Q8): its pull cached the manifest that names it.
+    let client = LibraryClient::from_env()?;
+    if let Ok(library) = client.cached(name)
+        && let Ok(Named::Pulled(model)) = registry.named(name, &library)
+    {
+        return Ok(Named::Pulled(model));
+    }
+    let library = block_on(client.lookup(name))??;
+    Ok(registry.named(name, &library)?)
 }
 
 /// The weights' size, or `missing` when the file is gone.
@@ -344,20 +379,19 @@ fn list() -> Result<()> {
         render::table(&["NAME", "SIZE", "PULLED", "SOURCE"], &rows)
     );
     if rows.is_empty() {
-        let library = library();
         eprintln!(
-            "no models pulled yet; try `ardana pull {}` (library: {})",
-            library.default,
-            library.names().join(", ")
+            "no models pulled yet; try `ardana pull {DEFAULT_MODEL}` (the library: {MODELS_PAGE})"
         );
     }
     Ok(())
 }
 
-/// `ardana show`: a pulled model's entry and profile, or a library model's download.
+/// `ardana show`: a pulled model's entry and profile, or a library model's download as the library cache describes
+/// it (no request is sent, Q8).
 fn show(args: &ShowArgs) -> Result<()> {
     let registry = Registry::open_default()?;
-    match registry.named(&args.name)? {
+    let library = LibraryClient::from_env()?.cached(&args.name)?;
+    match registry.named(&args.name, &library)? {
         Named::Pulled(model) if args.json => println!("{}", serde_json::to_string_pretty(model)?),
         Named::Pulled(model) => print!("{}", show_pulled(model)),
         Named::Library(pick) if args.json => {
@@ -525,7 +559,7 @@ fn rm(args: &RmArgs) -> Result<()> {
 
 /// `ardana run`: builds the request, answers it and prints the answers (or the response as JSON).
 fn run_model(args: &RunArgs, asked: &ask::Asked) -> Result<()> {
-    let model = args.name.as_deref().unwrap_or("decider-2b");
+    let model = args.name.as_deref().unwrap_or(DEFAULT_MODEL);
     let request = match &args.request {
         Some(path) => read_request(path)?,
         None => {
@@ -618,7 +652,7 @@ struct Answered {
 /// pulled first, with its progress on stderr.
 fn run_named(name: &str, args: &RunArgs, request: &SystemOneRequest) -> Result<Answered> {
     let registry = Registry::open_default()?;
-    let name = match registry.named(name)? {
+    let name = match named(&registry, name)? {
         Named::Pulled(model) => model.name.clone(),
         Named::Library(pick) => {
             let size = pick
@@ -630,7 +664,9 @@ fn run_named(name: &str, args: &RunArgs, request: &SystemOneRequest) -> Result<A
                 progress: true,
                 ..PullOptions::default()
             };
-            let (model, _) = pull_into_registry(&pick.name(), &opts)?;
+            let pulled: Result<ResolvedModel, RegistryError> =
+                block_on(ardana_registry::pull_library(&pick, &opts, &runtimes()))?;
+            let (model, _) = record(pulled?)?;
             eprintln!("pulled {}", model.name);
             model.name
         }

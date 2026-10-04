@@ -13,6 +13,8 @@ const QWEN35_GGUF: (&str, &str) = ("ggml-org/Qwen3.5-0.8B-GGUF", "Qwen3.5-0.8B-Q
 const QWEN35_TOKENIZER: &str = "Qwen/Qwen3.5-0.8B";
 const SMOLLM3_GGUF: (&str, &str) = ("ggml-org/SmolLM3-3B-GGUF", "SmolLM3-Q4_K_M.gguf");
 const SMOLLM3_TOKENIZER: &str = "HuggingFaceTB/SmolLM3-3B";
+const GEMMA4_GGUF: (&str, &str) = ("ggml-org/gemma-4-E2B-it-GGUF", "gemma-4-E2B-it-Q4_0.gguf");
+const GEMMA4_TOKENIZER: &str = "google/gemma-4-E2B-it";
 
 /// `ardana run --layout chat` without `--config` on a GGUF and the tokenizer repo it was converted from.
 fn run_chat(gguf: (&str, &str), tokenizer: &str, request: PathBuf) -> Result<Value> {
@@ -47,6 +49,18 @@ fn smollm3_3b() -> Result<()> {
     let resp = run_chat(
         SMOLLM3_GGUF,
         SMOLLM3_TOKENIZER,
+        common::request("sentiment.json"),
+    )?;
+    common::check_sentiment(&resp)?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "e2e: ggml-org/gemma-4-E2B-it-GGUF Q4_0 and the google/gemma-4-E2B-it tokenizer in tmp/hf (cargo xtask fetch)"]
+fn gemma4_e2b() -> Result<()> {
+    let resp = run_chat(
+        GEMMA4_GGUF,
+        GEMMA4_TOKENIZER,
         common::request("sentiment.json"),
     )?;
     common::check_sentiment(&resp)?;

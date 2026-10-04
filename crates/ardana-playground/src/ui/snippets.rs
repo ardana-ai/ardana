@@ -147,10 +147,11 @@ fn Cli(deck: Deck, shown: RwSignal<Option<SystemOneRequest>>) -> impl IntoView {
     let lede = move || {
         let model = deck.model.get();
         match (handoff.get(), server_row.get()) {
-            (Handoff::Install, true) => {
+            (Handoff::Install, true) if !model.is_empty() => {
                 format!("{model} runs with the ardana CLI on your machine.")
             }
-            (Handoff::Install, false) => {
+            // An "In browser" row, or nothing picked yet (the standalone build before its list is in).
+            (Handoff::Install, _) => {
                 "The ardana CLI runs this request on your own machine.".to_string()
             }
             (Handoff::Pull, true) => {

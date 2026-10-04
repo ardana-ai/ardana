@@ -34,6 +34,11 @@ const TMP_VARS: &[(&str, &str)] = &[
 /// The impeccable binary the launcher resolves first, relative to `tmp/`.
 const IMPECCABLE_BIN: &str = "impeccable/bin/0.1.5/impeccable";
 
+/// The library snapshot (C5), relative to the repo root: the document every process the sandbox runs reads the
+/// model library from (`ARDANA_LIBRARY`, as `.cargo/config.toml` hands it to cargo-run processes), and what
+/// `build-playground` and `onnx` read where they read the library.
+pub const SNAPSHOT: &str = "crates/ardana-registry/tests/data/models.json";
+
 /// Switches that stop impeccable from writing check files under `~/.impeccable`.
 const IMPECCABLE_FLAGS: &[&str] = &[
     "IMPECCABLE_NO_UPDATE_CHECK",
@@ -97,12 +102,19 @@ impl Sandbox {
         self.tmp.join("bin")
     }
 
-    /// The Q21 tool environment, absolute paths only.
+    /// The library snapshot ([`SNAPSHOT`]), absolute.
+    pub fn snapshot(&self) -> PathBuf {
+        self.repo_root.join(SNAPSHOT)
+    }
+
+    /// The Q21 tool environment, absolute paths only: every cache under `tmp/`, and the library read from the
+    /// snapshot, never the network.
     pub fn env(&self) -> Vec<(String, OsString)> {
         let mut env: Vec<(String, OsString)> = TMP_VARS
             .iter()
             .map(|(name, rel)| (name.to_string(), self.tmp.join(rel).into_os_string()))
             .collect();
+        env.push(("ARDANA_LIBRARY".into(), self.snapshot().into_os_string()));
         env.push((
             "IMPECCABLE_BIN".into(),
             self.tmp.join(IMPECCABLE_BIN).into_os_string(),

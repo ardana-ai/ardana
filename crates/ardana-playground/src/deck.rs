@@ -168,6 +168,9 @@ pub enum Held {
     /// The picked model runs only with the ardana CLI, on the visitor's own machine: no server serves the standalone
     /// build ([`Handoff::Install`]).
     Cli(String),
+    /// Nothing is picked yet in the standalone build, whose list is the library document: it is still loading, or it
+    /// did not arrive (`failed`, [`Deck::unlisted`]) and the page asks for it again when the tab comes back.
+    Listing { failed: bool },
     /// There is no question to ask.
     Empty,
 }
@@ -181,6 +184,8 @@ impl Held {
                 format!("This server has not pulled {model}: pull it with the ardana CLI")
             }
             Held::Cli(model) => format!("{model} runs with the ardana CLI on your machine"),
+            Held::Listing { failed: true } => "The model library is unavailable".to_string(),
+            Held::Listing { failed: false } => "Loading the model library".to_string(),
             Held::Empty => "Add a question to run".to_string(),
         }
     }
@@ -215,6 +220,8 @@ pub struct Deck {
     pub standalone: bool,
     /// `/v1/models` as last listed: the pulled models, then the library models this server has not pulled.
     pub models: RwSignal<Vec<ModelInfo>>,
+    /// Whether the last list did not arrive (`ApiClient::models` failed): `models` holds the list before it, if any.
+    pub unlisted: RwSignal<bool>,
     /// The model the last run named (none for the server's default).
     pub run_model: RwSignal<Option<String>>,
     /// Why the URL's share link could not be loaded.
@@ -344,6 +351,7 @@ impl Deck {
             unplaced: StoredValue::new(true),
             standalone,
             models: RwSignal::new(Vec::new()),
+            unlisted: RwSignal::new(false),
             run_model: RwSignal::new(None),
             share_error: RwSignal::new(None),
             previous: RwSignal::new(None),
@@ -535,6 +543,7 @@ impl Deck {
     /// Takes a `/v1/models` list, and places the pick that waits for it.
     pub fn set_models(&self, list: ModelsResponse) {
         self.models.set(list.models);
+        self.unlisted.set(false);
         self.place();
     }
 
@@ -651,11 +660,16 @@ impl Deck {
         self.held().is_none() && !self.runner.pending().get()
     }
 
-    /// Why Run is held, when it is: the questions do not parse, the pick runs only with the ardana CLI (here once it is
+    /// Why Run is held, when it is: the questions do not parse, nothing is picked yet in the standalone build (its
+    /// list, the library document, loading or unavailable), the pick runs only with the ardana CLI (here once it is
     /// pulled, or on the visitor's machine), or there is no question.
     pub fn held(&self) -> Option<Held> {
         if self.questions_error.with(Option::is_some) {
             Some(Held::Invalid)
+        } else if self.standalone && self.model.with(String::is_empty) {
+            Some(Held::Listing {
+                failed: self.unlisted.get(),
+            })
         } else if self.runs() == Runs::Cli {
             let model = self.model.get();
             Some(if self.standalone {

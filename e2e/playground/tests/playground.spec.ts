@@ -103,6 +103,9 @@ test('embedded_binary', async ({ page, baseURL }, testInfo) => {
   for (const url of requests) {
     expect(new URL(url).origin, url).toBe(origin);
   }
+  // The embedded build lists /v1/models; the library document is the standalone build's alone (Q13).
+  expect(requests.map((url) => new URL(url).pathname)).toContain('/v1/models');
+  expect(requests.map((url) => new URL(url).pathname)).not.toContain('/models.json');
   await screenshot(page, testInfo, 'embedded_binary');
 });
 
