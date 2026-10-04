@@ -77,7 +77,8 @@ share-link decoding.
   tmp/playwright/standalone-results`, so the playground suite's reports stay its own. `cargo xtask e2e standalone`
   starts `node e2e/playground/standalone-hosts.mjs` first, which prints the URLs of its two hosts (the standalone
   `dist` under `/playground/` with the isolation headers the landing sends, and a stand-in of Hugging Face over
-  `tmp/hf/hub`, CORS open, `Range` answered with a 206), builds the playground with `--hub` at the stand-in, and
+  `tmp/hf/hub`, CORS open, `Range` answered with a 206, a request naming a referring page refused with a 404 as
+  huggingface.co refuses one from `*.workers.dev`), builds the playground with `--hub` at the stand-in, and
   passes `ARDANA_BASE_URL` (the site), `ARDANA_HUB_URL` and `ARDANA_BIN` (the release `ardana`, whose `ardana run`
   answers the tab is compared with). The R6.4 `placeholder_without_dist` case is a cargo build plus
   `ardana-server`'s `playground` test in `tmp/e2e/placeholder/target`, run by xtask before Playwright.

@@ -10,8 +10,8 @@ use js_sys::Uint8Array;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    AbortSignal, Headers, ReadableStreamDefaultReader, ReadableStreamReadResult, Request,
-    RequestInit, Response,
+    AbortSignal, Headers, ReadableStreamDefaultReader, ReadableStreamReadResult, ReferrerPolicy,
+    Request, RequestInit, Response,
 };
 
 #[derive(Debug, Clone)]
@@ -281,6 +281,11 @@ impl ApiClient {
         let init = RequestInit::new();
         init.set_method(method);
         init.set_signal(signal);
+        // The standalone build asks the Hub alone, whose CDN refuses some referring pages (any on *.workers.dev: a 404
+        // without CORS headers); it names none.
+        if self.library.is_some() {
+            init.set_referrer_policy(ReferrerPolicy::NoReferrer);
+        }
         let sent = Headers::new().map_err(js_error)?;
         for (name, value) in headers {
             sent.set(name, value).map_err(js_error)?;

@@ -4,7 +4,8 @@
 //   headers the landing sends there (`static/_headers`);
 // - a stand-in of Hugging Face serving the hub cache (`tmp/hf/hub`) as huggingface.co serves a repository's files,
 //   `/<org>/<repo>/resolve/<commit>/<file>`: CORS open to any origin, its headers exposed, the whole file with its
-//   length or the rest of it from `Range: bytes=<from>-` (206), never compressed.
+//   length or the rest of it from `Range: bytes=<from>-` (206), never compressed; a request naming a referring page
+//   gets a 404 without CORS headers, as huggingface.co answers one from any page on *.workers.dev.
 // Usage: node standalone-hosts.mjs <dist> <hub cache>. Prints `{"site": <url>, "hub": <url>}` on one line once both
 // listen, then serves until it is stopped.
 import fs from 'node:fs';
@@ -69,6 +70,10 @@ const hub = http.createServer((req, res) => {
     resolve === 'resolve' && name.length > 0
       ? inside(path.join(cache, `models--${org}--${repo}`, 'snapshots', commit), name.join('/'))
       : null;
+  if (req.headers.referer) {
+    res.writeHead(404).end();
+    return;
+  }
   if (!file || req.method !== 'GET') {
     res.writeHead(404, cors).end();
     return;

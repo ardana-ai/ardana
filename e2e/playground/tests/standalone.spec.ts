@@ -173,6 +173,12 @@ test.describe('standalone', { tag: '@standalone' }, () => {
     try {
       const page = context.pages()[0] ?? (await context.newPage());
       const { requests, failed } = record(page);
+      const referers: string[] = [];
+      page.on('request', (r) => {
+        if (r.url().startsWith(hub)) {
+          referers.push(r.headers().referer ?? '');
+        }
+      });
       await page.goto(PAGE);
       await expect(modelPicker(page)).toHaveValue(browserRow(MODEL));
       await loadPreset(page, 'Ticket routing');
@@ -188,6 +194,8 @@ test.describe('standalone', { tag: '@standalone' }, () => {
       await expectFiguresMatch(page, answered as unknown as Json);
       const fetched = requests.filter((url) => url.startsWith(hub));
       expect(fetched).toEqual(files);
+      // huggingface.co refuses some referring pages (any on *.workers.dev), and so does the stand-in: none is named.
+      expect(referers).toEqual(files.map(() => ''));
       expect(requests.filter((url) => new URL(url).pathname.startsWith('/v1/'))).toEqual([]);
       expect(failed).toEqual([]);
       await screenshot(page, testInfo, 'standalone_browser_run', 'answered');

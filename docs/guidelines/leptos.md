@@ -108,7 +108,8 @@ gates every UI change (Q23, Q27).
   (below) has no server: `ApiClient::standalone`, the model list and the profiles come from the `StandaloneLibrary`
   it bakes in (`api::baked`, the one `cfg(feature = "standalone")` of the crate), and `browser_file` fetches
   `<hub>/<org>/<repo>/resolve/<commit>/<file>` with `Range` alone (a commit's file never changes; `If-Range` would
-  make the request a CORS preflight). The page's own static files are loaded by their loaders, by paths relative to
+  make the request a CORS preflight) and no referrer (`ReferrerPolicy::NoReferrer`: huggingface.co's CDN answers a
+  request from any page on `*.workers.dev` with a 404 that carries no CORS header). The page's own static files are loaded by their loaders, by paths relative to
   the page or to the loader, never absolute, so one `dist` runs wherever it is served: trunk's loader fetches the wasm,
   and `engine.js` imports the engine module from beside itself (`engine/ardana-engine.js`, whose `init` fetches its
   WASM beside it) and onnxruntime-web from `../ort/1.30.0/` (`import.meta.url`), whose bundles fetch their WASM

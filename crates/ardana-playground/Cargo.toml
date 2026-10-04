@@ -42,6 +42,7 @@ web-sys = { workspace = true, features = [
     "ReadableStream",
     "ReadableStreamDefaultReader",
     "ReadableStreamReadResult",
+    "ReferrerPolicy",
     "Request",
     "RequestInit",
     "ResizeObserver",
