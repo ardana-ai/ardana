@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 368" width="760" height="368" role="img" aria-label="ardana run decider-2b answers two questions about a support ticket, with a probability for each option">
+<style>
+text{font:14px ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;fill:#ededed}
+.dim{fill:#8f8f8f}.hit{fill:#fff;font-weight:700}
+@keyframes c0{0%,4.29%{transform:translateX(0)}8.21%,100%{transform:translateX(210.8px)}}.c0{animation:c0 14.0s steps(25,end) infinite}@keyframes c1{0%,9.29%{transform:translateX(0)}21.70%,100%{transform:translateX(666.0px)}}.c1{animation:c1 14.0s steps(79,end) infinite}@keyframes c2{0%,22.77%{transform:translateX(0)}34.87%,100%{transform:translateX(649.1px)}}.c2{animation:c2 14.0s steps(77,end) infinite}@keyframes c3{0%,35.94%{transform:translateX(0)}43.49%,100%{transform:translateX(404.6px)}}.c3{animation:c3 14.0s steps(48,end) infinite}@keyframes o0{0%,50.99%{opacity:0}51.34%,97%{opacity:1}100%{opacity:0}}.o0{animation:o0 14.0s linear infinite}@keyframes o1{0%,51.49%{opacity:0}51.84%,97%{opacity:1}100%{opacity:0}}.o1{animation:o1 14.0s linear infinite}@keyframes o2{0%,51.99%{opacity:0}52.34%,97%{opacity:1}100%{opacity:0}}.o2{animation:o2 14.0s linear infinite}@keyframes o3{0%,52.49%{opacity:0}52.84%,97%{opacity:1}100%{opacity:0}}.o3{animation:o3 14.0s linear infinite}@keyframes o4{0%,52.99%{opacity:0}53.34%,97%{opacity:1}100%{opacity:0}}.o4{animation:o4 14.0s linear infinite}@keyframes o5{0%,53.49%{opacity:0}53.84%,97%{opacity:1}100%{opacity:0}}.o5{animation:o5 14.0s linear infinite}@keyframes o6{0%,53.99%{opacity:0}54.34%,97%{opacity:1}100%{opacity:0}}.o6{animation:o6 14.0s linear infinite}@keyframes o7{0%,54.49%{opacity:0}54.84%,97%{opacity:1}100%{opacity:0}}.o7{animation:o7 14.0s linear infinite}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}rect[class^="c"]{display:none}}
+</style>
+<clipPath id="w"><rect x="24" y="30" width="712" height="320"/></clipPath>
+<rect width="760" height="368" rx="10" fill="#0a0a0a"/>
+<rect x=".5" y=".5" width="759" height="367" rx="9.5" fill="none" stroke="#2e2e2e"/>
+<circle cx="24" cy="22" r="5.5" fill="#3a3a3a"/><circle cx="42" cy="22" r="5.5" fill="#3a3a3a"/><circle cx="60" cy="22" r="5.5" fill="#3a3a3a"/>
+<text x="24" y="58" xml:space="preserve"><tspan class="dim">$ </tspan>ardana run decider-2b \</text>
+<g clip-path="url(#w)"><rect class="c0" x="24" y="42" width="712" height="22" fill="#0a0a0a"/></g>
+<text x="24" y="80" xml:space="preserve">    &quot;My card was charged twice for order A-104. Please refund the duplicate.&quot; \</text>
+<g clip-path="url(#w)"><rect class="c1" x="24" y="64" width="712" height="22" fill="#0a0a0a"/></g>
+<text x="24" y="102" xml:space="preserve">    --choice &quot;Which department should handle this?&quot; billing technical sales \</text>
+<g clip-path="url(#w)"><rect class="c2" x="24" y="86" width="712" height="22" fill="#0a0a0a"/></g>
+<text x="24" y="124" xml:space="preserve">    --noul &quot;Does the customer ask for a refund?&quot;</text>
+<g clip-path="url(#w)"><rect class="c3" x="24" y="108" width="712" height="22" fill="#0a0a0a"/></g>
+<text class="o0 " x="24" y="168" xml:space="preserve">Which department should handle this?</text>
+<text class="o1 hit" x="24" y="190" xml:space="preserve">  * billing    93.5%</text>
+<text class="o2 " x="24" y="212" xml:space="preserve">    technical   0.5%</text>
+<text class="o3 " x="24" y="234" xml:space="preserve">    sales       6.1%</text>
+<text class="o4 dim" x="24" y="256" xml:space="preserve">    confidence 0.90, p max 93.5%, certainty 0.76</text>
+<text class="o5 " x="24" y="278" xml:space="preserve"></text>
+<text class="o6 " x="24" y="300" xml:space="preserve">Does the customer ask for a refund?</text>
+<text class="o7 " x="24" y="322" xml:space="preserve">    probability of yes  0.93</text>
+</svg>
