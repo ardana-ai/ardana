@@ -43,6 +43,14 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   module and `engine.js` in `dist/engine/`), then the release `ardana`, which embeds it (memory-serve, `force-embed`)
   and serves it at `/`. Building `ardana-server` without a dist (or with `ARDANA_PLAYGROUND_DIST` at a directory
   without `index.html`) warns and embeds a placeholder page.
+- `cargo xtask build-playground --public-url <path> [--hub <url>]` builds the standalone playground, which no server
+  serves, into `tmp/playground/dist` and prints that path (`crates/ardana-playground/dist` stays as it is): trunk with
+  the playground's `standalone` feature and `--public-url`, the library baked in (every library model, no default, and
+  for each browser variant its profile and the commit `tmp/hf/hub` holds, read offline; a variant not held whole fails
+  the build, naming its model). Its "In browser" rows download `<hub>/ardana-ai/<name>-ONNX/resolve/<commit>/<file>`
+  (default `https://huggingface.co`), and every other model shows ardana.ai's install line and `ardana run`.
+  `npm run build-playground` in `../ardana-landing` runs it with `--public-url /playground/` and commits the result in
+  its `static/playground/`, served at ardana.ai/playground/.
 - Releases: dist 0.32.0 (`tmp/bin/dist`, from `cargo xtask fetch`) generates `.github/workflows/release.yml` from
   `dist-workspace.toml` and `.github/build-setup.yml` (the playground build each runner does first); after changing
   either run `tmp/bin/dist generate` (`generate --check` fails on drift). Releases start only by hand: the
@@ -100,18 +108,20 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   through a proxy that drops the weights' connection, then after Stop, then after a reload, each next run resuming with
   `Range: bytes=<had>-` and a 206, the weights crossing the wire about once), `browser_pull` against one more server
   over an empty Hub cache (the first run in the tab says the server pulls, then that the server could not provide the
-  files); `@design` and `@public` tests left out;
-  screenshots in `tmp/screens/<case>/`, reports in `tmp/playwright/`), `public` (`cargo xtask e2e public`: the release
-  `ardana serve --public` on an empty `ARDANA_HOME`, offline over `tmp/hf`; curl probes its HTTP surface with every
-  path sent as written: the library listed, `POST /v1/systemone` 403, `/health` naming no model, `..` and
-  percent-encoded traversal, unknown names and other files 404, other methods 405, no `Access-Control-*` header and no
-  path or URL in a body; the `@public` Playwright case `public_playground` at both viewports, where every server row
-  runs with the ardana CLI on the visitor's machine, after ardana.ai's install line, and "Run decider-0.8b in this tab
-  instead" answers in the tab; a second public server
-  over an empty Hub cache, whose failed pull answers without its reason; both homes still empty afterwards) and
-  `design` (/impeccable context, then `impeccable detect` of the empty, loaded, results, 422 and `run-command` states
-  and the `public` playground at 1280x800 and 390x844, and of the in-tab `browser-download` and `browser-results`
-  states the `@design` Playwright test freezes from a real run into `tmp/evals/design/<state>-<viewport>.html`,
+  files); `@design` and `@standalone` tests left out; screenshots in `tmp/screens/<case>/`, reports in
+  `tmp/playwright/`), `standalone` (`cargo xtask e2e standalone`: `cargo xtask build-playground --public-url
+  /playground/` with `--hub` at a stand-in of Hugging Face serving `tmp/hf` offline on another origin, the dist served
+  as static files under `/playground/` with the landing's isolation headers, both hosts from
+  `e2e/playground/standalone-hosts.mjs`; the `@standalone` cases at both viewports: `standalone_first_run` (the library
+  listed, decider-0.8b's "In browser" row, nothing under `/v1/`, fonts and onnxruntime-web from `/playground/`, no
+  failed request), `standalone_browser_run` (the three files from the stand-in at the baked commit, the ticket answered
+  as the release `ardana run` answers it, under 1 MB after a reload), `standalone_run_command` (a model without a
+  browser variant and a share link's unknown model: the install line and `ardana run`, Run sends nothing, and "Run
+  decider-0.8b in this tab instead" picks that row) and `standalone_share` (`<origin>/playground/#share/` round trip))
+  and `design`
+  (/impeccable context, then `impeccable detect` of the empty, loaded, results, 422 and `run-command` states at
+  1280x800 and 390x844, and of the in-tab `browser-download` and `browser-results` states the `@design` Playwright
+  test freezes from a real run into `tmp/evals/design/<state>-<viewport>.html`,
   reports in `tmp/evals/design/`, then the finish: a `.impeccable/critique/` record, `docs/design/audit.md` with
   `P0: 0 · P1: 0`, clean scans, the hook enabled).
 - `ardana pull <name|ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model
@@ -135,11 +145,11 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   both take `[--gpu-layers -1|0] [--n-ctx N]`. `--layout chat` reads the chat template next to the tokenizer, and
   without `--config` the model gets the stock profile.
 - `ardana serve` (alias `start`) `[--host 127.0.0.1] [--port 8000] [--api-key K] [--default-model NAME]
-  [--keep-alive 5m] [--max-loaded-models 1] [--max-queued-rows 4096] [--public]`, each flag also read from
-  `ARDANA_<FLAG>` (`ARDANA_PORT`, `ARDANA_API_KEY`, `ARDANA_PUBLIC=1`, ...), serves the registry's models and the
+  [--keep-alive 5m] [--max-loaded-models 1] [--max-queued-rows 4096]`, each flag also read from
+  `ARDANA_<FLAG>` (`ARDANA_PORT`, `ARDANA_API_KEY`, ...), serves the registry's models and the
   library's: `POST /v1/systemone`, `GET /v1/models` (pulled models, then library models with `x_pulled: false` and
   `x_size`; `x_default` marks the default, `x_browser` the bytes of a browser variant, `x_browser_pulled` a browser
-  variant the hub cache holds whole (public mode too), `x_browser_default` the library's `browser_default`),
+  variant the hub cache holds whole, `x_browser_default` the library's `browser_default`),
   `GET /health`, and
   `GET /v1/browser/<name>/{model.onnx,model.onnx.data,tokenizer.json,profile}` (a library model's browser variant
   from the hub cache, pulled once on its first request, cache first; the three files also by byte range,
@@ -156,14 +166,9 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   pulled shows `ardana pull <name>`, to run where the server runs, and `ardana run <name> --request -` with the exact
   request instead, as the snippets do for an "In browser" row (the pull only while the server lacks the model); the
   page lists the models again after each run and whenever its tab comes back, so a model pulled meanwhile runs on the
-  server. On `--public` a server row shows ardana.ai's install line in the pull's place and offers the browser default
-  in the tab instead.
+  server.
   `models.toml` is reread when it changes, so a model `ardana pull` adds while `serve` runs is servable at once;
-  models load on their first request and unload after `--keep-alive` idle. `ardana serve --public` is a public
-  playground that runs no model: no runtime, no registry (no `models.toml` opened), the library listed with no
-  default, `POST /v1/systemone` 403 (`permission_error`) before its body is read, `/health` naming no model, the
-  browser files served (a failure answered without its reason, which goes to the log), so its visitors run browser
-  models in their own tabs.
+  models load on their first request and unload after `--keep-alive` idle.
 - Running Ardana by hand: under `cargo run` (and `cargo test`), `.cargo/config.toml` puts `ARDANA_HOME` in
   `tmp/ardana` and `HF_HOME` in `tmp/hf`, so `cargo xtask build` then `cargo run --release -p ardana -- serve` serves
   the sandbox: its playground opens on decider-0.8b's "In browser" row while nothing is pulled, and an API request

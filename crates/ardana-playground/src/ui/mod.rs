@@ -97,7 +97,7 @@ impl Shell {
 
 #[component]
 pub fn App() -> impl IntoView {
-    let client = ApiClient::same_origin();
+    let client = ApiClient::page();
     let deck = Deck::new(client.clone());
     let shell = Shell::new();
     let models = LocalResource::new(move || {

@@ -1,19 +1,17 @@
 // W3, the models a server cannot run, as the user amended Q2, Q4 and R3.3. On a local server, which ardana runs
 // already, a model it has not pulled shows `ardana pull <name>` and `ardana run <name> --request -` with the exact
-// request, never ardana.ai's install line, and once `ardana pull` has added it the page runs it on the server; on a
-// public server, which runs no model, a server row shows the install line and `ardana run`, and offers the browser
-// default in this tab instead. Run sends nothing for a model the server would have to pull, autorun included.
-// `run_command` runs on the release `ardana serve` holding decider-2b, `pull_while_open` on an empty server of its own
-// (the playground suite); `public_playground` (tagged @public, `cargo xtask e2e public`) on `ardana serve --public`.
+// request, never ardana.ai's install line, and once `ardana pull` has added it the page runs it on the server. Run
+// sends nothing for a model the server would have to pull, autorun included. `run_command` runs on the release
+// `ardana serve` holding decider-2b, `pull_while_open` on an empty server of its own (the playground suite).
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
-  INSTALL,
   ardanaCommand,
-  browserRow,
+  body,
   decimalSize,
   expectFiguresMatch,
+  expectSendsNothing,
   fixture,
   isSystemOne,
   loadPreset,
@@ -24,42 +22,15 @@ import {
   runKey,
   screenshot,
   shareHash,
-  visibleText,
+  startsWith,
   type Json,
   type ModelInfo,
   type Request,
 } from './helpers';
 
-/** The body Run sends for `model` while the editors hold `request`'s state and questions, as the page writes it. */
-const body = (model: string, request: Request) =>
-  JSON.stringify({ model, state: request.state, questions: request.questions }, null, 2);
-
-/** `text` as a regular expression that matches it from its start. */
-const startsWith = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
-
 /** The `/v1/models` list of the server at `origin` (the page's own when empty). */
 async function listed(page: Page, origin = ''): Promise<ModelInfo[]> {
   return ((await (await page.request.get(`${origin}/v1/models`)).json()) as { models: ModelInfo[] }).models;
-}
-
-/**
- * Run, held, sends nothing: neither a click (with `force`: Playwright waits on `aria-disabled` buttons) nor Ctrl+Enter
- * (`requests` holds every request the page made) starts a run or says anything, and it shows no tooltip saying it
- * would.
- */
-async function expectSendsNothing(page: Page, requests: string[]) {
-  await expect(runKey(page)).toHaveAttribute('aria-disabled', 'true');
-  const sent = requests.length;
-  const said = (await page.getByTestId('run-status').textContent()) ?? '';
-  await runKey(page).click({ force: true });
-  await page.keyboard.press('Control+Enter');
-  await expect(page.getByTestId('run-label')).toHaveText('Run');
-  await expect(runKey(page)).toHaveAttribute('aria-busy', 'false');
-  await expect(page.getByTestId('run-status')).toHaveText(said);
-  expect(requests.slice(sent).filter(isSystemOne)).toEqual([]);
-  // At the pill's faded strength a tooltip would also cover the banner.
-  await runKey(page).hover({ force: true });
-  expect(await runKey(page).evaluate((key) => getComputedStyle(key, '::after').display)).toBe('none');
 }
 
 /**
@@ -74,28 +45,6 @@ async function expectPull(page: Page, model: string, request: Request, requests:
   await expect(page.getByTestId('cli-lede')).toHaveText(`This server runs ${model} once the ardana CLI pulls it.`);
   await expect(page.getByTestId('install')).toHaveCount(0);
   await expect(page.getByTestId('pull')).toHaveText(`ardana pull ${model}`);
-  const command = await ardanaCommand(page);
-  expect(command.line).toBe(`ardana run ${model} --request - <<'JSON'`);
-  expect(command.body).toBe(body(model, request));
-  await expectSendsNothing(page, requests);
-}
-
-/**
- * On a public server, the server row of `model`: Run is held and says it runs with the ardana CLI on the visitor's
- * machine, offering the browser default in this tab instead; the snippets show the install line and `ardana run` with
- * the exact request.
- */
-async function expectInstall(page: Page, model: string, request: Request, requests: string[]) {
-  await expect(modelPicker(page)).toHaveValue(model);
-  const reason = `${model} runs with the ardana CLI on your machine`;
-  await expect(page.getByTestId('run-note')).toContainText(reason);
-  await expect(runKey(page)).toHaveAccessibleDescription(startsWith(reason));
-  await expect(
-    page.getByTestId('run-note').getByRole('button', { name: 'Run decider-0.8b in this tab instead' }),
-  ).toBeVisible();
-  await expect(page.getByTestId('cli-lede')).toHaveText(`${reason}.`);
-  await expect(page.getByTestId('install')).toHaveText(INSTALL);
-  await expect(page.getByTestId('pull')).toHaveCount(0);
   const command = await ardanaCommand(page);
   expect(command.line).toBe(`ardana run ${model} --request - <<'JSON'`);
   expect(command.body).toBe(body(model, request));
@@ -248,77 +197,4 @@ test('pull_while_open', async ({ page }, testInfo) => {
   await expectPull(page, model, ticket, requests);
   expect(requests.filter(isSystemOne)).toHaveLength(1);
   await screenshot(page, testInfo, 'pull_while_open');
-});
-
-test('public_playground', { tag: '@public' }, async ({ page, baseURL }, testInfo) => {
-  test.setTimeout(900_000);
-  const origin = new URL(baseURL!).origin;
-  const models = await listed(page);
-  expect(models.every((m) => m.x_pulled === false && !m.x_default)).toBe(true);
-  const inBrowser = models.filter((m) => m.x_browser !== undefined);
-  const requests: string[] = [];
-  page.on('request', (r) => requests.push(r.url()));
-
-  // R3.5: the page opens on the browser default's row in the tab; every model is the CLI's on this server.
-  await page.goto('/');
-  const picker = modelPicker(page);
-  await expect(picker).toHaveValue(browserRow('decider-0.8b'));
-  await expect(picker.locator('optgroup[label="Pulled"]')).toHaveCount(0);
-  await expect(picker.locator('optgroup[label="In browser · runs in this tab"] option')).toHaveText(
-    inBrowser.map((m) => `${m.name} · ${decimalSize(m.x_browser!)}`),
-  );
-  await expect(picker.locator('optgroup[label="Library · runs with the ardana CLI"] option')).toHaveText(
-    models.map((m) => `${m.name} · ${decimalSize(m.x_size!)}`),
-  );
-  await loadPreset(page, 'Ticket routing');
-  const ticket = fixture('ticket.json');
-  // R3.4: the tab's row shows ardana.ai's install line and the CLI's command for the same request.
-  await expect(page.getByTestId('cli-lede')).toHaveText('The ardana CLI runs this request on your own machine.');
-  await expect(page.getByTestId('install')).toHaveText(INSTALL);
-  await expect(page.getByTestId('pull')).toHaveCount(0);
-  const command = await ardanaCommand(page);
-  expect(command.line).toBe(`ardana run decider-0.8b --request - <<'JSON'`);
-  expect(command.body).toBe(body('decider-0.8b', ticket));
-  expect((await visibleText(page)).toLowerCase()).not.toContain('jev');
-  await screenshot(page, testInfo, 'public_playground', 'opened');
-
-  // R3.3: this server runs no model, so every server row runs with the ardana CLI on the visitor's machine, and Run
-  // sends nothing.
-  for (const model of models.map((m) => m.name)) {
-    await pickModel(page, model);
-    await expectInstall(page, model, ticket, requests);
-    const size = decimalSize(models.find((m) => m.name === model)!.x_size!);
-    await expect(page.getByTestId('model-note')).toHaveText(
-      `Runs with the ardana CLI on your machine; its first run downloads ${size}.`,
-    );
-  }
-  await screenshot(page, testInfo, 'public_playground', 'command');
-
-  // The browser default runs in this tab instead: the banner's switch picks its "In browser" row and gives Run the
-  // focus, described by what its first run downloads; the first Run answers there, and nothing goes to
-  // /v1/systemone or to another origin (R3.5).
-  await page.getByTestId('run-note').getByRole('button', { name: 'Run decider-0.8b in this tab instead' }).click();
-  await expect(picker).toHaveValue(browserRow('decider-0.8b'));
-  await expect(runKey(page)).toBeFocused();
-  const firstRun = `Run downloads decider-0.8b into this tab once: ${decimalSize(
-    inBrowser.find((m) => m.name === 'decider-0.8b')!.x_browser!,
-  )}, kept by this browser.`;
-  await expect(runKey(page)).toHaveAccessibleDescription(startsWith(firstRun));
-  await screenshot(page, testInfo, 'public_playground', 'in-tab');
-  await page.keyboard.press('Enter');
-  await expect(page.getByTestId('answered-by')).toContainText(' in this tab on ', { timeout: 600_000 });
-  await expect(page.getByTestId('run-label')).toHaveText('Run');
-  await expect(page.getByTestId('fault')).toHaveCount(0);
-  const answered = JSON.parse((await page.getByTestId('raw-response').textContent())!) as { model: string };
-  expect(answered.model).toBe('decider-0.8b-v1');
-  await expectFiguresMatch(page, answered as unknown as Json);
-  expect(requests.filter(isSystemOne)).toEqual([]);
-  for (const url of requests) {
-    expect(new URL(url).origin, url).toBe(origin);
-  }
-  // An API client meets the server's own refusal.
-  const refused = await page.request.post('/v1/systemone', { data: ticket });
-  expect(refused.status()).toBe(403);
-  expect(((await refused.json()) as { detail: { error_type: string } }).detail.error_type).toBe('permission_error');
-  await screenshot(page, testInfo, 'public_playground');
 });

@@ -405,8 +405,8 @@ test('browser_run', async ({}, testInfo) => {
 });
 
 // A page that is no secure context (a host name other than localhost, over HTTP: `--host 0.0.0.0` opened from another
-// device, or a public server without TLS) has no Cache Storage. The run downloads without keeping the files, on WASM
-// (no WebGPU there either), and nothing on the page says the files are kept.
+// device) has no Cache Storage. The run downloads without keeping the files, on WASM (no WebGPU there either), and
+// nothing on the page says the files are kept.
 test('insecure_origin', async ({}, testInfo) => {
   test.setTimeout(900_000);
   expect(base, 'xtask passes the server of this case').toBeTruthy();

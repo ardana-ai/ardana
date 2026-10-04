@@ -7,6 +7,8 @@
 pub mod error;
 pub mod format;
 
+use std::collections::BTreeMap;
+
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -141,11 +143,10 @@ pub struct ModelInfo {
     pub name: String,
     pub description: String,
     pub release_date: String,
-    /// Whether the server has pulled the model; a library model it has not is pulled by its first API request, except
-    /// on a public server, which pulls and runs none.
+    /// Whether the server has pulled the model; a library model it has not is pulled by its first API request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub x_pulled: Option<bool>,
-    /// Whether this is the model requests without a model use; a public server has none.
+    /// Whether this is the model requests without a model use.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub x_default: bool,
     /// A library model not pulled yet: its download size in bytes.
@@ -155,7 +156,8 @@ pub struct ModelInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub x_browser: Option<u64>,
     /// Whether the server holds the browser variant whole in its Hugging Face cache, so it answers a tab's request for
-    /// the files at once; otherwise the first request pulls them from the Hub first.
+    /// the files at once; otherwise the first request pulls them from the Hub first. In a [`StandaloneLibrary`], every
+    /// browser variant: the Hub holds it whole.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub x_browser_pulled: bool,
     /// Whether this is the browser model a playground offers first (`library.toml`'s `browser_default`): its tab row
@@ -169,6 +171,29 @@ impl ModelInfo {
     pub fn pulled(&self) -> bool {
         self.x_pulled != Some(false)
     }
+}
+
+/// What the standalone playground (`cargo xtask build-playground`), which no server serves, carries in place of one:
+/// the library's models as a server that has pulled none lists them, with no default model, and for each browser
+/// variant where a tab downloads its files and the profile it reads them with.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StandaloneLibrary {
+    /// The Hugging Face the browser files come from: `https://huggingface.co`, or a stand-in.
+    pub hub: String,
+    pub models: ModelsResponse,
+    /// Each browser variant, by its model's name.
+    pub browser: BTreeMap<String, BrowserVariant>,
+}
+
+/// A browser variant's files on the Hub: `<hub>/<repository>/resolve/<commit>/<file>`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BrowserVariant {
+    /// `<org>/<repo>`, the ONNX repository.
+    pub repository: String,
+    /// The commit of the files, which a tab keeps them under.
+    pub commit: String,
+    /// The profile `GET /v1/browser/<name>/profile` sends for the variant.
+    pub profile: Value,
 }
 
 /// A byte count in decimal units, as Ollama prints model sizes (`2.0 GB`): model sizes in the CLI, in download

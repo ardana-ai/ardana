@@ -100,14 +100,19 @@ gates every UI change (Q23, Q27).
   id, renamed on `change` only; option and level rows by index), and each row's values are reactive closures over a
   `Memo` of its question, so typing never recreates the focused input.
 - State text that parses as a JSON object or array is sent as JSON; every other text is sent as a string (R7.2).
-- All network access goes through one `ApiClient { base_url }` module with typed methods (`models()`,
-  `systemone(req)`, `browser_profile(name, signal)`, `browser_file(name, file, from, version, signal)`, whose
-  `api::Download` hands out the bytes as they arrive) using `ardana_api` request/response types; a browser file's
-  failure says whether the connection or the server failed (`api::Failed`).
-  Construct it with the page origin; never hard-code a host, never call any non-`/v1/*` URL (Q15, R6.6). The
-  page's own static files are the exception, loaded by their loaders: trunk's loader fetches the wasm, and
-  `engine.js` imports the engine module from beside itself (`/engine/ardana-engine.js`, whose `init` fetches its WASM
-  beside it) and onnxruntime-web from `/ort/1.30.0/`, whose bundles fetch their WASM modules beside them.
+- All network access goes through one `ApiClient` module with typed methods (`models()`, `systemone(req)`,
+  `browser_profile(name, signal)`, `browser_file(name, file, from, version, signal)`, whose `api::Download` hands out
+  the bytes as they arrive) using `ardana_api` request/response types; a browser file's failure says whether the
+  connection or the server failed (`api::Failed`). `ApiClient::page()` builds it: served by `ardana serve`, it calls
+  `/v1/*` paths on the page's own origin and nothing else, never a hard-coded host (Q15, R6.6). The standalone build
+  (below) has no server: `ApiClient::standalone`, the model list and the profiles come from the `StandaloneLibrary`
+  it bakes in (`api::baked`, the one `cfg(feature = "standalone")` of the crate), and `browser_file` fetches
+  `<hub>/<org>/<repo>/resolve/<commit>/<file>` with `Range` alone (a commit's file never changes; `If-Range` would
+  make the request a CORS preflight). The page's own static files are loaded by their loaders, by paths relative to
+  the page or to the loader, never absolute, so one `dist` runs wherever it is served: trunk's loader fetches the wasm,
+  and `engine.js` imports the engine module from beside itself (`engine/ardana-engine.js`, whose `init` fetches its
+  WASM beside it) and onnxruntime-web from `../ort/1.30.0/` (`import.meta.url`), whose bundles fetch their WASM
+  modules beside them.
 - Load `/v1/models` with a `LocalResource` (browser fetch futures are `!Send`); run decisions with
   `Action::new_local` over a `deck::Job` (the exact body, and for a run in the tab its model and `x_browser`),
   `dispatch` on the Run button, and drive the UI from `pending()` and `value()`. `Deck::run` is the one place a run
@@ -151,7 +156,8 @@ gates every UI change (Q23, Q27).
   loads the model again from the kept files). Every object the engine module hands out holds that module's memory: the
   page frees it once done (`engine::Freed`, `free()` on drop). `engine.js` is a file of its own, which trunk copies
   beside the engine module (`rel="copy-file"` into `dist/engine/`, preloaded by a plain `modulepreload` link) and the
-  page's wasm imports as a `raw_module` (`/engine/engine.js`), so the page has no wasm-bindgen snippet. It imports the
+  page's wasm imports as a `raw_module` (`./engine/engine.js`, beside the page's glue), so the page has no wasm-bindgen
+  snippet. It imports the
   engine module and onnxruntime-web on first use (or when an "In browser" row is picked, the page's opening pick among
   them) and holds the only JavaScript: the import of each module (a failed one is forgotten and asked for again under a
   new query), the session, one decode per row, and the release, which waits for a row still decoding (a run stopped
@@ -200,24 +206,24 @@ gates every UI change (Q23, Q27).
   place, and a select keeps the selection its elements had (one removed with its group, one drawn over another's
   place), so a model pulled or removed meanwhile, listed again, left the select on its first row.
 - `Deck::runs` says where Run answers the pick: `Tab` for an "In browser" row, else where the server reads the name
-  (`deck::named`, as `Registry::named` reads it: the exact listed name, else a library model's other spellings, its
-  name in any case with or without a `:<quant>`, the quant lowercased): `Server` for a model this server has pulled
-  under any spelling, `Cli` for any other spelling of a listed model (one the server would pull; the CLI resolves it
-  itself) and every server row of a public server (a list that marks no default model), and `Server` for a name nothing
-  listed matches on a local server, which refuses it (404) without pulling. Run never pulls (Q2): a `Cli` pick holds
-  Run, and the snippets show the ardana CLI's commands instead. `Deck::handoff` says which (`deck::Handoff`, Q4 as the
-  user amended it): `Install` on a public server (ardana.ai's install line, then `ardana run`), `Pull` on a local one
-  for a model it has not pulled under any spelling, an "In browser" row's model too (`ardana pull <pick as written>`,
-  then `ardana run`; a local server runs ardana already, so it never shows the install line), and `Run` for the "In
-  browser" row of a model it has pulled (`ardana run` alone). Under the picker, a pick that does not run on the server
-  says where it runs (`#model-note`, the select's description): "Runs in this tab. The first run downloads <size>,
-  which this browser keeps. Running it takes 3 to 4 times that in memory; only a reload frees all of it." (where the
-  page has no Cache Storage: "Runs in this tab. The first run on each visit downloads <size>: a page without HTTPS
-  keeps no files. …"; the memory sentence is `ui::topbar::IN_MEMORY`, measured for every browser model on WebGPU and
-  WASM, `onnx.md`), on a local server "Not pulled on this server. Pull it with
-  the ardana CLI where the server runs (<x_size>), then Run answers here.", on a public one "Runs with the ardana CLI on
-  your machine; its first run downloads <x_size>." (the size, `Deck::pull_size`, for any spelling of a listed name, not
-  for another quant).
+  (`deck::named`, as `Registry::named` reads it: the exact listed name, else a library model's other spellings, its name
+  in any case with or without a `:<quant>`, the quant lowercased): `Server` for a model this server has pulled under any
+  spelling, `Cli` for any other spelling of a listed model (one the server would pull; the CLI resolves it itself) and
+  every server row of the standalone build (`Deck::standalone`, which no server serves; a name nothing listed matches
+  too), and on a server `Server` for a name nothing listed matches, which the server refuses (404) without pulling. Run
+  never pulls (Q2): a `Cli` pick holds Run, and the snippets show the ardana CLI's commands instead. `Deck::handoff`
+  says which (`deck::Handoff`, Q4 as the user amended it): `Install` in the standalone build (ardana.ai's install line,
+  then `ardana run`), `Pull` for a model the server has not pulled under any spelling, an "In browser" row's model too
+  (`ardana pull <pick as written>`, then `ardana run`; the server runs ardana already, so it never shows the install
+  line), and `Run` for the "In browser" row of a model it has pulled (`ardana run` alone). Under the picker, a pick that
+  does not run on the server says where it runs (`#model-note`, the select's description): "Runs in this tab. The first run downloads <size>, which this browser
+  keeps. Running it takes 3 to 4 times that in memory; only a reload frees all of it." (where the page has no Cache
+  Storage: "Runs in this tab. The first run on each visit downloads <size>: a page without HTTPS keeps no files. …"; the
+  memory sentence is `ui::topbar::IN_MEMORY`, measured for every browser model on WebGPU and WASM, `onnx.md`), for a
+  model the server has not pulled "Not pulled on this server. Pull it with the ardana CLI where the server runs
+  (<x_size>), then Run answers here.", in the standalone build "Runs with the ardana CLI on your
+  machine; its first run downloads <x_size>." (the size, `Deck::pull_size`, for any spelling of a listed name, not for
+  another quant).
 - The picked model starts empty, and `Deck::place` places the page's first pick, and a share link's, once `/v1/models`
   is in (`Deck::unplaced`; a pick by hand ends the wait): no model (nothing linked, or Jev's `jev-*` alias) opens on
   `deck::opening_row` (the `x_default` model when it is pulled, else the `x_browser_default` model's "In browser" row,
@@ -230,11 +236,11 @@ gates every UI change (Q23, Q27).
   server pick at once, a pick in the tab only when its files need no download (`engine::kept`); a first run in the tab
   waits for the tap.
 - The banner `#run-note` under the top bar says, in this order: where a run in the tab is (below); why Run is held
-  (`deck::Held`): in the fault colours "Questions JSON has an error"; quiet, on a local server "This server has not
-  pulled <name>: pull it with the ardana CLI" (`Held::Pull`) and on a public one "<name> runs with the ardana CLI on
+  (`deck::Held`): in the fault colours "Questions JSON has an error"; quiet, "This server has not pulled <name>: pull it
+  with the ardana CLI" (`Held::Pull`), or in the standalone build "<name> runs with the ardana CLI on
   your machine" (`Held::Cli`), followed by the ink "Show the command" key, whose arrow leads to the commands
   (`ui::reveal("snippets")`: the block opens, scrolls under the top bar and its summary takes focus; the sidebar's
-  section rows use the same function), and on a public server by "Run <browser default> in this tab instead"
+  section rows use the same function), and after `Held::Cli` by "Run <browser default> in this tab instead"
   (`Deck::browser_default`), which picks that model's "In browser" row and focuses Run; quiet, "Add a question to
   run"; else, quiet, what a run of the picked "In browser" row downloads while its files are not kept (`Deck::kept`,
   probed from Cache Storage whenever such a row is picked and after each run): "Run downloads <name> into this tab
@@ -245,7 +251,7 @@ gates every UI change (Q23, Q27).
   page origin; a `Tab` or `Cli` pick shows the step `Deck::handoff` names, `ardana pull <name>` (`snippets::pull`)
   with what it downloads or ardana.ai's install line (`snippets::INSTALL`, its Windows line under it), and then
   `ardana run <name> --request -` with the exact body Run sends in a heredoc (`snippets::cli`), each in a command box
-  with its copy key, and on a public server what the CLI's first run downloads (`x_size`). The raw exchange's heading says
+  with its copy key, and for `Install` what the CLI's first run downloads (`x_size`). The raw exchange's heading says
   where Run sends ("Sent · POST /v1/systemone", "Sent · in this tab", or "Sent" for a `Cli` pick, whose empty pane
   reads "Nothing sent yet."). The block builds its text only while it is open (its `toggle` event), and from editors
   holding more than 32 KB only once they have stayed unchanged for 150 ms (`leptos::prelude::debounce`), so a key
@@ -309,7 +315,9 @@ gates every UI change (Q23, Q27).
   imports the module itself, on an "In browser" pick), is named after its crate without a content hash
   (`dist/engine/ardana-engine.js` and `ardana-engine_bg.wasm`), and `web` makes its glue an ES module whose default
   `init` fetches the WASM beside it. `engine.js` joins it there (`rel="copy-file" data-target-path="engine"`), with a
-  plain `<link rel="modulepreload" href="/engine/engine.js" />` so the page's glue does not wait a round trip for it.
+  plain `<link rel="modulepreload" href="engine/engine.js" />` so the page's glue does not wait a round trip for it.
+  The link names no features (`data-cargo-features=""`): trunk passes `--features` to every Rust link, and the
+  standalone build's feature is the page crate's alone.
   Names that never change need a fresh copy on every load: `ardana serve` sends `/engine/` with `Cache-Control:
   no-cache` (`axum.md`), so a page never runs with another binary's engine.
 - No crate of the playground has a wasm-bindgen snippet (`#[wasm_bindgen(module = ...)]`, `inline_js`): wasm-bindgen
@@ -317,15 +325,26 @@ gates every UI change (Q23, Q27).
   builds, and trunk copies wasm-bindgen's whole `snippets/` output into every Rust link's target path, the engine's
   too. Import JavaScript as `raw_module` from a file trunk copies into `dist/engine/`; `cargo xtask build` removes a
   `snippets/` an older build left in `target/wasm-bindgen/`.
-- Unhashed static files go in with `rel="copy-dir"` (`fonts/`, served at `/fonts/`; `ort/`, onnxruntime-web, served at
-  `/ort/`) and `rel="copy-file"` (`brand/favicon.svg`, `brand/favicon.ico`, served at the root); plain `<link>` tags
-  without `data-trunk` name them by absolute path (the favicons, the preload of the two latin font files), and the
-  `embedded_binary` case fetches every such path. memory-serve gives these files its default week-long cache, so a
+- Unhashed static files go in with `rel="copy-dir"` (`fonts/`; `ort/`, onnxruntime-web) and `rel="copy-file"`
+  (`brand/favicon.svg`, `brand/favicon.ico`), beside `index.html`; plain `<link>` tags without `data-trunk` name them
+  by a path relative to the page (the favicons, the preload of the two latin font files), as `styles/fonts.css` names
+  the fonts relative to itself, and the `embedded_binary` case fetches every such path. memory-serve gives these files its default week-long cache, so a
   changed font or icon takes a new file name, and a new onnxruntime-web a new version directory.
 - `Trunk.toml` sits next to `index.html` and pins tools under `[tools]`: `wasm_bindgen = "<Cargo.lock version>"` and
   `wasm_opt = "version_133"`. Trunk uses a tool from `PATH` only when its version matches, otherwise it downloads.
   Bump the pin, `xtask/fetch.toml` (`cargo-lock:wasm-bindgen`) and `cargo xtask fetch` together whenever Cargo.lock's
   wasm-bindgen changes.
+- The standalone build: `cargo xtask build-playground --public-url <path> [--hub <url>]` runs trunk with
+  `--features standalone --public-url <path> --dist tmp/playground/dist` (the embedded `dist/` stays as it is), the
+  library it bakes in written first to `tmp/playground/library.json` and named by `ARDANA_PLAYGROUND_LIBRARY`
+  (`include_str!`): the library's models as a server that has pulled none lists them, with no default model and every
+  browser variant held, and for each browser variant its ardana-ai repository, the commit `refs/main` names in
+  `tmp/hf/hub` and its profile, read by `ardana_registry::BrowserCache` as a server reads it; a variant the cache does
+  not hold whole fails the build, naming its model. trunk prefixes the paths it writes with `<path>`; every other path
+  is relative. The page then runs no model on a server: every server row runs with the ardana CLI after ardana.ai's
+  install line, the browser default in the tab instead, and a share link keeps the page's path
+  (`<origin><path>#share/…`). `../ardana-landing`'s `npm run build-playground` runs it and serves the result at
+  `/playground/`.
 - Build locally only with `cargo xtask build`, which runs `trunk build --release --offline` through `Sandbox::command`
   (`PATH` starts with `tmp/bin`, `HOME` under `tmp/`). `--offline` turns a missing or mismatched tool into an error
   instead of a download into `~/Library/Caches/dev.trunkrs.trunk`, which the home guard would flag.
@@ -394,15 +413,14 @@ gates every UI change (Q23, Q27).
   binary serving decider-2b from `tmp/hf`; never replace the model with canned responses in e2e. `browser_run` runs
   decider-0.8b's browser variant in the tab, on WebGPU and on WASM, `insecure_origin` on a page that is no secure
   context, `browser_stop` stops its download (and waits for a tap under `?autorun=1`), `browser_recover` runs again
-  after a dropped connection, `first_run` opens an empty registry in the tab, `run_command` holds Run for every
-  model the server has not pulled, under any spelling, and `pull_while_open` runs the shown `ardana pull` while the
-  page is open; `cargo xtask e2e public` drives the same page on
-  `ardana serve --public` (`playwright.md`). The zoom and text-size reflow, the focus, announcement and ARIA cases,
-  the touch reach and the first load's weight have cases of their own (`reflow.spec.ts`, `focus.spec.ts`,
-  `polish.spec.ts`). The pure picker rules (`deck::opening_row`, `deck::linked_row`, `deck::server_runs` for every
-  spelling on a local and a public server), the banner's and the status's words and what of the bars stays on screen
-  (`ui::topbar`), the logo's symbol (`ui::logo`), the CLI's handoff and its note (`deck::handoff`,
-  `ui::sidebar::cli_note`) and the ardana commands (`snippets::pull`, `snippets::cli`) have unit tests.
+  after a dropped connection, `first_run` opens an empty registry in the tab, `run_command` holds Run for every model
+  the server has not pulled, under any spelling, and `pull_while_open` runs the shown `ardana pull` while the page is
+  open (`playwright.md`). The zoom and text-size reflow, the focus, announcement and ARIA cases, the touch reach and the
+  first load's weight have cases of their own (`reflow.spec.ts`, `focus.spec.ts`, `polish.spec.ts`). The pure picker
+  rules (`deck::opening_row`, `deck::linked_row`, `deck::server_runs` for every spelling, on a server and in the
+  standalone build), the banner's and the status's words and what of the bars stays on screen (`ui::topbar`), the logo's
+  symbol (`ui::logo`), the CLI's handoff and its note (`deck::handoff`, `ui::sidebar::cli_note`) and the ardana commands
+  (`snippets::pull`, `snippets::cli`) have unit tests.
 
 ## Sources
 - https://book.leptos.dev/getting_started/index.html — CSR setup: `csr` feature, trunk, wasm32 target, `mount_to_body`
@@ -446,7 +464,7 @@ gates every UI change (Q23, Q27).
 - https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-margin-bottom — room for a term's tooltip under it
 - https://developer.mozilla.org/en-US/docs/Web/SVG/Element/symbol — the logo's one drawing, which each logo uses
 - https://wasm-bindgen.github.io/wasm-bindgen/reference/js-snippets.html — snippets, named by their crate, which the playground avoids
-- https://wasm-bindgen.github.io/wasm-bindgen/reference/attributes/on-js-imports/raw_module.html — `raw_module = "/engine/engine.js"`, an import written as is
+- https://wasm-bindgen.github.io/wasm-bindgen/reference/attributes/on-js-imports/raw_module.html — `raw_module = "./engine/engine.js"`, an import written as is
 - https://wasm-bindgen.github.io/wasm-bindgen/reference/attributes/on-js-imports/method.html — `method` bindings on the engine module's objects
 - https://wasm-bindgen.github.io/wasm-bindgen/reference/deployment.html — `--target web`: an ES module whose `init` fetches the WASM
 - https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/modulepreload — `engine.js` fetched with the page's glue

@@ -4,12 +4,12 @@ Scope: the browser end-to-end suite for the embedded Leptos playground (`crates/
 `crates/ardana-server` from the `ardana` binary). It lives in `e2e/playground/` (`package.json`, `package-lock.json`,
 `.npmrc`, `playwright.config.ts`, `tests/helpers.ts`, `tests/playground.spec.ts` (W6), `tests/parity.spec.ts` (W7),
 `tests/first-run.spec.ts`, `tests/browser.spec.ts` (the in-tab engine), `tests/cli.spec.ts` (models the server cannot
-run, and the public playground), `tests/design.spec.ts` (the design suite's in-tab states), `tests/reflow.spec.ts` (zoom
-and enlarged text), `tests/focus.spec.ts` (focus, history, announcements, ARIA), `tests/polish.spec.ts` (touch reach,
-the current row, the first load's weight), `fixtures/jev-share-links.json`) and runs through
-`cargo xtask e2e playground` (W6 R6.3-R6.7, W7 R7.1-R7.6, W2 R2.2-R2.6, W3 R3.3-R3.5) and `cargo xtask e2e public`
-(W3 R3.2, R3.3, R3.5), next to the `impeccable detect` scans and the finish check of `cargo xtask e2e design` (Q24,
-R6.2, R7.7, R2.7, R3.6).
+run), `tests/design.spec.ts` (the design suite's in-tab states), `tests/reflow.spec.ts` (zoom and enlarged text),
+`tests/focus.spec.ts` (focus, history, announcements, ARIA), `tests/polish.spec.ts` (touch reach, the current row, the
+first load's weight), `tests/standalone.spec.ts` (the standalone build), `standalone-hosts.mjs` (its two hosts),
+`fixtures/jev-share-links.json`) and runs through `cargo xtask e2e playground` (W6 R6.3-R6.7, W7 R7.1-R7.6, W2
+R2.2-R2.6, W3 R3.3-R3.5) and `cargo xtask e2e standalone` (the standalone build), next to the `impeccable detect`
+scans and the finish check of `cargo xtask e2e design` (Q24, R6.2, R7.7, R2.7, R3.6).
 It covers npm setup inside the sandbox, config, browsers, locators, assertions, network timing, screenshots and
 share-link decoding.
 
@@ -71,12 +71,16 @@ share-link decoding.
 - Ardana's choice: `cargo xtask e2e playground` starts the server (the release binary copied alone into
   `tmp/e2e/playground-binary`, decider-2b pulled offline, `crates/ardana-playground/dist` moved away while it runs)
   and passes `ARDANA_BASE_URL` and `ARDANA_REPO_ROOT`; the config has no `webServer` and throws without
-  `ARDANA_BASE_URL`. It runs `playwright test --grep-invert "@design|@public"`: tests tagged `@design` belong to
+  `ARDANA_BASE_URL`. It runs `playwright test --grep-invert "@design|@standalone"`: tests tagged `@design` belong to
   `cargo xtask e2e design`, which runs `--grep @design --reporter list --output tmp/playwright/design-results`, and
-  tests tagged `@public` to `cargo xtask e2e public`, which runs `--grep @public --reporter list --output
-  tmp/playwright/public-results` with `ARDANA_BASE_URL` at `ardana serve --public`, so the playground suite's reports
-  stay its own. The R6.4 `placeholder_without_dist` case is a cargo build plus `ardana-server`'s `playground`
-  test in `tmp/e2e/placeholder/target`, run by xtask before Playwright.
+  tests tagged `@standalone` to `cargo xtask e2e standalone`, which runs `--grep @standalone --reporter list --output
+  tmp/playwright/standalone-results`, so the playground suite's reports stay its own. `cargo xtask e2e standalone`
+  starts `node e2e/playground/standalone-hosts.mjs` first, which prints the URLs of its two hosts (the standalone
+  `dist` under `/playground/` with the isolation headers the landing sends, and a stand-in of Hugging Face over
+  `tmp/hf/hub`, CORS open, `Range` answered with a 206), builds the playground with `--hub` at the stand-in, and
+  passes `ARDANA_BASE_URL` (the site), `ARDANA_HUB_URL` and `ARDANA_BIN` (the release `ardana`, whose `ardana run`
+  answers the tab is compared with). The R6.4 `placeholder_without_dist` case is a cargo build plus
+  `ardana-server`'s `playground` test in `tmp/e2e/placeholder/target`, run by xtask before Playwright.
 - `webServer`: either the config launches the binary that `cargo xtask build` produced (`command`, `url` pointing at
   `http://127.0.0.1:<port>/health`, `reuseExistingServer: false`, `timeout` covering startup, `stdout: 'pipe'`), or
   `cargo xtask e2e playground` starts the server itself and passes the base URL in; pick one per case and never both.
@@ -147,6 +151,14 @@ share-link decoding.
   pull, which the list does not size) with and without `?autorun=1`, with no `POST /v1/systemone` from any; an "In
   browser" row shows the ardana command without the install line, after `ardana pull` for decider-0.8b (not pulled
   here) and alone for decider-2b (pulled); and decider-2b then runs on the server again.
+- The standalone build (`tests/standalone.spec.ts`, `@standalone`): the page at `/playground/` requests nothing under
+  `/v1/` and nothing from another origin until a run in the tab, every request under `/playground/` and none failed
+  (`requestfailed`, or a status of 400 and over), and lists `tmp/playground/library.json`, whose names are
+  `library.toml`'s; `standalone_browser_run` runs in a persistent profile of its own, as `browser_run` does, takes
+  `ardana run decider-0.8b --request - --json` (`ARDANA_BIN`, a home of its own, `HF_HUB_OFFLINE=1`) as the answer to
+  match, and expects exactly the three file URLs `<hub>/<repository>/resolve/<commit>/<file>` from the stand-in; after
+  a reload it sums the stand-in's `responseBodySize`s. The server rows hold Run behind ardana.ai's install line
+  (`INSTALL`), and nothing goes out when Run is pressed.
 - A pull while the page is open (`pull_while_open`): on one more empty server (`ARDANA_PULL_URL`, its home in
   `ARDANA_PULL_HOME`), so the other servers' lists stay as their cases expect, the case first undoes the other
   project's pull (`ardana rm`, entries only), picks qwen3.5-0.8b's server row (the pull shown, Run held), runs the shown
@@ -156,13 +168,6 @@ share-link decoding.
   again with `ardana rm`, the page shown again holds Run with the pull once more. Headless Chrome keeps every page
   visible and focused (`bringToFront` and a minimised window send nothing), so the case dispatches the events a tab
   switch sends: `focus` at the window, then `visibilitychange` at the document.
-- The public playground (`public_playground`, tagged `@public`, `cargo xtask e2e public`): on `ardana serve --public`,
-  the page opens on decider-0.8b's "In browser" row with no "Pulled" group, the snippets show the install line and
-  the ardana command for the tab's model, every server row (all of them, since the server runs none) holds Run with
-  "<name> runs with the ardana CLI on your machine", the install line, the command and the model note's download, and
-  the banner's "Run decider-0.8b in this tab instead" picks the tab's row with the focus on Run (described by the size
-  line), whose first press answers in the tab with no request to `/v1/systemone` or to another origin; an API request
-  gets the 403.
 - In the tab (`browser_run`, W2): xtask starts one more server on an empty registry (`ARDANA_BROWSER_URL`), since the
   case compares the tab with `POST /v1/systemone` for decider-0.8b, which pulls and loads its GGUF there; the other
   cases keep a server holding decider-2b alone. Each project runs in a persistent Chrome profile of its own under its
@@ -321,9 +326,8 @@ share-link decoding.
   one compares file mtimes, which a checkout reorders.
 - `cargo xtask e2e design` runs `$IMPECCABLE_BIN detect --json --viewport 1280x800 <url>` and `--viewport 390x844` on
   `/`, `/#share/<ticket>`, `/?autorun=1#share/<ticket>`, `/?autorun=1#share/<invalid>` and `run-command`
-  (`/#share/<ticket naming decider-4b>`: a model the server has not pulled) of a server holding decider-2b, and on
-  `public` (`/#share/<ticket>` of `ardana serve --public`, opening in the tab); exit 0 is clean, 1 means a target was
-  not scanned, 2 means primary findings. Treat any non-zero exit as a failure.
+  (`/#share/<ticket naming decider-4b>`: a model the server has not pulled) of a server holding decider-2b; exit 0 is
+  clean, 1 means a target was not scanned, 2 means primary findings. Treat any non-zero exit as a failure.
 - Its "finish" check (R7.7) then wants a critique record under `.impeccable/critique/` (any file but `ignore.md`),
   `docs/design/audit.md` with the line `P0: 0 · P1: 0`, every scan of this run clean, and `.impeccable/config.json`
   `hook.enabled` true.

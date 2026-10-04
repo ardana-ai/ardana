@@ -40,8 +40,6 @@ pub enum ApiError {
     MissingKey,
     /// 401: the request carries a key that is not the server's.
     WrongKey,
-    /// 403: a public server (`ardana serve --public`) runs no model, whatever the request.
-    RunsNoModel,
     /// 400: the request body could not be read.
     BadBody(String),
     /// 500: the model files, the runtime or the model worker failed.
@@ -70,7 +68,7 @@ impl ApiError {
             ApiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             ApiError::RangeNotSatisfiable(_) => StatusCode::RANGE_NOT_SATISFIABLE,
             ApiError::Busy(_) => StatusCode::SERVICE_UNAVAILABLE,
-            ApiError::MissingKey | ApiError::RunsNoModel => StatusCode::FORBIDDEN,
+            ApiError::MissingKey => StatusCode::FORBIDDEN,
             ApiError::WrongKey => StatusCode::UNAUTHORIZED,
             ApiError::BadBody(_) => StatusCode::BAD_REQUEST,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -93,12 +91,6 @@ impl ApiError {
                 "no API key; send it as `Authorization: Bearer <key>`",
             ),
             ApiError::WrongKey => ErrorBody::error("authentication_error", "invalid API key"),
-            // Not an authentication problem: no key opens it. TypeSafe's SDKs read a 403 as permission denied.
-            ApiError::RunsNoModel => ErrorBody::error(
-                "permission_error",
-                "this public server runs no model; run a browser model in the playground's tab, or any model on your \
-                 own machine with `ardana run`",
-            ),
             ApiError::BadBody(msg) => ErrorBody::error("invalid_request_error", msg.as_str()),
             ApiError::Internal(msg) => ErrorBody::error("api_error", msg.as_str()),
         }

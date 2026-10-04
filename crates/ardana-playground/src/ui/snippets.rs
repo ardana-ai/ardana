@@ -1,7 +1,7 @@
 //! The snippets: a toggle block with the request Run would send now, as curl, Python or TypeScript aimed at this
 //! server, in one command box with its copy key; or, for a model this server does not run (one picked in the tab, or
-//! one it has not pulled), the ardana CLI's commands (Q4): `ardana pull` first where a local server lacks the model,
-//! ardana.ai's install line first on a public server. The block builds its text only while it is open, and for a large
+//! one it has not pulled), the ardana CLI's commands (Q4): `ardana pull` first where a server lacks the model,
+//! ardana.ai's install line first in the standalone build. The block builds its text only while it is open, and for a large
 //! request once the editors pause, so typing in a long state never waits for it; a copy key copies the request as it
 //! is at that moment.
 
@@ -130,9 +130,9 @@ fn shown_request(deck: Deck, open: RwSignal<bool>) -> RwSignal<Option<SystemOneR
     shown
 }
 
-/// The request for the ardana CLI, where this server does not run the pick ([`Handoff`]): on a public server, which runs
-/// no model, ardana.ai's install line, then `ardana run` on the visitor's own machine; on a local server, which ardana
-/// runs already, `ardana pull` first when the server has not pulled the model (run where the server runs, after which
+/// The request for the ardana CLI, where no server runs the pick ([`Handoff`]): in the standalone build, which no server
+/// serves, ardana.ai's install line, then `ardana run` on the visitor's own machine; on a server, which ardana runs
+/// already, `ardana pull` first when the server has not pulled the model (run where the server runs, after which
 /// Run sends a server row there), then `ardana run`. Each command sits in a command box with its copy key; the model
 /// note and the banner say why the page shows them.
 #[component]

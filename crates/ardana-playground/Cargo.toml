@@ -6,6 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# The standalone build `cargo xtask build-playground` makes, which no server serves: the library it writes is baked in
+# (`src/api.rs`), and the browser files come from their Hugging Face repositories.
+standalone = []
+
 [dependencies]
 ardana-api.workspace = true
 indexmap.workspace = true

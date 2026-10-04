@@ -113,11 +113,11 @@ async fn head(
     Ok((response.status(), response.headers().clone()))
 }
 
-/// Every file of the page goes out with the cache policy its name allows, on a local server and a public one alike:
-/// the page and the in-tab engine (`/engine/`: the engine module and `engine.js`), whose names outlive their contents,
-/// are revalidated on every load and answer 304 while unchanged; every other file keeps memory-serve's week, its name
-/// changing with its contents (or never changing at all, as the fonts and onnxruntime-web's versioned directory). Every
-/// response keeps the page cross-origin isolated.
+/// Every file of the page goes out with the cache policy its name allows: the page and the in-tab engine (`/engine/`:
+/// the engine module and `engine.js`), whose names outlive their contents, are revalidated on every load and answer 304
+/// while unchanged; every other file keeps memory-serve's week, its name changing with its contents (or never changing
+/// at all, as the fonts and onnxruntime-web's versioned directory). Every response keeps the page cross-origin
+/// isolated.
 #[tokio::test]
 async fn caches_only_what_its_name_pins() -> Result<()> {
     let dir = embedded_dir();
@@ -138,53 +138,47 @@ async fn caches_only_what_its_name_pins() -> Result<()> {
             );
         }
     }
-    for public in [false, true] {
-        let opts = ModelOptions {
-            public,
-            ..ModelOptions::default()
+    let (_, models) = models("playground-cache", &[], ModelOptions::default())?;
+    let app = router(models, None);
+    for path in &paths {
+        let (status, headers) = head(&app, path, &[]).await?;
+        ensure!(status == StatusCode::OK, "{path}: {status}");
+        let header = |name: &str| {
+            headers
+                .get(name)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default()
         };
-        let (_, models) = models(&format!("playground-cache-{public}"), &[], opts)?;
-        let app = router(models, None);
-        for path in &paths {
-            let (status, headers) = head(&app, path, &[]).await?;
-            ensure!(status == StatusCode::OK, "{path}: {status}");
-            let header = |name: &str| {
-                headers
-                    .get(name)
-                    .and_then(|v| v.to_str().ok())
-                    .unwrap_or_default()
-            };
-            let revalidated = path.ends_with(".html") || path.starts_with("/engine/");
-            let expected = if revalidated {
-                "no-cache"
-            } else {
-                "max-age=604800, stale-while-revalidate=86400"
-            };
+        let revalidated = path.ends_with(".html") || path.starts_with("/engine/");
+        let expected = if revalidated {
+            "no-cache"
+        } else {
+            "max-age=604800, stale-while-revalidate=86400"
+        };
+        ensure!(
+            header("cache-control") == expected,
+            "{path}: {:?}",
+            header("cache-control")
+        );
+        for (name, value) in [
+            ("cross-origin-opener-policy", "same-origin"),
+            ("cross-origin-embedder-policy", "require-corp"),
+            ("cross-origin-resource-policy", "same-origin"),
+        ] {
+            ensure!(header(name) == value, "{path}: {name} {:?}", header(name));
+        }
+        if revalidated {
+            let etag = header("etag").to_string();
+            ensure!(!etag.is_empty(), "{path} has no ETag");
+            let (status, again) = head(&app, path, &[("if-none-match", &etag)]).await?;
             ensure!(
-                header("cache-control") == expected,
-                "{path}: {:?}",
-                header("cache-control")
+                status == StatusCode::NOT_MODIFIED,
+                "{path} revalidated: {status}"
             );
-            for (name, value) in [
-                ("cross-origin-opener-policy", "same-origin"),
-                ("cross-origin-embedder-policy", "require-corp"),
-                ("cross-origin-resource-policy", "same-origin"),
-            ] {
-                ensure!(header(name) == value, "{path}: {name} {:?}", header(name));
-            }
-            if revalidated {
-                let etag = header("etag").to_string();
-                ensure!(!etag.is_empty(), "{path} has no ETag");
-                let (status, again) = head(&app, path, &[("if-none-match", &etag)]).await?;
-                ensure!(
-                    status == StatusCode::NOT_MODIFIED,
-                    "{path} revalidated: {status}"
-                );
-                ensure!(
-                    again.get("cache-control").and_then(|v| v.to_str().ok()) == Some("no-cache"),
-                    "{path} revalidated: {again:?}"
-                );
-            }
+            ensure!(
+                again.get("cache-control").and_then(|v| v.to_str().ok()) == Some("no-cache"),
+                "{path} revalidated: {again:?}"
+            );
         }
     }
     Ok(())

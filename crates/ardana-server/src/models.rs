@@ -8,9 +8,6 @@
 //! A library model's browser variant is pulled the same way, into the hub cache only, by the first request for its
 //! files ([`Models::browser`]).
 //!
-//! A public server ([`ModelOptions::public`]) does nothing else: it lists the library alone, as models it has not
-//! pulled, never reads or writes the registry it was given, and pulls, loads and runs no model.
-//!
 //! Every model reads its requests through a [`Decider`] (tokenizer and profile, built on the first request and kept
 //! while its registry entry is unchanged), so a request is validated and sized before any weights load. Loaded weights live on one worker thread per model
 //! that decodes one request at a time from a FIFO channel. At most `max_loaded_models` hold weights at once, counting
@@ -58,14 +55,10 @@ pub struct ModelOptions {
     pub max_loaded_models: usize,
     /// Scoring rows admitted and not yet answered, over all models, at least 1.
     pub max_queued_rows: usize,
-    /// A public playground (`ardana serve --public`): only the browser variants' files are served, no model is
-    /// pulled, loaded or run, and the registry is never read or written (the binary gives it an empty one, backed by
-    /// no file); the other options do not apply.
-    pub public: bool,
 }
 
 impl Default for ModelOptions {
-    /// Ollama's 5-minute keep-alive, one loaded model and decider's 4,096 queued rows, on a local server.
+    /// Ollama's 5-minute keep-alive, one loaded model and decider's 4,096 queued rows.
     fn default() -> Self {
         ModelOptions {
             default_model: None,
@@ -73,7 +66,6 @@ impl Default for ModelOptions {
             keep_alive: Duration::from_secs(300),
             max_loaded_models: 1,
             max_queued_rows: 4096,
-            public: false,
         }
     }
 }
@@ -133,15 +125,14 @@ impl Models {
         if opts.max_queued_rows == 0 {
             return Err(ModelsError::Zero("the queued-row limit"));
         }
-        // A public server answers no request with a model, so it has no default to look up.
         let default = match &opts.default_model {
-            Some(name) if !opts.public => Some(
+            Some(name) => Some(
                 match registry.named(name).map_err(ModelsError::DefaultModel)? {
                     Named::Pulled(model) => model.name.clone(),
                     Named::Library(pick) => pick.name(),
                 },
             ),
-            _ => None,
+            None => None,
         };
         let residents = Arc::new(Residents {
             count: AtomicUsize::new(0),
@@ -175,11 +166,6 @@ impl Models {
             .map_err(|err| ApiError::Internal(err.to_string()))
     }
 
-    /// Whether this is a public server, which runs no model ([`ModelOptions::public`]).
-    pub fn public(&self) -> bool {
-        self.opts.public
-    }
-
     /// The model `jev-*` names and requests without a model mean: `--default-model`, else the first registry entry,
     /// else the library default.
     fn default_name(&self, registry: &Registry) -> String {
@@ -190,12 +176,8 @@ impl Models {
     }
 
     /// The registry entry a request's `model` means, pulling a library model that is not pulled yet: `jev-*` and no
-    /// model are the default model (Q7); a name that is neither pulled nor in the library is a 404 listing both. A
-    /// public server resolves nothing: it is a 403 before the registry is read.
+    /// model are the default model (Q7); a name that is neither pulled nor in the library is a 404 listing both.
     pub async fn resolve(&self, requested: Option<&str>) -> Result<ResolvedModel, ApiError> {
-        if self.opts.public {
-            return Err(ApiError::RunsNoModel);
-        }
         let registry = self.registry()?;
         let name = match requested {
             Some(name) if !name.starts_with(JEV_PREFIX) => name.to_string(),
@@ -250,38 +232,29 @@ impl Models {
     /// pulls, with its download size. `x_pulled` tells them apart and `x_default` marks the default model; `x_browser`
     /// gives the download size of the browser variant of a library model that has one, pulled or not,
     /// `x_browser_pulled` marks a browser variant the hub cache holds whole (a tab's request for its files pulls
-    /// nothing), and `x_browser_default` marks the library's browser default. A public server reads no registry: it
-    /// lists the library alone, as models it has not pulled, and has no default.
+    /// nothing), and `x_browser_default` marks the library's browser default.
     pub async fn list(&self) -> Result<ModelsResponse, ApiError> {
-        let registry = if self.opts.public {
-            None
-        } else {
-            Some(self.registry()?)
-        };
-        let default = registry.as_deref().map(|r| self.default_name(r));
-        let is_default = |name: &str| default.as_deref() == Some(name);
-        let pulled = registry
-            .iter()
-            .flat_map(|r| r.entries())
-            .map(|m| ModelInfo {
-                name: m.name.clone(),
-                description: m.source.clone(),
-                release_date: m
-                    .profile
-                    .release_date
-                    .clone()
-                    .unwrap_or_else(|| m.pulled_at.clone()),
-                x_pulled: Some(true),
-                x_default: is_default(&m.name),
-                x_size: None,
-                x_browser: browser_size(&m.name),
-                x_browser_pulled: false,
-                x_browser_default: browser_default(&m.name),
-            });
+        let registry = self.registry()?;
+        let default = self.default_name(&registry);
+        let pulled = registry.entries().iter().map(|m| ModelInfo {
+            name: m.name.clone(),
+            description: m.source.clone(),
+            release_date: m
+                .profile
+                .release_date
+                .clone()
+                .unwrap_or_else(|| m.pulled_at.clone()),
+            x_pulled: Some(true),
+            x_default: m.name == default,
+            x_size: None,
+            x_browser: library().browser_size(&m.name),
+            x_browser_pulled: false,
+            x_browser_default: library().is_browser_default(&m.name),
+        });
         let pullable = library()
             .models
             .iter()
-            .filter(|m| registry.as_ref().is_none_or(|r| r.entry(&m.name).is_err()))
+            .filter(|m| registry.entry(&m.name).is_err())
             .filter_map(|m| library().find(&m.name))
             .map(|pick| {
                 let name = pick.name();
@@ -289,11 +262,11 @@ impl Models {
                     description: pick.reference(),
                     release_date: pick.model.release_date.clone(),
                     x_pulled: Some(false),
-                    x_default: is_default(&name),
+                    x_default: name == default,
                     x_size: pick.size(),
-                    x_browser: browser_size(&name),
+                    x_browser: library().browser_size(&name),
                     x_browser_pulled: false,
-                    x_browser_default: browser_default(&name),
+                    x_browser_default: library().is_browser_default(&name),
                     name,
                 }
             });
@@ -306,12 +279,8 @@ impl Models {
         Ok(ModelsResponse { models })
     }
 
-    /// `GET /health`: `status` plus the loaded models (most recently used first) and every model's temperatures. A
-    /// public server, which has neither, names no model.
+    /// `GET /health`: `status` plus the loaded models (most recently used first) and every model's temperatures.
     pub async fn health(&self) -> Result<Value, ApiError> {
-        if self.opts.public {
-            return Ok(json!({"status": "ok"}));
-        }
         let temperatures: Map<String, Value> = self
             .registry()?
             .entries()
@@ -682,16 +651,6 @@ async fn pull_into(
         registry.path().display()
     );
     Ok(())
-}
-
-/// The bytes a tab downloads to run the browser variant of the library model `name`, when it has one.
-fn browser_size(name: &str) -> Option<u64> {
-    library().browser(name).map(|(_, browser)| browser.size)
-}
-
-/// Whether `name` is the library's browser default, the browser model a playground offers first.
-fn browser_default(name: &str) -> bool {
-    library().browser_default.as_deref() == Some(name)
 }
 
 /// Queued rows reserved by one request, released when its job is decoded or discarded.

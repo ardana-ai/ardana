@@ -30,12 +30,13 @@ impl SharePayload {
     }
 }
 
-/// The share link for `payload` on the playground at `origin`: `<origin>/#share/<encoded payload>`.
-pub fn link(origin: &str, payload: &SharePayload) -> String {
+/// The share link for `payload` on the playground at `page` (its URL without query and fragment):
+/// `<page>/#share/<encoded payload>`.
+pub fn link(page: &str, payload: &SharePayload) -> String {
     let json = serde_json::to_string(payload).expect("a payload of strings serialises");
     format!(
         "{}/#{PREFIX}{}",
-        origin.trim_end_matches('/'),
+        page.trim_end_matches('/'),
         lz_str::compress_to_encoded_uri_component(json.as_str())
     )
 }
@@ -115,6 +116,12 @@ mod tests {
         assert_eq!(
             String::from_utf16(&units).unwrap(),
             r#"{"apiVersion":"v1","documentText":"Café ☕","promptsText":"{\"q\": 1}","selectedModels":["decider-2b"]}"#
+        );
+        // The landing's playground keeps its path.
+        let url = link("https://ardana.ai/playground/", &payload);
+        assert!(
+            url.starts_with("https://ardana.ai/playground/#share/"),
+            "{url}"
         );
     }
 

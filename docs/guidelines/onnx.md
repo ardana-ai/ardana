@@ -112,7 +112,7 @@ variants").
   beside itself (`import.meta.url`).
 - Import a build on first use (`engine.js#runtime`), never at page load: a page that only runs server models loads no
   runtime. Picking an "In browser" row starts the import, the page's own opening pick of one included (an empty
-  registry, a public server). A failed import is not kept: the next run imports the build again, under a `?retry=<n>`
+  registry). A failed import is not kept: the next run imports the build again, under a `?retry=<n>`
   query, since a browser may keep a module's failed fetch for its URL (the build still loads its WASM module from beside
   itself, `import.meta.url` without the query). A build whose WASM module could not be fetched is forgotten too
   (`createSession` fails with `NotLoaded`, recognised by the vendored Emscripten loader's "fetching of the wasm failed"):

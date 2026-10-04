@@ -1,9 +1,11 @@
-//! The one place the playground talks to the network: the public API at `<base_url>/v1/*` (Q15). The base URL is the
-//! page's own origin; no other host and no other path is ever called.
+//! The one place the playground talks to the network. Served by `ardana serve`, it calls the public API on the page's
+//! own origin, `/v1/*` (Q15), and no other host or path. The standalone build (`cargo xtask build-playground`), which no
+//! server serves, carries the model list and the browser variants' profiles and commits instead, and fetches the
+//! browser files from their Hugging Face repositories at those commits.
 
 use std::fmt;
 
-use ardana_api::{Detail, ErrorBody, ModelsResponse};
+use ardana_api::{Detail, ErrorBody, ModelsResponse, StandaloneLibrary};
 use js_sys::Uint8Array;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
@@ -12,9 +14,10 @@ use web_sys::{
     RequestInit, Response,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct ApiClient {
-    base_url: String,
+    /// The standalone build's library, in place of a server; none in the build `ardana serve` embeds.
+    library: Option<&'static StandaloneLibrary>,
 }
 
 /// One run as it happened: a `POST /v1/systemone` round trip, or the same request answered in this tab.
@@ -100,22 +103,22 @@ impl Backend {
 }
 
 impl ApiClient {
-    pub fn new(base_url: impl Into<String>) -> ApiClient {
-        ApiClient {
-            base_url: base_url.into().trim_end_matches('/').to_string(),
-        }
+    /// The page's client: the server that served it, or the standalone build's library.
+    pub fn page() -> ApiClient {
+        ApiClient { library: baked() }
     }
 
-    /// A client for the origin that served the page.
-    pub fn same_origin() -> ApiClient {
-        let origin = web_sys::window()
-            .and_then(|w| w.location().origin().ok())
-            .unwrap_or_default();
-        ApiClient::new(origin)
+    /// Whether this is the standalone build, which no server serves: a model runs in this tab or with the ardana CLI on
+    /// the visitor's machine.
+    pub fn standalone(&self) -> bool {
+        self.library.is_some()
     }
 
-    /// `GET /v1/models`.
+    /// `GET /v1/models`; in the standalone build, the library's models.
     pub async fn models(&self) -> Result<ModelsResponse, String> {
+        if let Some(library) = self.library {
+            return Ok(library.models.clone());
+        }
         let (status, text) = self.fetch("GET", "/v1/models", None).await?;
         if status != 200 {
             return Err(format!("GET /v1/models answered {status}: {text}"));
@@ -138,12 +141,16 @@ impl ApiClient {
 
     /// `GET /v1/browser/<name>/profile`: the profile of a model's browser variant, as JSON text, and the version of its
     /// files (the `ETag`). The server pulls the variant on the first request for it, so this waits for that pull;
-    /// `signal` ends the wait.
+    /// `signal` ends the wait. In the standalone build, the library's profile and the commit of the variant's files.
     pub async fn browser_profile(
         &self,
         name: &str,
         signal: &AbortSignal,
     ) -> Result<(String, String), Failed> {
+        if let Some(library) = self.library {
+            let variant = library.browser.get(name).ok_or_else(|| unknown(name))?;
+            return Ok((variant.profile.to_string(), variant.commit.clone()));
+        }
         let path = browser_path(name, "profile");
         let response = self
             .send("GET", &path, None, Some(signal), &[])
@@ -169,7 +176,8 @@ impl ApiClient {
     /// `GET /v1/browser/<name>/<file>`, its bytes to be read as they arrive ([`Download::next`]); `signal` stops the
     /// download where it is. From byte `from` on when the tab keeps the bytes before it, of the file at `version`:
     /// `Range: bytes=<from>-` with `If-Range: "<version>"`, which the server answers with the rest (206), or with the
-    /// whole file (200) when its copy is no longer that version.
+    /// whole file (200) when its copy is no longer that version. In the standalone build, the file of the variant's
+    /// repository at that commit, `<hub>/<repository>/resolve/<version>/<file>`, which never changes: `Range` alone.
     pub async fn browser_file(
         &self,
         name: &str,
@@ -178,13 +186,21 @@ impl ApiClient {
         version: &str,
         signal: &AbortSignal,
     ) -> Result<Download, Failed> {
-        let path = browser_path(name, file);
+        let path = match self.library {
+            Some(library) => {
+                let variant = library.browser.get(name).ok_or_else(|| unknown(name))?;
+                let hub = library.hub.trim_end_matches('/');
+                format!("{hub}/{}/resolve/{version}/{file}", variant.repository)
+            }
+            None => browser_path(name, file),
+        };
         let range = format!("bytes={from}-");
         let version = format!("\"{version}\"");
-        let headers: &[(&str, &str)] = if from > 0 {
-            &[("range", &range), ("if-range", &version)]
-        } else {
-            &[]
+        // The Hub's `ETag` is no commit, and a request with `If-Range` would be no CORS-safelisted one there.
+        let headers: &[(&str, &str)] = match (from > 0, self.library) {
+            (false, _) => &[],
+            (true, Some(_)) => &[("range", &range)],
+            (true, None) => &[("range", &range), ("if-range", &version)],
         };
         let response = self
             .send("GET", &path, None, Some(signal), headers)
@@ -252,7 +268,8 @@ impl ApiClient {
         Ok((response.status(), text(&response, method, path).await?))
     }
 
-    /// Sends a request with `headers` and waits for the response's head; `signal`, when given, can end the request.
+    /// Sends a request to `path` (on the page's origin, or a whole URL) with `headers` and waits for the response's head;
+    /// `signal`, when given, can end the request.
     async fn send(
         &self,
         method: &str,
@@ -274,8 +291,7 @@ impl ApiClient {
             init.set_body(&JsValue::from_str(body));
         }
         init.set_headers(&sent);
-        let url = format!("{}{path}", self.base_url);
-        let request = Request::new_with_str_and_init(&url, &init).map_err(js_error)?;
+        let request = Request::new_with_str_and_init(path, &init).map_err(js_error)?;
         let window = web_sys::window().ok_or("no window")?;
         JsFuture::from(window.fetch_with_request(&request))
             .await
@@ -337,6 +353,30 @@ impl Download {
         self.read += u64::from(chunk.length());
         Ok(Some(chunk))
     }
+}
+
+/// The standalone build's library (`cargo xtask build-playground` writes it to the file `ARDANA_PLAYGROUND_LIBRARY`
+/// names); none in the build `ardana serve` embeds.
+#[cfg(feature = "standalone")]
+fn baked() -> Option<&'static StandaloneLibrary> {
+    static LIBRARY: std::sync::OnceLock<StandaloneLibrary> = std::sync::OnceLock::new();
+    Some(LIBRARY.get_or_init(|| {
+        serde_json::from_str(include_str!(env!(
+            "ARDANA_PLAYGROUND_LIBRARY",
+            "the standalone playground is built by `cargo xtask build-playground`"
+        )))
+        .expect("cargo xtask build-playground writes the library it reads")
+    }))
+}
+
+#[cfg(not(feature = "standalone"))]
+fn baked() -> Option<&'static StandaloneLibrary> {
+    None
+}
+
+/// A browser variant the standalone build's library lacks.
+fn unknown(name: &str) -> Failed {
+    Failed::Refused(format!("this playground has no browser files of {name}"))
 }
 
 /// `/v1/browser/<name>/<file>`, the name percent-encoded.

@@ -5,10 +5,6 @@
 //! playground's in-tab engine (`GET /v1/browser/<name>/<file>`). The binary passes in the registry and the
 //! [`ardana_core::Runtimes`] it is built with, so this crate never sees a concrete runtime. Every other path serves
 //! the playground embedded at build time. Every response keeps the page and what it loads to this origin (Q13).
-//!
-//! `ardana serve --public` ([`ModelOptions::public`]) serves the same routes for a public playground, whose visitors
-//! run browser models in their own tabs: it lists the library, serves the browser files and answers every
-//! `POST /v1/systemone` with 403, so no model runs on the server.
 
 mod body;
 mod browser;
@@ -92,14 +88,6 @@ pub struct ServeArgs {
         value_parser = clap::value_parser!(u32).range(1..)
     )]
     pub max_queued_rows: u32,
-    /// Serve a public playground: browser models run in visitors' tabs, and no model runs on this server
-    #[arg(
-        long,
-        env = "ARDANA_PUBLIC",
-        hide_env_values = true,
-        value_parser = clap::builder::BoolishValueParser::new()
-    )]
-    pub public: bool,
 }
 
 impl ServeArgs {
@@ -111,7 +99,6 @@ impl ServeArgs {
             keep_alive: self.keep_alive,
             max_loaded_models: self.max_loaded_models as usize,
             max_queued_rows: self.max_queued_rows as usize,
-            public: self.public,
         }
     }
 
@@ -147,15 +134,10 @@ pub fn parse_duration(text: &str) -> Result<Duration, String> {
 
 /// The API: `/health` (open) and the `/v1` routes, behind the key when one is set, plus the embedded playground. Unknown
 /// `/v1/*` paths are 404 `{"detail":"Not Found"}` and never fall through to the playground. Every response carries
-/// the cross-origin isolation headers ([`isolate`]). A public server refuses every decision before reading its body.
+/// the cross-origin isolation headers ([`isolate`]).
 pub fn router(models: Arc<Models>, api_key: Option<String>) -> Router {
-    let systemone = if models.public() {
-        post(refuse)
-    } else {
-        post(systemone)
-    };
     let mut v1 = Router::new()
-        .route("/systemone", systemone)
+        .route("/systemone", post(systemone))
         .route("/models", get(list_models))
         // A layer wraps only the routes added before it: the browser files go out as stored, with their length.
         .layer(CompressionLayer::new())
@@ -273,11 +255,6 @@ async fn systemone(
     let body = body.map_err(ApiError::from_body)?;
     let request = body::parse(headers.get(header::CONTENT_TYPE), &body)?;
     Ok(Json(models.decide(request).await?))
-}
-
-/// `POST /v1/systemone` on a public server: 403 whatever the request, its body left unread.
-async fn refuse() -> ApiError {
-    ApiError::RunsNoModel
 }
 
 async fn list_models(State(models): State<Arc<Models>>) -> Result<Json<ModelsResponse>, ApiError> {

@@ -1,7 +1,8 @@
 //! The in-tab engine: a library model's browser variant, run in this tab (Q9). The server pulls the variant once and
-//! serves its files from its own origin (`/v1/browser/<name>/*`); the tab downloads them once into its Cache Storage
+//! serves its files from its own origin (`/v1/browser/<name>/*`), and the standalone build fetches them from their
+//! Hugging Face repository ([`ApiClient::browser_file`]); the tab downloads them once into its Cache Storage
 //! (where the page has one: only a secure context does). Two modules, imported on an "In browser" pick and never
-//! before, run it: the engine module (`crates/ardana-engine`, built by trunk into `/engine/`) plans the request and
+//! before, run it: the engine module (`crates/ardana-engine`, built by trunk into `engine/`) plans the request and
 //! reads the answers out with `ardana-core` as the server does, and onnxruntime-web (`engine.js`) decodes each row on
 //! WebGPU, else WASM; this page's own wasm carries neither. A run yields the [`Exchange`] a server run would: the exact
 //! body sent, and the status and body text the API answers that request with, refusals included. A run can be stopped
@@ -21,8 +22,9 @@ use web_sys::{AbortController, AbortSignal, Cache, CacheStorage, Response};
 use crate::api::{ApiClient, Backend, Exchange, Failed, Place, Unanswered, js_error, now};
 
 // `engine.js`, which trunk copies beside the engine module (`index.html`): a file of its own rather than a wasm-bindgen
-// snippet, so `/engine/` holds every script of the in-tab engine, whose names never change.
-#[wasm_bindgen(raw_module = "/engine/engine.js")]
+// snippet, so `engine/` holds every script of the in-tab engine, whose names never change. The path is relative to this
+// page's own module, beside `engine/` wherever the page is served.
+#[wasm_bindgen(raw_module = "./engine/engine.js")]
 extern "C" {
     #[wasm_bindgen(js_name = hasWebGpu)]
     fn has_webgpu() -> bool;
@@ -898,7 +900,8 @@ fn cache_name(name: &str, version: &str) -> String {
     format!("{CACHE_PREFIX} {name} {version}")
 }
 
-/// The URL `file` of `name`'s browser variant is downloaded from, and kept under.
+/// The URL `file` of `name`'s browser variant is kept under in Cache Storage: its path on a server, whichever source
+/// sends it.
 fn file_url(name: &str, file: &str) -> String {
     format!("/v1/browser/{name}/{file}")
 }

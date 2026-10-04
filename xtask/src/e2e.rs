@@ -1,6 +1,6 @@
 //! `cargo xtask e2e <suite>`: end-to-end suites, each run under the home guard. The API suites (`jevcompat`, `sdk`,
 //! `jevbench`) run their harness from `tmp/` against a release `ardana serve` on decider-2b; the browser suites
-//! (`playground`, `public`, `design`) live in [`crate::browser`].
+//! (`playground`, `standalone`, `design`) live in [`crate::browser`].
 
 use std::path::Path;
 
@@ -18,7 +18,7 @@ pub const SUITES: &[&str] = &[
     "sdk",
     "jevbench",
     "playground",
-    "public",
+    "standalone",
     "design",
 ];
 
@@ -39,7 +39,7 @@ pub fn run(sandbox: &Sandbox, suite: &str) -> Result<()> {
         "sdk" => sdk(sandbox),
         "jevbench" => jevbench(sandbox),
         "playground" => browser::playground(sandbox),
-        "public" => browser::public(sandbox),
+        "standalone" => browser::standalone(sandbox),
         "design" => browser::design(sandbox),
         other => bail!("unknown e2e suite `{other}`; suites: {}", SUITES.join(", ")),
     }

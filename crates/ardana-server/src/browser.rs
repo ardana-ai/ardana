@@ -6,8 +6,7 @@
 //! Hub); requests for the same model share that pull, and a pulled variant is kept while the server runs. Files go
 //! out as stored, never compressed, with their `Content-Length`, so a tab can show how far its download is, and by
 //! byte range (`Range`, `If-Range`, 206), so a tab resumes a download that stopped; every response names the snapshot
-//! commit as its `ETag` and keeps out of the HTTP cache, since the tab keeps the files itself. A public server answers
-//! a failure without its reason, which only its log holds.
+//! commit as its `ETag` and keeps out of the HTTP cache, since the tab keeps the files itself.
 
 use std::io::{self, SeekFrom};
 use std::pin::Pin;
@@ -47,19 +46,7 @@ pub(crate) async fn file(
     {
         return Err(ApiError::NotFound);
     }
-    serve(&models, &name, &file, &headers)
-        .await
-        .map_err(|err| match err {
-            // A public server says what failed, never why: the reason may name a cache path or a Hub URL, so it goes to the
-            // server's log instead. `name` and `file` are a library name and an allowed file by now.
-            ApiError::Internal(reason) if models.public() => {
-                eprintln!("ardana serve: GET /v1/browser/{name}/{file}: {reason}");
-                ApiError::Internal(format!(
-                    "the browser files of {name} are not available on this server; try again later"
-                ))
-            }
-            err => err,
-        })
+    serve(&models, &name, &file, &headers).await
 }
 
 /// `file` of the browser variant of `name`, which the first request pulls: whole, or the one byte range `headers` ask

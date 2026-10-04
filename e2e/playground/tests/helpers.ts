@@ -61,9 +61,22 @@ export function shareHash(request: Request): string {
 
 /**
  * The Run key, by each name its face takes (Run, and Running, Loading or Pulling while a run is in flight): never a
- * banner action whose words start with "Run", such as a public server's "Run decider-0.8b in this tab instead".
+ * banner action whose words start with "Run", such as the standalone build's "Run decider-0.8b in this tab instead".
  */
 export const runKey = (page: Page) => page.getByRole('button', { name: /^(Run|Running|Loading|Pulling)$/ });
+
+/** The state editor. */
+export const stateBox = (page: Page) => page.getByRole('textbox', { name: 'State' });
+
+/** The questions editor. */
+export const questionsBox = (page: Page) => page.getByRole('textbox', { name: 'Questions JSON' });
+
+/** The body Run sends for `model` while the editors hold `request`'s state and questions, as the page writes it. */
+export const body = (model: string, request: Request) =>
+  JSON.stringify({ model, state: request.state, questions: request.questions }, null, 2);
+
+/** `text` as a regular expression that matches it from its start. */
+export const startsWith = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
 
 /**
  * The model picker and the presets live in the sidebar, which is a drawer behind "Open sidebar" on a phone (and when
@@ -124,7 +137,7 @@ export function topAnswers(response: { answers: Record<string, Record<string, Js
 /** What the page says running a browser model takes in memory, after what its first run downloads. */
 export const IN_MEMORY = 'Running it takes 3 to 4 times that in memory';
 
-/** ardana.ai's install line, which a public server's page shows before the ardana command; a local one runs ardana. */
+/** ardana.ai's install line, which the standalone build shows before the ardana command; a server runs ardana. */
 export const INSTALL = 'curl -fsSL https://ardana.ai/install.sh | sh';
 
 /**
@@ -256,6 +269,26 @@ export async function screenshot(page: Page, testInfo: TestInfo, caseName: strin
 }
 
 export const isSystemOne = (url: string) => new URL(url).pathname === '/v1/systemone';
+
+/**
+ * Run, held, sends nothing: neither a click (with `force`: Playwright waits on `aria-disabled` buttons) nor Ctrl+Enter
+ * (`requests` holds every request the page made) starts a run or says anything, and it shows no tooltip saying it
+ * would.
+ */
+export async function expectSendsNothing(page: Page, requests: string[]) {
+  await expect(runKey(page)).toHaveAttribute('aria-disabled', 'true');
+  const sent = requests.length;
+  const said = (await page.getByTestId('run-status').textContent()) ?? '';
+  await runKey(page).click({ force: true });
+  await page.keyboard.press('Control+Enter');
+  await expect(page.getByTestId('run-label')).toHaveText('Run');
+  await expect(runKey(page)).toHaveAttribute('aria-busy', 'false');
+  await expect(page.getByTestId('run-status')).toHaveText(said);
+  expect(requests.slice(sent).filter(isSystemOne)).toEqual([]);
+  // At the pill's faded strength a tooltip would also cover the banner.
+  await runKey(page).hover({ force: true });
+  expect(await runKey(page).evaluate((key) => getComputedStyle(key, '::after').display)).toBe('none');
+}
 
 /** `html { font-size: 200% }`: the text-size setting the reflow cases enlarge the page's text with. */
 export const LARGE_TEXT = 'html { font-size: 200% !important; }';

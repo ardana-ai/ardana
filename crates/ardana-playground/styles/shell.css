@@ -351,7 +351,7 @@ html:has(.banner.busy) {
 }
 
 /* The banner's actions keep together after its words, 24px apart so the arrow of the first never points at the next:
-   the way to the ardana CLI's commands and, on a public server, the browser default in this tab instead. Where the
+   the way to the ardana CLI's commands and, in the standalone build, the browser default in this tab instead. Where the
    words and the actions do not fit one line, the actions take the next whole, rather than squeezing the words. */
 .banner:has(.banner-actions) {
   flex-wrap: wrap;

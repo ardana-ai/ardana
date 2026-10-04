@@ -1,7 +1,6 @@
 //! R2.1: the browser variants of library models behind `GET /v1/browser/<name>/<file>`, `x_browser` in `/v1/models`,
 //! and the cross-origin isolation headers (Q13) on every response. `browser_routes` needs no browser files;
-//! `browser_files` serves the real ones `cargo xtask onnx convert` builds into `tmp/hf`. R3.1, R3.2: `public_mode`,
-//! the routes of `ardana serve --public`, which runs no model.
+//! `browser_files` serves the real ones `cargo xtask onnx convert` builds into `tmp/hf`.
 
 mod common;
 
@@ -12,14 +11,13 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, ensure};
-use ardana_api::SystemOneRequest;
 use ardana_core::Layout;
-use ardana_registry::{LayoutKind, Registry};
-use ardana_server::{ApiError, BODY_LIMIT, ModelOptions, Models, router};
+use ardana_registry::LayoutKind;
+use ardana_server::{ModelOptions, router};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderMap, Request, StatusCode};
-use common::{Fake, get, hf_file, models, scratch, send, with_held_variants};
+use common::{get, hf_file, models, send, with_held_variants};
 use http_body::Body as _;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -179,172 +177,6 @@ async fn browser_routes() -> Result<()> {
         assert_eq!(got.as_u16(), status, "keyed {uri}");
         isolated(&format!("keyed {uri}"), &headers);
     }
-    Ok(())
-}
-
-/// R3.2: an error body that names no filesystem path and no upstream URL.
-fn tells_no_path(what: &str, body: &str) {
-    for told in ["/", "\\", "hf.co", "huggingface"] {
-        assert!(!body.contains(told), "{what}: {body} names {told:?}");
-    }
-}
-
-/// R3.1, R3.2: a public server lists the library alone, every model not pulled, with the browser variants and the
-/// browser default and without a default model; refuses every decision with TypeSafe's 403 before reading its body;
-/// names no model in `/health`; answers traversal, unknown names, other files and other methods with the API's 404
-/// and 405, whose bodies name no path or URL; sends no CORS header, even when asked; and neither loads a runtime nor
-/// writes to its empty Ardana home. Nothing here pulls a browser variant (the e2e `public` suite serves them).
-#[tokio::test]
-async fn public_mode() -> Result<()> {
-    let home = scratch("public-mode")?.join("home");
-    std::fs::create_dir_all(&home)?;
-    let fake = Fake::new();
-    let opts = ModelOptions {
-        public: true,
-        // A public server answers no request with a model: a default model is not looked up, nor listed.
-        default_model: Some("decider-4b".into()),
-        ..ModelOptions::default()
-    };
-    let models = Arc::new(Models::new(Registry::open(&home)?, fake.runtimes(), opts)?);
-    let app = router(models.clone(), None);
-    let asking = [("origin", "https://elsewhere.example")];
-
-    let listed = send(&app, "GET", "/v1/models", &asking, Vec::new()).await?;
-    isolated("/v1/models", &listed.headers);
-    assert_eq!(
-        listed.body,
-        with_held_variants(json!({"models": [
-            {"name": "decider-2b", "description": "hf.co/Mapika/decider-2b-GGUF:Q4_K_M", "release_date": "2026-09-24",
-             "x_pulled": false, "x_size": 1_274_396_800_u64, "x_browser": 1_121_602_009},
-            {"name": "decider-0.8b", "description": "hf.co/ardana-ai/decider-0.8b-GGUF:Q8_0",
-             "release_date": "2026-09-19", "x_pulled": false, "x_size": 811_843_552, "x_browser": 467_748_928,
-             "x_browser_default": true},
-            {"name": "decider-4b", "description": "hf.co/Mapika/decider-4b-GGUF:Q4_K_M", "release_date": "2026-09-24",
-             "x_pulled": false, "x_size": 2_708_804_640_u64},
-            {"name": "qwen3.5-0.8b", "description": "hf.co/ggml-org/Qwen3.5-0.8B-GGUF:Q4_0",
-             "release_date": "2026-02-28", "x_pulled": false, "x_size": 563_036_064, "x_browser": 904_574_185},
-            {"name": "smollm3-3b", "description": "hf.co/ggml-org/SmolLM3-3B-GGUF:Q4_K_M",
-             "release_date": "2025-07-08", "x_pulled": false, "x_size": 1_915_305_312},
-        ]}))
-        .await?
-    );
-
-    // Every decision is refused, whatever its model or body; the body is never read.
-    let ticket = |model: Option<&str>| -> Result<Vec<u8>> {
-        let mut body = json!({"state": "My card was charged twice.", "questions": {
-            "refund": {"type": "noul", "instructions": "Does the customer ask for a refund?"}}});
-        if let Some(model) = model {
-            body["model"] = json!(model);
-        }
-        Ok(serde_json::to_vec(&body)?)
-    };
-    let json_type = "application/json";
-    let refused: [(&str, &str, Vec<u8>); 8] = [
-        ("a library model", json_type, ticket(Some("decider-2b"))?),
-        (
-            "the browser default",
-            json_type,
-            ticket(Some("decider-0.8b"))?,
-        ),
-        ("jev-latest", json_type, ticket(Some("jev-latest"))?),
-        ("no model", json_type, ticket(None)?),
-        ("not JSON", json_type, b"{\"state\": ".to_vec()),
-        ("no body", json_type, Vec::new()),
-        ("text/plain", "text/plain", ticket(None)?),
-        ("over the body limit", json_type, vec![b' '; BODY_LIMIT + 1]),
-    ];
-    for (label, content_type, body) in refused {
-        let headers = [asking[0], ("content-type", content_type)];
-        let reply = send(&app, "POST", "/v1/systemone", &headers, body).await?;
-        assert_eq!(reply.status, 403, "{label}: {reply:?}");
-        let detail = &reply.body["detail"];
-        assert_eq!(detail["error_type"], "permission_error", "{label}");
-        assert_eq!(detail.as_object().map(|d| d.len()), Some(2), "{label}");
-        assert!(
-            detail["message"]
-                .as_str()
-                .is_some_and(|m| m.contains("runs no model") && m.contains("`ardana run`")),
-            "{label}: {detail}"
-        );
-        tells_no_path(label, &reply.body.to_string());
-        isolated(label, &reply.headers);
-    }
-    let request: SystemOneRequest = serde_json::from_slice(&ticket(Some("decider-2b"))?)?;
-    assert!(matches!(
-        models.decide(request).await,
-        Err(ApiError::RunsNoModel)
-    ));
-
-    let health = send(&app, "GET", "/health", &asking, Vec::new()).await?;
-    assert_eq!(
-        (health.status.as_u16(), &health.body),
-        (200, &json!({"status": "ok"}))
-    );
-    isolated("/health", &health.headers);
-
-    // Traversal as sent and percent-encoded, unknown names and other files: the API's 404, before anything is pulled.
-    for uri in [
-        "/v1/browser/../../models.toml",
-        "/v1/browser/../profile",
-        "/v1/browser/decider-0.8b/../profile",
-        "/v1/browser/decider-0.8b/..",
-        "/v1/browser/%2e%2e/profile",
-        "/v1/browser/..%2F..%2Fmodels.toml/profile",
-        "/v1/browser/decider-0.8b/%2e%2e%2f%2e%2e%2fmodels.toml",
-        "/v1/browser/decider-0.8b/..%2Fdecider-0.8b-GGUF%2Fdecider_config.json",
-        "/v1/browser/decider-4b/profile",
-        "/v1/browser/smollm3-3b/model.onnx",
-        "/v1/browser/nope/tokenizer.json",
-        "/v1/browser/DECIDER-0.8B/profile",
-        "/v1/browser/decider-0.8b:q8_0/profile",
-        "/v1/browser/decider-0.8b/README.md",
-        "/v1/browser/decider-0.8b/decider_config.json",
-        "/v1/browser/decider-0.8b/tokenizer_config.json",
-        "/v1/browser/decider-0.8b/chat_template.jinja",
-        "/v1/browser/decider-0.8b/model.onnx.datax",
-        "/v1/browser/decider-0.8b/%FF",
-        "/v1/models/decider-2b",
-        "/v1/nope",
-    ] {
-        let reply = send(&app, "GET", uri, &asking, Vec::new()).await?;
-        assert_eq!(
-            (reply.status.as_u16(), &reply.body),
-            (404, &json!({"detail": "Not Found"})),
-            "{uri}"
-        );
-        tells_no_path(uri, &reply.body.to_string());
-        isolated(uri, &reply.headers);
-    }
-    // Other methods, a CORS preflight among them: the API's 405.
-    for (method, uri) in [
-        ("POST", "/v1/browser/decider-0.8b/model.onnx"),
-        ("PUT", "/v1/browser/decider-0.8b/profile"),
-        ("DELETE", "/v1/browser/decider-0.8b/tokenizer.json"),
-        ("PATCH", "/v1/browser/decider-0.8b/model.onnx.data"),
-        ("POST", "/v1/models"),
-        ("OPTIONS", "/v1/models"),
-        ("GET", "/v1/systemone"),
-        ("PUT", "/v1/systemone"),
-    ] {
-        let headers = [asking[0], ("access-control-request-method", "POST")];
-        let reply = send(&app, method, uri, &headers, Vec::new()).await?;
-        assert_eq!(
-            (reply.status.as_u16(), &reply.body),
-            (405, &json!({"detail": "Method Not Allowed"})),
-            "{method} {uri}"
-        );
-        isolated(&format!("{method} {uri}"), &reply.headers);
-    }
-    let (status, headers, body) = raw(&app, "POST", "/health", &asking).await?;
-    assert_eq!(status.as_u16(), 405);
-    tells_no_path("POST /health", &String::from_utf8_lossy(&body));
-    isolated("POST /health", &headers);
-
-    assert_eq!(fake.loads(), 0, "a public server loads no runtime");
-    let left: Vec<PathBuf> = std::fs::read_dir(&home)?
-        .map(|entry| entry.map(|e| e.path()))
-        .collect::<Result<_, _>>()?;
-    assert!(left.is_empty(), "the Ardana home stays empty: {left:?}");
     Ok(())
 }
 

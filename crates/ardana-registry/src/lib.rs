@@ -169,9 +169,8 @@ struct ModelsFile {
     models: Vec<ResolvedModel>,
 }
 
-/// The named models of one Ardana home. The default registry is empty and backed by no file: a public server's, which
-/// reads no registry.
-#[derive(Debug, Clone, Default)]
+/// The named models of one Ardana home.
+#[derive(Debug, Clone)]
 pub struct Registry {
     path: PathBuf,
     models: Vec<ResolvedModel>,
@@ -535,13 +534,26 @@ impl BrowserModel {
 /// [`pull`] derives the library model's own: `decider_config.json` beside the files, else the stock profile named
 /// `name` in the library's layout, dated by the library's release date.
 pub async fn pull_browser(name: &str, progress: bool) -> Result<BrowserModel, RegistryError> {
-    let (model, browser) = library()
+    let (model, browser) = browser_entry(name)?;
+    browser_variant(&Hub::from_env(progress)?, model, &browser.weights).await
+}
+
+/// The library model `name` and its browser variant; an error when it has none.
+fn browser_entry(
+    name: &str,
+) -> Result<
+    (
+        &'static library::LibraryModel,
+        &'static library::BrowserWeights,
+    ),
+    RegistryError,
+> {
+    library()
         .browser(name)
         .ok_or_else(|| RegistryError::Invalid {
             what: format!("the model {name:?}"),
             msg: "no library model of that name has a browser variant".into(),
-        })?;
-    browser_variant(&Hub::from_env(progress)?, model, &browser.weights).await
+        })
 }
 
 /// The browser variant `reference` of `model` through `hub`, cache first: the cache's copy when it holds all of it,
@@ -651,6 +663,25 @@ impl BrowserCache {
     /// The hub cache the environment names, as a pull finds it (`HF_HOME` and the other variables, [`Hub::from_env`]).
     pub fn from_env() -> Result<BrowserCache, RegistryError> {
         Ok(BrowserCache(Hub::from_env(false)?.cache_only()))
+    }
+
+    /// The hub cache at `dir` (a `hub/` directory: `models--<org>--<repo>/...`), whatever the environment names.
+    pub fn at(dir: &Path) -> Result<BrowserCache, RegistryError> {
+        let client = hf_hub::HFClient::builder()
+            .cache_dir(dir)
+            .build()
+            .map_err(|err| RegistryError::Hub {
+                repo: "the Hugging Face client".into(),
+                err,
+            })?;
+        Ok(BrowserCache(Hub::new(client, true, false)))
+    }
+
+    /// The browser variant of the library model `name` as the cache holds it, read as [`pull_browser`] reads it from
+    /// there: its commit and the profile; an error when the cache does not hold every file of it.
+    pub async fn variant(&self, name: &str) -> Result<BrowserModel, RegistryError> {
+        let (model, browser) = browser_entry(name)?;
+        browser_files(&self.0, model, &browser.weights).await
     }
 
     /// Whether the cache holds the browser variant of the library model `name` whole: every file [`pull_browser`]

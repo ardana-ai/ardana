@@ -1,8 +1,8 @@
 # axum guidelines
 
 Scope: the HTTP layer of Ardana, which lives in `crates/ardana-server` (axum router, handlers, error mapping, model
-lifecycle, auth, embedded playground, the browser variants' files, the public mode) and is started by `ardana serve`
-(or `ardana serve --public`) in `crates/ardana`. It covers axum 0.8 with tower-http 0.7 middleware, the tokio runtime
+lifecycle, auth, embedded playground, the browser variants' files) and is started by `ardana serve` in
+`crates/ardana`. It covers axum 0.8 with tower-http 0.7 middleware, the tokio runtime
 underneath, the hand-off of blocking llama.cpp inference off the async runtime, serving the Leptos playground's `dist`
 from memory with `memory-serve`, and serving library models' browser variants from the hub cache (`/v1/browser`).
 `ardana-server` never depends on `ardana-llama`; it receives a `Runtimes` value from the binary.
@@ -18,14 +18,12 @@ from memory with `memory-serve`, and serving library models' browser variants fr
 - `http-body` 1 — the `Body` trait (`Frame`, `SizeHint`) the browser files' streaming body implements; already in the
   build through axum, named directly because axum re-exports the trait but not `Frame`
 - `tower` 0.5 (dev) — `ServiceExt::oneshot` in tests; needs the `util` feature
-- `clap` 4 with `env` — `ardana_server::ServeArgs`, the `ardana serve` flags, reads `ARDANA_API_KEY`, and
-  `ARDANA_PUBLIC` through `clap::builder::BoolishValueParser` (`1`, `true`, `yes`, `on`; a bare flag's default parser
-  takes only `true`/`false`)
+- `clap` 4 with `env` — `ardana_server::ServeArgs`, the `ardana serve` flags, reads `ARDANA_API_KEY`
 
 ## Rules
 - Write routes in 0.8 syntax: `/{param}` and `/{*rest}`; the old `/:param` and `/*rest` forms panic at startup.
 - Keep the route table explicit: `POST /v1/systemone`, `GET /v1/models`, `GET /v1/browser/{name}/{file}`,
-  `GET /health`, plus the playground; a public server routes `POST /v1/systemone` to a handler that takes no body.
+  `GET /health`, plus the playground.
   Put the `/v1` routes in their own `Router` mounted with `nest("/v1", ..)` and give that router its own `fallback`
   returning 404 `{"detail":"Not Found"}`, so unknown `/v1/*` paths never fall through to the playground's
   `index.html`, plus a `method_not_allowed_fallback` returning 405 `{"detail":"Method Not Allowed"}` (FastAPI's
@@ -53,9 +51,6 @@ from memory with `memory-serve`, and serving library models' browser variants fr
   - unknown `model` -> 404 `not_found_error` whose message lists `Registry::names()`
   - queue over `--max-queued-rows` -> 503 `overloaded_error` with `Retry-After: 1`
   - missing (or empty) bearer key -> 403, another key or scheme -> 401, both `authentication_error`
-  - any decision on a public server (`ApiError::RunsNoModel`) -> 403 `permission_error`, whatever its body: it is
-    not an authentication problem (no key opens it), and TypeSafe's SDKs read a 403 as permission denied
-    (`TypeSafePermissionDeniedError`)
   - only the model files, the runtime and the worker (`DecideError::Runtime`, a panicked worker) may produce 5xx
     (`api_error`)
 - Do not accept axum's default `Json` rejections: they answer 400 for a syntax error and 415 for a missing
@@ -76,8 +71,7 @@ from memory with `memory-serve`, and serving library models' browser variants fr
   `ARDANA_API_KEY` (clap `env`, `hide_env_values`); when unset the API is open and ignores `Authorization` headers.
   Compare keys without an early exit.
 - The `ardana serve` flags are `ardana_server::ServeArgs` (`#[derive(clap::Args)]`), flattened into the binary's
-  `serve` subcommand, so `crates/ardana-server/tests/http.rs` tests their defaults; `--public` sets
-  `ModelOptions::public`, which in-process tests set directly (they cannot set variables).
+  `serve` subcommand, so `crates/ardana-server/tests/http.rs` tests their defaults.
 - Bind `127.0.0.1:8000` by default via `tokio::net::TcpListener::bind`; only `--host`/`--port` change it. Never
   default to `0.0.0.0`.
 - Serve with `axum::serve(listener, app).with_graceful_shutdown(shutdown_signal())`, where `shutdown_signal` awaits
@@ -145,8 +139,8 @@ from memory with `memory-serve`, and serving library models' browser variants fr
 - `GET /v1/models` keeps Jev's `{name, description, release_date}` per entry and adds `x_pulled` (every entry),
   `x_default` (the default model only), `x_size` (library models not pulled yet, the GGUF's bytes), `x_browser`
   (a library model with a browser variant, pulled or not: the bytes a tab downloads, `library.toml`'s browser `size`)
-  and `x_browser_pulled` (a browser variant the hub cache holds whole, so a request for its files pulls nothing; on a
-  public server too). `Models` asks `ardana_registry::BrowserCache`, built once, which finds every file a pull reads
+  and `x_browser_pulled` (a browser variant the hub cache holds whole, so a request for its files pulls nothing).
+  `Models` asks `ardana_registry::BrowserCache`, built once, which finds every file a pull reads
   in the cache without reading one or calling the Hub, so the list stays cheap; the playground says the server pulls
   only when it does not hold the variant.
 
@@ -181,25 +175,6 @@ from memory with `memory-serve`, and serving library models' browser variants fr
   past the end is `416` with `Content-Range: bytes */<length>` and `{"detail":"Range Not Satisfiable"}`
   (`ApiError::RangeNotSatisfiable`). The profile is always whole (`browser.rs#part` reads the headers).
 
-## Public mode (`--public`)
-- `ardana serve --public` (`ARDANA_PUBLIC=1`) serves a public playground whose visitors run browser models in their
-  own tabs; the server runs no model. The binary gives it no runtime (`Runtimes(Vec::new())`) and no registry: it opens
-  no `models.toml` (`Registry::default()`, empty and backed by no file), so an unreadable one cannot stop it, and
-  `Models` with `ModelOptions::public` never reads or writes a registry, never resolves `--default-model` and
-  pulls only browser variants: `Models::resolve` answers `ApiError::RunsNoModel` first, `GET /v1/models` lists the
-  library alone (every model `x_pulled: false`, with `x_size`, `x_browser` and `x_browser_default`, none `x_default`),
-  `GET /health` is `{"status":"ok"}`.
-- The router routes `POST /v1/systemone` to `refuse`, a handler with no body extractor: every decision is the 403
-  before a byte of its body is read (no 422, no 413, no 32 MiB buffered), and `Models::resolve` refuses too, for
-  in-process callers. Every other route behaves as on a local server: the same 404s and 405s, the Q13 headers, no CORS
-  header (even for a request with an `Origin` or a preflight).
-- A 5xx of a public server says what failed, never why: `browser.rs#file` answers a failed pull or a lost file with
-  "the browser files of <name> are not available on this server; try again later" (`name` is a library name by then)
-  and logs the reason, which can name the hub cache path or the `hf.co/` reference, on stderr. A local server keeps
-  the reason in the body.
-- The flags of the model lifecycle (`--default-model`, `--keep-alive`, the limits) do nothing in public mode, and
-  `--api-key` gates `/v1` as it does locally (the playground sends no key).
-
 ## Embedded playground (memory-serve)
 - List `memory-serve` in both `[dependencies]` and `[build-dependencies]` of `ardana-server`; the build script and
   the runtime both use it.
@@ -226,7 +201,7 @@ from memory with `memory-serve`, and serving library models' browser variants fr
 - `ardana-server` depends on memory-serve with `force-embed`, so debug builds embed too and every binary serves from
   memory, never from the source tree (R6.3). `crates/ardana-server/tests/playground.rs` checks that `/`, unknown
   paths and every asset come from the directory `build.rs` embedded, and each file's `Cache-Control` (`no-cache` and a
-  304 on revalidation for the page and `/engine/`, the week for the rest) on a local and a public server.
+  304 on revalidation for the page and `/engine/`, the week for the rest).
 
 ## Testing
 - Test handlers in `crates/ardana-server/tests/*.rs` without binding a port: build the app with a fake `Runtime`
@@ -236,11 +211,7 @@ from memory with `memory-serve`, and serving library models' browser variants fr
 - Assert status, headers (`Retry-After`, `Content-Type`) and the exact JSON shape of every error body, including
   that no bad-input case returns 5xx.
 - `tests/browser.rs`: `browser_routes` (plain) checks `x_browser` in `/v1/models`, the 404s and 405s of `/v1/browser`
-  and the Q13 headers on every kind of response; `public_mode` (plain: it pulls nothing) builds `Models` over an empty
-  home with the fake runtime and `public`, and checks the listing, the 403 for every body (malformed and over the limit
-  among them), `/health`, traversal as sent and percent-encoded, unknown names and other files (404), other methods and
-  a preflight (405), bodies that name no path or URL, no CORS header for a request from another origin, no load, and
-  the home still empty; `browser_files` (`#[ignore]`d: it reads the ONNX repositories
+  and the Q13 headers on every kind of response; `browser_files` (`#[ignore]`d: it reads the ONNX repositories
   `cargo xtask onnx convert` writes into `tmp/hf`, which CI does not fetch) checks one shared pull, the three files
   byte for byte, uncompressed with their length under `Accept-Encoding: br`, the `ETag`, byte ranges of the graph and
   the weights (each part byte for byte, `If-Range`, the whole file for another version or several ranges, the 416) and
@@ -248,11 +219,9 @@ from memory with `memory-serve`, and serving library models' browser variants fr
   without a file.
 - Fake runtimes are for lifecycle and error-path tests only; end-to-end checks (`cargo xtask e2e jevcompat|sdk|
   jevbench`) run the release binary on decider-2b pulled offline from `tmp/hf`, each in its own `ARDANA_HOME` under
-  `tmp/e2e/<suite>`, on a free port of 127.0.0.1, stopped with SIGTERM afterwards. `cargo xtask e2e public` probes
-  the release `ardana serve --public` with curl (`--path-as-is`, so `..` reaches the server as written) and, over an
-  empty Hub cache, a failed pull's wording (`playwright.md`); `crates/ardana/tests/serve.rs` starts the debug binary
-  with `ARDANA_PUBLIC=1`, and with `--public` over an `ARDANA_HOME` whose `models.toml` does not parse, which it serves
-  and leaves as it was.
+  `tmp/e2e/<suite>`, on a free port of 127.0.0.1, stopped with SIGTERM afterwards. `crates/ardana/tests/serve.rs`
+  starts the debug binary: it binds 127.0.0.1, reads `ARDANA_API_KEY`, and has one mode (`--public` is clap's
+  unexpected argument, and the variable it would have is not read).
 
 ## Sources
 - https://docs.rs/axum/0.8 — crate overview, handlers, extractors, state sharing, `axum::serve`, tokio features

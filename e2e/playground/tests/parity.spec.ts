@@ -16,6 +16,7 @@ import {
   pickModel,
   picker,
   pointer,
+  questionsBox,
   readRequest,
   restorePrevious,
   root,
@@ -23,12 +24,11 @@ import {
   runKey,
   screenshot,
   shareHash,
+  stateBox,
   type Json,
   type Request,
 } from './helpers';
 
-const stateBox = (page: Page) => page.getByRole('textbox', { name: 'State' });
-const questionsBox = (page: Page) => page.getByRole('textbox', { name: 'Questions JSON' });
 const questionsJson = async (page: Page) => JSON.parse(await questionsBox(page).inputValue()) as Record<string, Json>;
 
 /** The model `ardana serve` has pulled: decider-2b. */

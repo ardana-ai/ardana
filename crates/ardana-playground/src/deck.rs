@@ -107,29 +107,25 @@ fn named<'a>(models: &'a [ModelInfo], name: &str) -> Named<'a> {
 }
 
 /// Where Run answers a server row's pick `name`: on the server only what it has pulled, under any spelling; with the
-/// ardana CLI any other model the list names, in any spelling or quant (the CLI resolves it), and on a public server
-/// every pick; on a local server, a name nothing listed matches goes to the server, which refuses it without pulling.
-fn server_runs(models: &[ModelInfo], name: &str) -> Runs {
+/// ardana CLI any other model the list names, in any spelling or quant (the CLI resolves it), and in the `standalone`
+/// build, which no server serves, every pick; on a server, a name nothing listed matches goes to the server, which
+/// refuses it without pulling.
+fn server_runs(models: &[ModelInfo], name: &str, standalone: bool) -> Runs {
     match named(models, name) {
         Named::Listed(model) if model.pulled() => Runs::Server,
         Named::Listed(_) | Named::Quant(_) => Runs::Cli,
-        Named::Unlisted if public(models) => Runs::Cli,
+        Named::Unlisted if standalone => Runs::Cli,
         Named::Unlisted => Runs::Server,
     }
 }
 
-/// Whether `/v1/models` comes from a public server, which runs no model: a list that marks no default model.
-fn public(models: &[ModelInfo]) -> bool {
-    !models.is_empty() && !models.iter().any(|m| m.x_default)
-}
-
-/// How the ardana CLI reaches the model `name` where this server does not run the pick: a public server's visitor
-/// installs ardana; on a local server, which ardana runs already, `ardana pull` adds a model it has not pulled, under
-/// any spelling (an "In browser" row's model too), and a model it has pulled needs only `ardana run`.
-fn handoff(models: &[ModelInfo], name: &str) -> Handoff {
-    if public(models) {
+/// How the ardana CLI reaches the model `name` where no server runs the pick: the `standalone` build's visitor installs
+/// ardana; on a server, which ardana runs already, `ardana pull` adds a model it has not pulled, under any spelling (an
+/// "In browser" row's model too), and a model it has pulled needs only `ardana run`.
+fn handoff(models: &[ModelInfo], name: &str, standalone: bool) -> Handoff {
+    if standalone {
         Handoff::Install
-    } else if server_runs(models, name) == Runs::Server {
+    } else if server_runs(models, name, standalone) == Runs::Server {
         Handoff::Run
     } else {
         Handoff::Pull
@@ -143,15 +139,16 @@ pub enum Runs {
     Server,
     /// This tab, on the model's browser variant: an "In browser" row.
     Tab,
-    /// Nowhere here: a model this server would have to pull, or any server row of a public server. The page hands it
-    /// over to the ardana CLI ([`Handoff`]), and Run sends nothing (Q2).
+    /// Nowhere here: a model this server would have to pull, or any server row of the standalone build. The page hands
+    /// it over to the ardana CLI ([`Handoff`]), and Run sends nothing (Q2).
     Cli,
 }
 
 /// How the page hands a pick this server does not run ([`Runs::Tab`], [`Runs::Cli`]) over to the ardana CLI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Handoff {
-    /// A public server, which runs no model: ardana.ai's install line, then `ardana run` on the visitor's own machine.
+    /// The standalone build, which no server serves: ardana.ai's install line, then `ardana run` on the visitor's own
+    /// machine.
     Install,
     /// A local server that has not pulled the model: `ardana pull` where the server runs, after which Run sends the
     /// model's server row here, then `ardana run`.
@@ -168,8 +165,8 @@ pub enum Held {
     /// The picked model runs only with the ardana CLI ([`Runs::Cli`]) until `ardana pull` adds it to this local
     /// server ([`Handoff::Pull`]).
     Pull(String),
-    /// The picked model runs only with the ardana CLI, on the visitor's own machine: a public server runs no model
-    /// ([`Handoff::Install`]).
+    /// The picked model runs only with the ardana CLI, on the visitor's own machine: no server serves the standalone
+    /// build ([`Handoff::Install`]).
     Cli(String),
     /// There is no question to ask.
     Empty,
@@ -214,6 +211,8 @@ pub struct Deck {
     pub in_browser: RwSignal<bool>,
     /// Whether the pick waits for `/v1/models` to place it: the page's first pick, or a share link's.
     unplaced: StoredValue<bool>,
+    /// Whether this is the standalone build, which no server serves ([`ApiClient::standalone`]).
+    pub standalone: bool,
     /// `/v1/models` as last listed: the pulled models, then the library models this server has not pulled.
     pub models: RwSignal<Vec<ModelInfo>>,
     /// The model the last run named (none for the server's default).
@@ -273,6 +272,7 @@ impl LastRun {
 
 impl Deck {
     pub fn new(client: ApiClient) -> Deck {
+        let standalone = client.standalone();
         let stage = RwSignal::new(None);
         let kept = RwSignal::new(None);
         let runner = Action::new_local(move |job: &Job| {
@@ -342,6 +342,7 @@ impl Deck {
             model,
             in_browser,
             unplaced: StoredValue::new(true),
+            standalone,
             models: RwSignal::new(Vec::new()),
             run_model: RwSignal::new(None),
             share_error: RwSignal::new(None),
@@ -601,15 +602,12 @@ impl Deck {
             .with(|models| models.iter().find(|m| m.name == name).cloned())
     }
 
-    /// Whether this page comes from a public server, which runs no model ([`public`]).
-    pub fn public(&self) -> bool {
-        self.models.with(|models| public(models))
-    }
-
-    /// How the ardana CLI reaches the pick, where this server does not run it ([`Handoff`]).
+    /// How the ardana CLI reaches the pick, where no server runs it ([`Handoff`]).
     pub fn handoff(&self) -> Handoff {
-        self.models
-            .with(|models| self.model.with(|model| handoff(models, model)))
+        self.models.with(|models| {
+            self.model
+                .with(|model| handoff(models, model, self.standalone))
+        })
     }
 
     /// The browser default's name, when the list names one that runs in a tab.
@@ -635,8 +633,10 @@ impl Deck {
         if self.in_browser.get() {
             return Runs::Tab;
         }
-        self.models
-            .with(|models| self.model.with(|model| server_runs(models, model)))
+        self.models.with(|models| {
+            self.model
+                .with(|model| server_runs(models, model, self.standalone))
+        })
     }
 
     /// The request RUN would send now.
@@ -658,7 +658,7 @@ impl Deck {
             Some(Held::Invalid)
         } else if self.runs() == Runs::Cli {
             let model = self.model.get();
-            Some(if self.public() {
+            Some(if self.standalone {
                 Held::Cli(model)
             } else {
                 Held::Pull(model)
@@ -764,7 +764,7 @@ mod tests {
     }
 
     /// Q11: the page opens on the default model when the server has pulled it, else on the browser default's row in
-    /// the tab (an empty registry, or a public server, which has no default model).
+    /// the tab (an empty registry, or the standalone build's library, which has no default model).
     #[test]
     fn the_page_opens_where_a_model_runs() {
         let local = [
@@ -779,11 +779,14 @@ mod tests {
             info("decider-4b", false, false, None),
         ];
         assert_eq!(opening_row(&empty), Some(browser_value("decider-0.8b")));
-        let public = empty.clone().map(|m| ModelInfo {
+        let standalone = empty.clone().map(|m| ModelInfo {
             x_default: false,
             ..m
         });
-        assert_eq!(opening_row(&public), Some(browser_value("decider-0.8b")));
+        assert_eq!(
+            opening_row(&standalone),
+            Some(browser_value("decider-0.8b"))
+        );
         // Without a browser default: the default model, else the first pulled one.
         let plain = [
             info("decider-4b", false, true, None),
@@ -802,7 +805,7 @@ mod tests {
                 "{name}"
             );
             assert_eq!(
-                linked_row(&public, name),
+                linked_row(&standalone, name),
                 browser_value("decider-0.8b"),
                 "{name}"
             );
@@ -817,7 +820,7 @@ mod tests {
 
     /// Run answers on the server only what it has pulled, read as the server reads names (`Registry::named`): any
     /// other spelling of a library model, which the server would pull, goes to the ardana CLI; a name nothing listed
-    /// matches goes to a local server, which refuses it without pulling; a public server runs nothing.
+    /// matches goes to the server, which refuses it without pulling; the standalone build runs nothing on a server.
     #[test]
     fn run_never_makes_the_server_pull() {
         // decider-2b pulled (the default), and its Q8_0 too; the rest of the library not.
@@ -844,27 +847,25 @@ mod tests {
             ("hf.co/Mapika/decider-2b-GGUF:Q4_K_M", Runs::Server),
         ];
         for (name, runs) in spellings {
-            assert_eq!(server_runs(&local, name), runs, "local {name}");
+            assert_eq!(server_runs(&local, name, false), runs, "local {name}");
         }
-        let served_publicly = [
+        let library = [
             info("decider-2b", false, false, Some(false)),
             info("decider-0.8b", false, false, Some(true)),
             info("decider-4b", false, false, None),
         ];
         for (name, _) in spellings {
             assert_eq!(
-                server_runs(&served_publicly, name),
+                server_runs(&library, name, true),
                 Runs::Cli,
-                "public {name}"
+                "standalone {name}"
             );
         }
-        // A list not in yet is no public server's.
-        assert!(!public(&[]));
     }
 
     /// A pick this server does not run goes to the ardana CLI: on a local server, which ardana runs already, after
     /// `ardana pull` for a model it has not pulled under any spelling (an "In browser" row's model too), and without it
-    /// for an "In browser" row of a model it has pulled; on a public server, after ardana.ai's install line.
+    /// for an "In browser" row of a model it has pulled; in the standalone build, after ardana.ai's install line.
     #[test]
     fn the_cli_gets_a_model_onto_a_local_server() {
         let local = [
@@ -879,19 +880,19 @@ mod tests {
             "decider-2b:q4_0",
             "decider-0.8b",
         ] {
-            assert_eq!(handoff(&local, name), Handoff::Pull, "{name}");
+            assert_eq!(handoff(&local, name, false), Handoff::Pull, "{name}");
         }
-        assert_eq!(handoff(&local, "decider-2b"), Handoff::Run);
-        let served_publicly = local.clone().map(|m| ModelInfo {
+        assert_eq!(handoff(&local, "decider-2b", false), Handoff::Run);
+        let library = local.clone().map(|m| ModelInfo {
             x_pulled: Some(false),
             x_default: false,
             ..m
         });
-        for name in ["decider-4b", "decider-2b", "decider-0.8b"] {
-            assert_eq!(handoff(&served_publicly, name), Handoff::Install, "{name}");
+        for name in ["decider-4b", "decider-2b", "decider-0.8b", "speed_latest"] {
+            assert_eq!(handoff(&library, name, true), Handoff::Install, "{name}");
         }
         assert_eq!(
-            browser_default(&served_publicly).map(|m| m.name.as_str()),
+            browser_default(&library).map(|m| m.name.as_str()),
             Some("decider-0.8b")
         );
         assert_eq!(browser_default(&local[..1]), None);

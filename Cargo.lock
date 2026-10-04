@@ -5074,9 +5074,12 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ardana-api",
+ "ardana-registry",
  "lz-str",
  "serde",
  "serde_json",
+ "tokio",
  "toml",
 ]
 

@@ -1,7 +1,6 @@
 //! A running `ardana serve` for the end-to-end suites: the release binary serving decider-2b, pulled offline from
 //! `tmp/hf` into its own `ARDANA_HOME` under `tmp/e2e/<suite>` (or with that home empty, so the first request pulls
-//! it, or a public server on it, which runs no model; either over an empty Hub cache of its own when asked), on a free
-//! port of 127.0.0.1. Dropping it stops the server.
+//! it, over an empty Hub cache of its own when asked), on a free port of 127.0.0.1. Dropping it stops the server.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -55,8 +54,6 @@ enum Mode<'a> {
     /// On an empty registry: its first request pulls decider-2b. Its Hub cache is `<dir>/hf` when `own_cache` (empty:
     /// every pull fails, offline), else `tmp/hf`.
     Empty { own_cache: bool },
-    /// `--public`, its Hub cache in `<dir>/hf` when `true` (empty: every browser pull fails), else `tmp/hf`.
-    Public { own_cache: bool },
 }
 
 impl Server {
@@ -81,17 +78,6 @@ impl Server {
     /// holds no model and no browser variant, and every pull fails offline.
     pub fn start_uncached(sandbox: &Sandbox, ardana: &Path, name: &str) -> Result<Server> {
         Server::launch(sandbox, ardana, name, Mode::Empty { own_cache: true })
-    }
-
-    /// Starts `ardana serve --public` on the empty home `tmp/e2e/<name>/home`, reading the browser variants offline
-    /// from `tmp/hf`, or from the empty cache `tmp/e2e/<name>/hf` with `own_cache`.
-    pub fn start_public(
-        sandbox: &Sandbox,
-        ardana: &Path,
-        name: &str,
-        own_cache: bool,
-    ) -> Result<Server> {
-        Server::launch(sandbox, ardana, name, Mode::Public { own_cache })
     }
 
     fn launch(sandbox: &Sandbox, ardana: &Path, name: &str, mode: Mode) -> Result<Server> {
@@ -137,10 +123,6 @@ impl Server {
                     serve.env("ARDANA_API_KEY", key);
                 }
                 false
-            }
-            Mode::Public { own_cache } => {
-                serve.arg("--public");
-                own_cache
             }
             Mode::Empty { own_cache } => own_cache,
         };

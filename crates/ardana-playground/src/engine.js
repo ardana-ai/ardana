@@ -3,13 +3,14 @@
 // code; the plan and the readout are the engine module's (`crates/ardana-engine`, ardana-core's tokenizer, planner and
 // readout, which trunk builds into `/engine/` beside this file). Both modules are imported on first use, so a page that
 // only runs server models loads neither: onnxruntime-web 1.30.0 is vendored beside the page
-// (`crates/ardana-playground/ort/`), and each module fetches its WASM from beside itself.
+// (`crates/ardana-playground/ort/`), and each module fetches its WASM from beside itself. Every path is relative to
+// this file, so the page runs wherever it is served (`/` by `ardana serve`, `/playground/` on the landing).
 
 /** The build for each execution provider. The WebGPU build's WASM module has no CPU kernel for the quantized
  * embedding (`GatherBlockQuantized`) the int4 graphs read, so a session on the CPU runs on the plain WASM build. */
 const BUNDLES = {
-  webgpu: '/ort/1.30.0/ort.webgpu.bundle.min.mjs',
-  wasm: '/ort/1.30.0/ort.wasm.bundle.min.mjs',
+  webgpu: new URL('../ort/1.30.0/ort.webgpu.bundle.min.mjs', import.meta.url).href,
+  wasm: new URL('../ort/1.30.0/ort.wasm.bundle.min.mjs', import.meta.url).href,
 };
 
 /** The engine module trunk builds from `crates/ardana-engine` beside this file (`index.html`). */

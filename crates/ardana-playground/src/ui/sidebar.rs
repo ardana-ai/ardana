@@ -185,8 +185,8 @@ fn ModelSelect(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>
     };
     // A pick that does not run on this server says where Run answers it, and what its first run downloads: kept by
     // this browser, or, where the page cannot keep files, again on each visit; in the tab, what running it takes in
-    // memory. A model this local server has not pulled runs here once the ardana CLI pulls it; on a public server,
-    // which runs no model, on the visitor's machine.
+    // memory. A model this server has not pulled runs here once the ardana CLI pulls it; in the standalone build, which
+    // no server serves, on the visitor's machine.
     let runs = Memo::new(move |_| deck.runs());
     // The options are drawn afresh whenever the list or the pick changes, their elements reused by place, and a select
     // keeps the selection its elements had (an option removed with its group, one drawn over another's place), not the
@@ -206,7 +206,7 @@ fn ModelSelect(deck: Deck, models: LocalResource<Result<ModelsResponse, String>>
         let text = match runs.get() {
             Runs::Server => return None,
             Runs::Tab => tab_note(deck.browser_size()?, engine::keeps_files()),
-            Runs::Cli => cli_note(deck.public(), deck.pull_size()),
+            Runs::Cli => cli_note(deck.standalone, deck.pull_size()),
         };
         Some(view! {
             <p class="field-note model-note" id="model-note" data-testid="model-note">
@@ -247,11 +247,11 @@ fn tab_note(bytes: u64, keeps: bool) -> String {
     format!("Runs in this tab. {download} {IN_MEMORY}; only a reload frees all of it.")
 }
 
-/// What the model note says of a model this server does not run: on a local server, that it is not pulled and how the
-/// ardana CLI adds it, with what that downloads (`bytes`, when the list names the pick); on a public server, which runs
-/// no model, that it runs with the ardana CLI on the visitor's machine.
-fn cli_note(public: bool, bytes: Option<u64>) -> String {
-    match (public, bytes) {
+/// What the model note says of a model no server runs here: on a server, that it is not pulled and how the ardana CLI
+/// adds it, with what that downloads (`bytes`, when the list names the pick); in the `standalone` build, which no server
+/// serves, that it runs with the ardana CLI on the visitor's machine.
+fn cli_note(standalone: bool, bytes: Option<u64>) -> String {
+    match (standalone, bytes) {
         (false, Some(bytes)) => format!(
             "Not pulled on this server. Pull it with the ardana CLI where the server runs ({}), then Run answers here.",
             human_size(bytes)

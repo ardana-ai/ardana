@@ -8,10 +8,11 @@
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
     <title>Playground · Ardana</title>
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preload" href="/fonts/onest-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/geist-mono-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- Relative paths: the page is served at / by ardana serve and at /playground/ on the landing. -->
+    <link rel="icon" href="favicon.ico" sizes="32x32" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="fonts/onest-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/geist-mono-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link data-trunk rel="copy-file" href="brand/favicon.ico" />
     <link data-trunk rel="copy-file" href="brand/favicon.svg" />
     <link data-trunk rel="copy-dir" href="fonts" />
@@ -22,6 +23,7 @@
     <link data-trunk rel="css" href="styles/shell.css" />
     <link data-trunk rel="css" href="styles/page.css" />
     <link data-trunk rel="rust" data-wasm-opt="z" />
+    <!-- The engine module has no features of its own: trunk's `--features` (the standalone build's) are the page's. -->
     <link
       data-trunk
       rel="rust"
@@ -29,10 +31,11 @@
       data-type="worker"
       data-bindgen-target="web"
       data-target-path="engine"
+      data-cargo-features=""
       data-wasm-opt="z"
     />
     <link data-trunk rel="copy-file" href="src/engine.js" data-target-path="engine" />
-    <link rel="modulepreload" href="/engine/engine.js" />
+    <link rel="modulepreload" href="engine/engine.js" />
   </head>
   <body></body>
 </html>

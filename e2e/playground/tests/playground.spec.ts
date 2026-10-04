@@ -40,8 +40,13 @@ test('embedded_binary', async ({ page, baseURL }, testInfo) => {
   isolated('/', index.headers());
   const html = await index.text();
 
-  // Every asset index.html names is served, the wasm with its own type.
-  const assets = [...html.matchAll(/(?:href|src|module_or_path:)\s*=?\s*['"](\/[^'"]+)['"]/g)].map((m) => m[1]);
+  // Every asset index.html names, by an absolute path or one relative to the page, is served, the wasm with its own
+  // type.
+  const assets = [...html.matchAll(/(?:href|src|module_or_path:)\s*=?\s*['"]([^'"#:]+)['"]/g)].map(
+    (m) => new URL(m[1], 'http://page/').pathname,
+  );
+  expect(assets).toContain('/favicon.svg');
+  expect(assets).toContain('/engine/engine.js');
   expect(assets.some((a) => a.endsWith('.wasm'))).toBe(true);
   expect(assets.some((a) => a.endsWith('.css'))).toBe(true);
   for (const asset of new Set(assets)) {

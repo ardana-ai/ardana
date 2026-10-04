@@ -11,6 +11,10 @@ const USAGE: &str = "usage: cargo xtask <step>
   fetch [--check]  install, or verify, the xtask/fetch.toml entries into tmp/
   fetch --tests    install only the Hub files plain `cargo test` reads (CI)
   build            build the playground dist with trunk, then the release ardana
+  build-playground --public-url <path> [--hub <url>]
+                   build the standalone playground, served as static files at
+                   <path>, into tmp/playground/dist; its browser files come
+                   from <url> (default https://huggingface.co)
   check-deps       check the workspace members and dependency direction
   check-docs       check CLAUDE.md, AGENTS.md and docs/guidelines
   export-decider   export decider's prompt layout cases into crates/ardana-core/tests/data/decider
@@ -50,6 +54,17 @@ fn run() -> Result<()> {
         ["fetch", "--check"] => fetch::check(&sandbox()?)?,
         ["fetch", "--tests"] => sandbox()?.guarded("fetch --tests", fetch::fetch_tests)?,
         ["build"] => sandbox()?.guarded("build", playground::build).map(drop)?,
+        ["build-playground", "--public-url", public_url, hub @ ..] => {
+            let hub = match hub {
+                [] => playground::HUB,
+                ["--hub", hub] => hub,
+                _ => bail!("{USAGE}"),
+            };
+            let dist = sandbox()?.guarded("build-playground", |s| {
+                playground::build_standalone(s, public_url, hub)
+            })?;
+            println!("{}", dist.display());
+        }
         ["check-deps"] => deps::check_deps(&deps::metadata(root)?)?,
         ["check-docs"] => docs::check_docs(root)?,
         ["export-decider"] => sandbox()?.guarded("export-decider", export::export_decider)?,

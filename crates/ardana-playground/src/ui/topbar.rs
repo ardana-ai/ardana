@@ -1,7 +1,7 @@
 //! The sticky top bar: the sidebar opener and the logo (while the sidebar is away), the page's name, the stale tag,
 //! Share with its popover, and the ink Run pill. Under it, the banner that says where a run in this tab is (with Stop
 //! while the server pulls or the tab downloads), why Run is held (with the way to the ardana CLI's commands when the
-//! server does not run the model, and on a public server the browser default in this tab instead), or what a first
+//! server does not run the model, and in the standalone build the browser default in this tab instead), or what a first
 //! run in this tab downloads.
 
 use ardana_api::human_size;
@@ -321,7 +321,7 @@ pub fn Topbar(deck: Deck, shell: Shell) -> impl IntoView {
         </header>
         // A wait or a hint is quiet; only an error takes the fault colours. A run in this tab says where it is, with its
         // download bar and Stop, and stays under the top bar while in flight; a model this server does not run leads to
-        // the ardana CLI's commands under Snippets (and, on a public server, to the browser default in this tab); before
+        // the ardana CLI's commands under Snippets (and, in the standalone build, to the browser default in this tab); before
         // a first run in this tab, what it downloads. The sentence is its own line of text (Run's description); the bar
         // and the actions beside it are not part of it.
         <p
@@ -351,7 +351,7 @@ pub fn Topbar(deck: Deck, shell: Shell) -> impl IntoView {
                                     </button>
                                 }
                             });
-                        // A public server runs no model; its browser default runs in this tab instead. The pick puts
+                        // No server serves the standalone build; its browser default runs in this tab instead. The pick puts
                         // the focus on Run, whose description then says what its first run downloads.
                         let instead = matches!(held, Held::Cli(_))
                             .then(|| deck.browser_default())
@@ -426,14 +426,21 @@ pub fn Topbar(deck: Deck, shell: Shell) -> impl IntoView {
 #[component]
 fn Share(deck: Deck) -> impl IntoView {
     let open = RwSignal::new(false);
-    let origin = window().location().origin().unwrap_or_default();
+    // The page's own URL, without its query and fragment: `ardana serve` serves the playground at `/`, the landing at
+    // `/playground/`.
+    let location = window().location();
+    let page = format!(
+        "{}{}",
+        location.origin().unwrap_or_default(),
+        location.pathname().unwrap_or_default()
+    );
     let link = move || {
         let payload = SharePayload::new(
             deck.state_text.get(),
             deck.questions_text.get(),
             deck.model.get(),
         );
-        share::link(&origin, &payload)
+        share::link(&page, &payload)
     };
     let link = Memo::new(move |_| open.get().then(&link).unwrap_or_default());
     // Whether `target` is the popover, its button or anything in them.

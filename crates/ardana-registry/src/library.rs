@@ -187,6 +187,16 @@ impl Library {
         Some((model, model.browser.as_ref()?))
     }
 
+    /// The bytes a tab downloads to run the browser variant of the model `name`, when it has one.
+    pub fn browser_size(&self, name: &str) -> Option<u64> {
+        self.browser(name).map(|(_, browser)| browser.size)
+    }
+
+    /// Whether `name` is the browser default, the browser model a playground offers first.
+    pub fn is_browser_default(&self, name: &str) -> bool {
+        self.browser_default.as_deref() == Some(name)
+    }
+
     /// The model requests use while the registry is empty.
     pub fn default_pick(&self) -> LibraryPick<'_> {
         self.find(&self.default)

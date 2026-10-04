@@ -506,16 +506,9 @@ fn defaults() -> Result<()> {
         (
             opts.max_loaded_models,
             opts.max_queued_rows,
-            opts.default_model,
-            opts.public
+            opts.default_model
         ),
-        (1, 4096, None, false)
-    );
-    assert!(
-        Serve::try_parse_from(["serve", "--public"])?
-            .args
-            .model_options()
-            .public
+        (1, 4096, None)
     );
 
     let args = Serve::try_parse_from([
@@ -557,13 +550,14 @@ fn defaults() -> Result<()> {
     assert!(Serve::try_parse_from(["serve", "--max-loaded-models", "0"]).is_err());
 
     let command = Serve::command();
-    for (id, env) in [("api_key", "ARDANA_API_KEY"), ("public", "ARDANA_PUBLIC")] {
-        let arg = command
-            .get_arguments()
-            .find(|arg| arg.get_id() == id)
-            .unwrap_or_else(|| panic!("an argument {id}"));
-        assert_eq!(arg.get_env().and_then(|e| e.to_str()), Some(env));
-    }
+    let api_key = command
+        .get_arguments()
+        .find(|arg| arg.get_id() == "api_key")
+        .expect("an --api-key argument");
+    assert_eq!(
+        api_key.get_env().and_then(|e| e.to_str()),
+        Some("ARDANA_API_KEY")
+    );
 
     for (text, duration) in [
         ("250ms", 250),

@@ -9,7 +9,7 @@ uncommitted fix: `ui/topbar.rs#follow_heights` keeps `--topbar-height` and `--ba
 padding, the in-flight banner's sticky `top` and the phone Share popover's `top`; `ui/mod.rs#show_text_field` brings an
 editor that Tab reaches whole into view; the binary of 00:52 on 2026-10-03, its served wasm, JS, `engine.js` and
 stylesheets byte-identical to `dist/` and the sources) behind a local server (`ardana serve`, decider-2b pulled) and a
-public one (`ardana serve --public`), on the installed Chrome 154 through Playwright with persistent profiles. Round 5's
+server that ran no model (a mode since removed), on the installed Chrome 154 through Playwright with persistent profiles. Round 5's
 walk (a server run's answers on the page while decider-0.8b downloads into the tab; Shift+Tab and Tab through every
 control and fact term: round 5's 16-stop walk, whole cycles, and whole cycles with a question's builder open) at
 320x640, 360x740, 390x844, 430x932 and 1280x800, 100% and 200% text (round 5's root font-size rule), light and dark,
@@ -19,9 +19,9 @@ for Pulling and onnxruntime-web's WASM module for Starting, the download throttl
 300 to 1280 px with both text sizes, the bars' boxes checked against the measured properties at every change of the
 banner, Stop hit-tested, the root's style changes and window errors counted; the top bar at 17 widths from 280 to 1280
 px with both text sizes; the phone Share popover at seven widths with both, at rest and in flight; the skip link, the
-sidebar's "On this page" rows and "Show the command"; Tab and clicks into the editors; reduced motion; the public
+sidebar's "On this page" rows and "Show the command"; Tab and clicks into the editors; reduced motion; the no-model
 server's opening page and an in-tab run on it; round 5's carried-findings script re-run; `impeccable detect --json` on
-five live states (local empty, loaded, results and run-command; the public opening page) at 1280x800 and 390x844 in
+five live states (local empty, loaded, results and run-command; the no-model server's opening page) at 1280x800 and 390x844 in
 light and dark, and on `index.html`, `styles/` and `placeholder/`. Evidence (scripts, JSON, notes, screenshots): round 1
 in `tmp/evals/audit/`, rounds 2 to 6 in `tmp/evals/audit/round2/` to `round6/`, each indexed by its `notes.txt`. Not
 exercised this round: a real screen reader (the fix changes no name, role or live region), real phones and their
@@ -87,7 +87,7 @@ bar and the banner take" until the bars outgrow the viewport (400% zoom with 200
   under the bar (also when the bar wraps mid-run at 300 px, 70 → 104 px) with Stop hit-testable; the popover hangs 8 px
   under the bar at every phone width and text size (over Run by 0 px; round 5: 17 px); the Raw exchange and Snippets
   jumps and "Show the command" land 11.5–12.5 px under the bars, and the skip link and "State and questions" bring the
-  page to its top; a click into an editor scrolls nothing and Tab brings it whole; reduced motion and the public
+  page to its top; a click into an editor scrolls nothing and Tab brings it whole; reduced motion and the no-model
   server's page hold.
 - New: at 400% zoom or with enlarged text the in-flight bars take most of a small screen (P2); "Skip to the page"
   changes the URL, and Back then reloads the share link over the edits (P2); a fact term's tooltip opens over the
@@ -240,11 +240,11 @@ the round history (round 6).
    - Category: Performance.
    - Evidence: This build's wasm is 935,577 bytes brotli and 3,730,258 raw (round 5: 3,707,220 raw; the fix's code is
      the difference). Round 5's measures stand: a cold first load of 1,048 KB on the local server and 1,081 KB on the
-     public one, first contentful paint 87–116 ms on loopback and 5,435–5,447 ms at 1.6 Mbps with 150 ms of latency,
+     no-model one, first contentful paint 87–116 ms on loopback and 5,435–5,447 ms at 1.6 Mbps with 150 ms of latency,
      blank until then (`round5/load.json`; round 4: 451 KB in all, the wasm 316 KB). onnxruntime-web is loaded only on
      an "In browser" pick; the tokenizer and planner are not, so every visitor pays for them, including those who only
      run server models.
-   - Impact: The public demo's first visit on a slow phone connection shows nothing for about three seconds longer than
+   - Impact: A first visit on a slow phone connection shows nothing for about three seconds longer than
      before the in-tab engine.
    - Recommendation: Build the in-tab engine (ardana-core's tokenizer and planner) as a second wasm module imported on
      the "In browser" pick, as onnxruntime-web is; or prerender the shell so the first paint does not wait for the wasm.
@@ -369,7 +369,7 @@ the round history (round 6).
   `round6/regress-bar.json`).
 - `show_text_field` is precise: a click into an editor half under the bars scrolls 0 px, and Tab into it brings it
   whole, 12 px under the bar or the banner (`round6/regress-jumps.json` textField).
-- The public server's opening page holds: decider-0.8b's "In browser" row with its model note, "Add a question to run"
+- The no-model server's opening page holds: decider-0.8b's "In browser" row with its model note, "Add a question to run"
   in the banner, the bar's property right at every width and text size, and whole Tab cycles at rest and during an
   in-tab run hide nothing (`round6/public.json`).
 - As round 5 measured them, on code this fix does not touch: the first run in the tab is guarded and controllable (the
@@ -446,7 +446,7 @@ the round history (round 6).
   hidden stop, and `detect` clean on 16 live scans and the file scans. The repeated-status, phone-run-focus and 400 KB
   P2s were not re-measured (the code they live in is unchanged since round 3).
 - Round 5 (fresh-context audit of the fix pass, commit ef50236, 2026-10-03; the "In browser" rows, the in-tab run, the
-  CLI handoff and the public server audited for the first time): P0 0 · P1 1 · P2 6 · P3 11, 16/20. The round-3 critique
+  CLI handoff and the no-model server audited for the first time): P0 0 · P1 1 · P2 6 · P3 11, 16/20. The round-3 critique
   (28/40, P1 ×2), re-verified on real models: its P1 on the unguarded, unstoppable 467.7 MB first run is closed (the
   size line before Run in the main column at every width on both servers, autorun waiting, Stop by keyboard and touch,
   Stop while pulling, another pick stopping the download; `round5/probe-static.json`, `round5/tab-desktop.json`,
@@ -457,7 +457,7 @@ the round history (round 6).
   residual on networks slower than the grace (P3 17); its in-tab failure P2 is closed (the page's words, one next step,
   recovery without a reload), with a residual: a failed runtime fetch leaves later runs on WASM (P3 17); the held Run's
   faded tooltip is closed (none on hover or focus); its run-command framing P2 stays open by plan decision Q2 (the
-  public server still says "This server has not pulled decider-4b", and the local one still leads with the install
+  no-model server still says "This server has not pulled decider-4b", and the local one still leads with the install
   line). Its minor notes are unchanged: two sizes for one model on one screen (467.7 MB in the tab, 811.8 MB for the
   CLI), "Received · HTTP 200" and decider-0.8b-v1 for a tab run (the API's own bytes, by DESIGN.md). Round 4's 13
   findings all reproduce on this build (`round5/carried.json`); two gain cases from the new states (the banner's words
@@ -489,7 +489,7 @@ the round history (round 6).
   (`round6/regress-bar.json`); the phone popover hangs 8 px under the bar in 18 width, text and flight combinations,
   over Run by 0 px (round 5: 17 px); the Raw exchange and Snippets jumps and "Show the command" land 11.5–12.5 px under
   the bars and the skip link and "State and questions" bring the page to its top, also with reduced motion; a click into
-  an editor scrolls 0 px and Tab brings it whole; the public opening page and an in-tab run on it hide nothing
+  an editor scrolls 0 px and Tab brings it whole; the no-model server's opening page and an in-tab run on it hide nothing
   (`round6/public.json`); `detect` reports 0 findings on 20 live scans and the file scans. Finding 2 is narrowed (the
   bar's wrap no longer hides focus, Run or the banner) to the segmented rows, now measured pushing the snippet's copy
   key off a phone's screen. Round 5's other findings reproduce (`round6/carried.json`) or stand on unchanged code. New:
