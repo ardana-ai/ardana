@@ -20,7 +20,7 @@ and a few questions. It reads everything once and answers each question with a p
 never writes text, so there is nothing to parse and nothing to retry.
 
 <p align="center">
-  <img src="docs/assets/demo.svg" alt="ardana run decider-2b routes a support ticket to billing at 93.5% and finds a refund request at 0.93" width="760">
+  <img src="docs/assets/demo.svg" alt="ardana run decider routes a support ticket to billing at 93.5% and finds a refund request at 0.93" width="760">
 </p>
 
 ## Install
@@ -42,7 +42,7 @@ It is one binary, installed in `~/.local/bin`.
 ## Get started
 
 ```shell
-ardana run decider-2b \
+ardana run decider \
   "My card was charged twice for order A-104. Please refund the duplicate." \
   --choice "Which department should handle this?" billing technical sales \
   --noul "Does the customer ask for a refund?"
@@ -72,13 +72,16 @@ A question is one of three types:
 ## Models
 
 ```shell
-ardana pull qwen3.5-0.8b   # download a model
-ardana list                # models on this machine
-ardana rm qwen3.5-0.8b     # remove one
+ardana pull qwen3.5         # download a model: qwen3.5:0.8b
+ardana pull decider:2b-q8_0  # one size of a model in another quantization
+ardana list                  # models on this machine
+ardana rm qwen3.5:0.8b       # remove one
 ```
 
-The library is at [ardana.ai/models](https://ardana.ai/models/). `decider-2b` is the default; `decider-0.8b` is the
-smallest. Any GGUF on Hugging Face works too (`ardana pull hf.co/<org>/<repo>`), and so does a model already in your
+The library is at [ardana.ai/models](https://ardana.ai/models/). A model is a family with its sizes inside, named
+`<family>:<size>` (`decider:2b`) and `<family>:<size>-<quant>` for another quantization; the family alone stands for
+its default size. `decider` (`decider:2b`) is the default; `decider:0.8b` is the smallest. Any GGUF on Hugging Face
+works too (`ardana pull hf.co/<org>/<repo>`), and so does a model already in your
 Ollama store (`ardana pull ollama:llama3.2`).
 
 ## API
@@ -89,7 +92,7 @@ ardana serve
 
 ```shell
 curl http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -d '{
-  "model": "decider-2b",
+  "model": "decider:2b",
   "state": "My card was charged twice for order A-104. Please refund the duplicate.",
   "questions": {
     "department": {
@@ -131,7 +134,7 @@ from typesafe_sdk import TypeSafeClient
 
 with TypeSafeClient() as client:
     response = client.system_one(
-        model="decider-2b",
+        model="decider:2b",
         state="My card was charged twice for order A-104. Please refund the duplicate.",
         questions={"refund": {"type": "noul", "instructions": "Does the customer ask for a refund?"}},
     )

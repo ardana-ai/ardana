@@ -26,28 +26,31 @@ variants").
 
 ### The step
 - The library document (`../ardana-landing/src/lib/data/models.json`, the landing checkout beside this one, read as
-  `ardana` reads it) declares the work: a model's `source` (`hf.co/<org>/<repo>@<commit>`, the checkpoint) and its
-  `browser` table (`weights` `hf.co/ardana-ai/<name>-ONNX`, `quant`). `cargo xtask onnx convert <name>` builds them
-  and records the browser table's `commit` (the local snapshot's), `size` (the bytes a browser downloads:
-  `model.onnx`, `model.onnx.data`, `tokenizer.json`) and `profile` (what `GET /v1/browser/<name>/profile` answers,
-  read from the snapshot by `BrowserCache::variant`); a model whose own `weights` is an ardana-ai repository also gets
-  its GGUF built, and its `commit`, `size` and the `size` of the `tags` item of its quant recorded. Never write these
-  by hand; rerun the step. A model without a browser table is refused by name, and `convert` and `publish` stop,
-  naming the document, when the landing checkout is not there.
-- What the steps record changes those fields of the one entry and no other byte: the document is read as a
+  `ardana` reads it) declares the work: `<name>` is a library name as `ardana` reads it that means a size's default
+  quant (Q10: `decider:0.8b`, `Decider:0.8B`, `decider:0.8b-q8_0`; `decider` is its latest size), which names one
+  size, its `source` (`{repo, commit}`, the checkpoint) and its `browser` table (`repo`
+  `hf.co/ardana-ai/<repo>-ONNX`, `quant`). `cargo xtask onnx convert <name>` builds them and records the browser
+  table's `commit` (the local snapshot's), `bytes` (what a browser downloads: `model.onnx`, `model.onnx.data`,
+  `tokenizer.json`) and `profile` (what `GET /v1/browser/<name>/profile` answers, read from the snapshot by
+  `BrowserCache::variant`); a size whose `gguf.repo` is an ardana-ai repository also gets its GGUF built, into the
+  `file` its quant names, and its `gguf.commit` and that quant's `bytes` recorded. Never write these by hand; rerun the
+  step. A name of another quant (`decider:2b-q8_0`), a tag the family lacks and a family the library lacks are refused,
+  saying which; so is a size without a browser table, by name; and `convert` and `publish` stop, naming the document,
+  when the landing checkout is not there.
+- What the steps record changes those fields of the one size and no other byte: the document is read as a
   `serde_json` value and written back in the landing's Prettier formatting (tabs, width 100, every object one key a
   line, an array on one line where it fits and else numbers filling the lines), and a document that does not read
   back byte for byte in that formatting is refused rather than rewritten. The result goes to the document and to the
   library snapshot (`crates/ardana-registry/tests/data/models.json`), which stay byte-identical; `npm run lint` in
   the landing checks the formatting.
-- Browser variants exist for decider-0.8b (int4, the browser default), decider-2b (int4) and qwen3.5-0.8b (int8: at
-  int4 the spike saw 4 of its 6 preset answers flip); decider-4b and smollm3-3b stay native-only.
+- Browser variants exist for decider:0.8b (int4, the browser default), decider:2b (int4) and qwen3.5:0.8b (int8: at
+  int4 the spike saw 4 of its 6 preset answers flip); decider:4b and smollm3:3b stay native-only.
 - The step runs under the home guard, by hand only: never in CI or from a test.
 
 ### Venv and downloads
 - `tmp/py/onnx` is the step's own venv (`python::pinned_venv`, the `export-decider` pattern), recreated when
   `pyvenv.cfg` points outside `tmp/uv/python`, with the pins above. llama.cpp's converter runs in it too, with the
-  clone's `gguf-py` (the script puts it first on `sys.path`); it converts decider-0.8b with transformers 5.18 although
+  clone's `gguf-py` (the script puts it first on `sys.path`); it converts decider:0.8b with transformers 5.18 although
   llama.cpp's requirements file pins 4.57.6.
 - The checkpoint comes through `tmp/py/onnx/bin/hf download <repo> --revision <commit>` into `tmp/hf/hub` (a cached
   snapshot is read in place); the export and the conversion then run with `HF_HUB_OFFLINE=1` and
@@ -74,7 +77,7 @@ variants").
 - The spike's second patch (`onnxruntime_genai.models.builders.base.Qwen3_5ForConditionalGeneration =
   AutoModelForCausalLM`) changed a module the builder never imports: `onnxruntime_genai/models/__init__.py` puts its
   directory on `sys.path` and the builder imports `builders.base`, a second module object. It is left out, and the
-  exports are byte-identical to the spike's (decider-2b int4 and qwen3.5-0.8b int8, sha256).
+  exports are byte-identical to the spike's (decider:2b int4 and qwen3.5:0.8b int8, sha256).
 - The graph: inputs `input_ids` (int64, `[batch, seq]`), `attention_mask` (int64, `[batch, total_seq]`),
   `position_ids` (int64, `[3, batch, seq]`, interleaved MRoPE), fp16 `past_key_values.<n>.{key,value}` for the
   full-attention layers (3, 7, ... 23) and `past.<n>.conv`, `past.<n>.recurrent` for the linear-attention ones; outputs
@@ -83,15 +86,16 @@ variants").
   checkpoint, so the repositories carry the source's files and browser and native read the same ids.
 
 ### GGUF
-- `convert_hf_to_gguf.py <snapshot> --outtype q8_0 --no-nextn --model-name <name> --outfile <name>-Q8_0.gguf`, so
-  the quant picker finds the file (`refs.rs#matches_quant`). The converter writes F32, F16, BF16 and Q8_0 itself;
+- `convert_hf_to_gguf.py <snapshot> --outtype q8_0 --no-nextn --model-name <name> --outfile <file>`: the canonical
+  name, and the `file` the document gives the size's default quant (`decider-0.8b-Q8_0.gguf`), which a library pull
+  downloads by that name. The converter writes F32, F16, BF16 and Q8_0 itself;
   another library `quant` for an ardana-ai GGUF is refused.
 - Always pass `--no-nextn`: decider configs declare `mtp_num_hidden_layers: 1` without MTP weights, and without the
   flag the GGUF claims 25 blocks and `nextn_predict_layers = 1`, which llama.cpp refuses to load ("null result from
   llama cpp"). Ardana never drafts, so no GGUF needs the draft tensors.
 
 ### Repositories and the cache layout
-- `ardana-ai/<name>-ONNX` holds `model.onnx`, `model.onnx.data` and `README.md`; `ardana-ai/<name>-GGUF` the GGUF and
+- `ardana-ai/<repo>-ONNX` holds `model.onnx`, `model.onnx.data` and `README.md`; `ardana-ai/<repo>-GGUF` the GGUF and
   `README.md`. Both carry the source's `tokenizer.json`, `tokenizer_config.json`, `chat_template.jinja`,
   `decider_config.json` and `LICENSE`, unchanged, where it has them.
 - `convert` writes each repository into `tmp/hf/hub/models--ardana-ai--<repo>/` in the official layout
@@ -103,13 +107,15 @@ variants").
   sorted), so rebuilding the same files makes the same snapshot, and `convert` records it in the document. After
   `publish`, `[[hf]]` and the document pin the Hub's commit and `cargo xtask fetch` moves `refs/main` to it.
 - `convert` reads both back offline through `ardana_registry`'s Hub: the release `ardana pull <name> --tokenizer
-  hf.co/ardana-ai/<name>-ONNX` in the scratch home `tmp/onnx/<name>/home`, with `HF_HUB_OFFLINE=1` and
-  `ARDANA_LIBRARY` at the document it just recorded, whose entry must point into the snapshots it wrote.
+  hf.co/ardana-ai/<repo>-ONNX` (the size's `browser.repo`) in the scratch home `tmp/onnx/<name>/home`, with
+  `HF_HUB_OFFLINE=1` and `ARDANA_LIBRARY` at the document it just recorded, whose registry entry must point into the
+  snapshots it wrote.
 
 ### Model cards
 - Front matter `license` (the source card's), `base_model: <source repo>`, `base_model_relation: quantized` and
-  `tags: [ardana, onnx|gguf]`; then the source repository and revision, the command that built it, and what each file
-  is. Claim nothing the step did not do.
+  `tags: [ardana, onnx|gguf]`; then the source repository and revision, the command that built it, the size's
+  canonical name with its `ardana pull <family>:<size>` and `ardana run <family>:<size>` lines, and what each file is.
+  Claim nothing the step did not do.
 
 ### onnxruntime-web
 - Vendored from the npm tarball `onnxruntime-web-1.30.0.tgz`, checked against the registry's `dist.integrity`, with the
@@ -140,9 +146,9 @@ variants").
   'model.onnx.data', data: <bytes> }] })`: the tab passes both files as `Uint8Array`s it downloaded or kept, never a
   URL, so onnxruntime fetches nothing itself. `session.release()` frees the weights before another model loads, and when
   the page picks a server row (the next run in the tab starts a session again from the kept files). It frees the
-  session's GPU buffers (about 625 MB of the GPU process's memory for decider-0.8b on WebGPU, 1.2 GB for qwen3.5-0.8b,
-  1.4 GB for decider-2b); the page's WebAssembly memories (onnxruntime-web's and the engine module's) never shrink, so
-  their high mark (on WebGPU about 585 MB for decider-0.8b, 895 MB for qwen3.5-0.8b and 966 MB for decider-2b; on
+  session's GPU buffers (about 625 MB of the GPU process's memory for decider:0.8b on WebGPU, 1.2 GB for qwen3.5:0.8b,
+  1.4 GB for decider:2b); the page's WebAssembly memories (onnxruntime-web's and the engine module's) never shrink, so
+  their high mark (on WebGPU about 585 MB for decider:0.8b, 895 MB for qwen3.5:0.8b and 966 MB for decider:2b; on
   WASM 1.94, 2.44 and 3.87 GB, under wasm32's 4 GB) stays with the page until a reload, and a later session reuses it.
   With the GPU process's share (1.0, 2.1 and 2.3 GB on WebGPU), a run takes 2.7 to 4.1 times the browser files in
   memory, which the page says as "3 to 4 times" beside what a first run downloads (measured in Chrome 154 with
@@ -161,7 +167,7 @@ variants").
 ### Publish and the token (Q12)
 - `publish` prints, for each repository, the card, the `hf repos create ardana-ai/<repo> --type model --public
   --exist-ok` and `hf upload ardana-ai/<repo> <snapshot> . --type model --commit-message <message> --format quiet`
-  commands and the `[[hf]]` entry it pins, then the document entry it pins; `--dry-run` stops there and writes
+  commands and the `[[hf]]` entry it pins, then the size's document entry it pins; `--dry-run` stops there and writes
   nothing.
 - The token is the user's: `HF_TOKEN`, else the real home's `~/.cache/huggingface/token` (`hf auth login`), read by
   xtask's own code, since the sandbox `HF_HOME` holds none. A child gets it only as `HF_TOKEN`, never in argv, and
@@ -170,8 +176,8 @@ variants").
   and the library document stay valid offline. Rerun it, or run the commands by hand.
 - After an upload, `publish` pins `[[hf]]` (`repo`, the Hub commit `hf upload` prints, every file but `README.md` and
   `LICENSE`) in `xtask/fetch.toml`, replacing an older pin of the repository, and the same commit in the document and
-  the snapshot: the browser table's `commit` for the ONNX repository, the model's own `commit` for the GGUF one. `cargo xtask fetch --tests` leaves out
-  `.onnx`, `.onnx.data` and `.gguf` files, so CI downloads no weights.
+  the snapshot: the browser table's `commit` for the ONNX repository, the size's `gguf.commit` for the GGUF one.
+  `cargo xtask fetch --tests` leaves out `.onnx`, `.onnx.data` and `.gguf` files, so CI downloads no weights.
 
 ## Sources
 - https://onnxruntime.ai/docs/genai/howto/build-model.html — the model builder: inputs, precisions, execution providers

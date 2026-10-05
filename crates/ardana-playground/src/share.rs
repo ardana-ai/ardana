@@ -91,8 +91,21 @@ mod tests {
     fn a_link_without_a_picked_model_carries_none() {
         let payload = SharePayload::new("Hi".into(), "{}".into(), String::new());
         assert!(payload.selected_models.is_empty());
-        let payload = SharePayload::new("Hi".into(), "{}".into(), "decider-2b".into());
-        assert_eq!(payload.selected_models, ["decider-2b"]);
+        let payload = SharePayload::new("Hi".into(), "{}".into(), "decider:2b".into());
+        assert_eq!(payload.selected_models, ["decider:2b"]);
+    }
+
+    /// A link carries the picked model under its canonical name, `:` and `-` in it, and reads back the same.
+    #[test]
+    fn a_link_carries_the_canonical_name() {
+        for model in ["decider:2b", "decider:2b-q8_0", "gemma-4:26b-a4b"] {
+            let payload = SharePayload::new("Hi".into(), "{}".into(), model.into());
+            let url = link("http://127.0.0.1:8000", &payload);
+            let read = from_hash(url.strip_prefix("http://127.0.0.1:8000/").unwrap())
+                .unwrap()
+                .unwrap();
+            assert_eq!(read.selected_models, [model]);
+        }
     }
 
     #[test]
@@ -106,7 +119,7 @@ mod tests {
 
     #[test]
     fn links_round_trip_in_jev_key_order() {
-        let payload = SharePayload::new("Café ☕".into(), "{\"q\": 1}".into(), "decider-2b".into());
+        let payload = SharePayload::new("Café ☕".into(), "{\"q\": 1}".into(), "decider:2b".into());
         let url = link("http://127.0.0.1:8000/", &payload);
         let hash = url.strip_prefix("http://127.0.0.1:8000/").unwrap();
         assert_eq!(from_hash(hash).unwrap().unwrap(), payload);
@@ -115,7 +128,7 @@ mod tests {
                 .unwrap();
         assert_eq!(
             String::from_utf16(&units).unwrap(),
-            r#"{"apiVersion":"v1","documentText":"Café ☕","promptsText":"{\"q\": 1}","selectedModels":["decider-2b"]}"#
+            r#"{"apiVersion":"v1","documentText":"Café ☕","promptsText":"{\"q\": 1}","selectedModels":["decider:2b"]}"#
         );
         // The landing's playground keeps its path.
         let url = link("https://ardana.ai/playground/", &payload);

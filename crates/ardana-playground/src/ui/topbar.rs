@@ -68,10 +68,10 @@ pub fn tab_status(name: &str, size: Option<u64>, stage: Stage) -> Option<String>
 
 /// What a browser model takes in memory once run, said after what its first run downloads: 3 to 4 times its files.
 /// Measured in Chrome 154 after a run of each browser model, as the page's memory after forced collections
-/// (`performance.measureUserAgentSpecificMemory`) and the GPU process's footprint: decider-0.8b 3.4 times on WebGPU
-/// (the page 585 MB, the GPU process 1.0 GB more) and 4.1 on WASM (1.94 GB in the page), qwen3.5-0.8b 3.3 and 2.7,
-/// decider-2b 2.9 and 3.5 (`tmp/evals/u2/memory*.json`). Running again adds nothing; picking a server row frees part of
-/// the GPU's share (625 MB of decider-0.8b's), and the page's WebAssembly memory never shrinks: only a reload frees all
+/// (`performance.measureUserAgentSpecificMemory`) and the GPU process's footprint: decider:0.8b 3.4 times on WebGPU
+/// (the page 585 MB, the GPU process 1.0 GB more) and 4.1 on WASM (1.94 GB in the page), qwen3.5:0.8b 3.3 and 2.7,
+/// decider:2b 2.9 and 3.5 (`tmp/evals/u2/memory*.json`). Running again adds nothing; picking a server row frees part of
+/// the GPU's share (625 MB of decider:0.8b's), and the page's WebAssembly memory never shrinks: only a reload frees all
 /// of it.
 pub const IN_MEMORY: &str = "Running it takes 3 to 4 times that in memory";
 
@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn the_banner_says_where_a_run_in_the_tab_is() {
-        let note = |stage| tab_note("decider-0.8b", Some(467_748_928), stage);
+        let note = |stage| tab_note("decider:0.8b", Some(467_748_928), stage);
         assert_eq!(
             note(Stage::Asking),
             None,
@@ -548,7 +548,7 @@ mod tests {
         assert_eq!(
             note(Stage::Pulling),
             Some((
-                "Pulling the browser files of decider-0.8b (467.7 MB) on the server".to_string(),
+                "Pulling the browser files of decider:0.8b (467.7 MB) on the server".to_string(),
                 None
             ))
         );
@@ -559,52 +559,52 @@ mod tests {
         assert_eq!(
             note(downloading),
             Some((
-                "Downloading decider-0.8b into this tab: 118.4 MB of 467.7 MB".to_string(),
+                "Downloading decider:0.8b into this tab: 118.4 MB of 467.7 MB".to_string(),
                 Some((118_400_000, 467_748_928))
             ))
         );
         assert_eq!(
             note(Stage::Starting).map(|(text, _)| text).as_deref(),
-            Some("Starting decider-0.8b in this tab")
+            Some("Starting decider:0.8b in this tab")
         );
         assert_eq!(
             note(Stage::Running(Backend::Wasm))
                 .map(|(text, _)| text)
                 .as_deref(),
-            Some("Running decider-0.8b in this tab on WASM")
+            Some("Running decider:0.8b in this tab on WASM")
         );
         assert_eq!(
-            tab_note("decider-0.8b", None, Stage::Pulling)
+            tab_note("decider:0.8b", None, Stage::Pulling)
                 .map(|(text, _)| text)
                 .as_deref(),
-            Some("Pulling the browser files of decider-0.8b on the server")
+            Some("Pulling the browser files of decider:0.8b on the server")
         );
     }
 
     /// The status region hears the banner's words, a download in tenths.
     #[test]
     fn the_status_counts_a_download_in_tenths() {
-        let status = |stage| tab_status("decider-0.8b", Some(467_748_928), stage);
+        let status = |stage| tab_status("decider:0.8b", Some(467_748_928), stage);
         let at = |done| Stage::Downloading {
             done,
             total: 467_748_928,
         };
         assert_eq!(
             status(at(0)).as_deref(),
-            Some("Downloading decider-0.8b into this tab: 0% of 467.7 MB")
+            Some("Downloading decider:0.8b into this tab: 0% of 467.7 MB")
         );
         assert_eq!(status(at(46_774_892)), status(at(0)));
         assert_eq!(
             status(at(46_774_893)).as_deref(),
-            Some("Downloading decider-0.8b into this tab: 10% of 467.7 MB")
+            Some("Downloading decider:0.8b into this tab: 10% of 467.7 MB")
         );
         assert_eq!(
             status(at(467_748_928)).as_deref(),
-            Some("Downloading decider-0.8b into this tab: 100% of 467.7 MB")
+            Some("Downloading decider:0.8b into this tab: 100% of 467.7 MB")
         );
         assert_eq!(
             status(Stage::Running(Backend::WebGpu)).as_deref(),
-            Some("Running decider-0.8b in this tab on WebGPU")
+            Some("Running decider:0.8b in this tab on WebGPU")
         );
         assert_eq!(status(Stage::Asking), None);
     }
@@ -627,13 +627,13 @@ mod tests {
     #[test]
     fn a_first_run_in_the_tab_says_what_it_downloads_and_takes() {
         assert_eq!(
-            first_download("decider-0.8b", 467_748_928, true),
-            "Run downloads decider-0.8b into this tab once: 467.7 MB, kept by this browser. Running it takes 3 to 4 \
+            first_download("decider:0.8b", 467_748_928, true),
+            "Run downloads decider:0.8b into this tab once: 467.7 MB, kept by this browser. Running it takes 3 to 4 \
              times that in memory."
         );
         assert_eq!(
-            first_download("decider-0.8b", 467_748_928, false),
-            "Run downloads decider-0.8b into this tab on each visit: 467.7 MB, as a page without HTTPS keeps no \
+            first_download("decider:0.8b", 467_748_928, false),
+            "Run downloads decider:0.8b into this tab on each visit: 467.7 MB, as a page without HTTPS keeps no \
              files. Running it takes 3 to 4 times that in memory."
         );
     }

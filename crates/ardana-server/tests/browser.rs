@@ -66,7 +66,7 @@ async fn raw(
 async fn browser_routes() -> Result<()> {
     let (_, models) = models(
         "browser-routes",
-        &["decider-2b", "stock"],
+        &["decider:2b", "stock"],
         ModelOptions::default(),
     )?;
     let app = router(models.clone(), None);
@@ -97,27 +97,27 @@ async fn browser_routes() -> Result<()> {
     assert_eq!(
         browser,
         [
-            ("decider-2b", Some(1_121_602_009)),
+            ("decider:2b", Some(1_121_602_009)),
             ("stock", None),
-            ("decider-0.8b", Some(467_748_928)),
-            ("decider-4b", None),
-            ("qwen3.5-0.8b", Some(904_574_185)),
-            ("smollm3-3b", None),
-            ("gemma-4-e2b", None),
-            ("gemma-4-e4b", None),
-            ("gemma-4-12b", None),
-            ("gemma-4-26b-a4b", None),
-            ("gemma-4-31b", None),
-            ("qwen3.6-35b-a3b", None),
-            ("qwen3.8-27b", None),
+            ("decider:0.8b", Some(467_748_928)),
+            ("decider:4b", None),
+            ("gemma-4:e2b", None),
+            ("gemma-4:e4b", None),
+            ("gemma-4:12b", None),
+            ("gemma-4:26b-a4b", None),
+            ("gemma-4:31b", None),
+            ("qwen3.5:0.8b", Some(904_574_185)),
+            ("qwen3.6:35b-a3b", None),
+            ("qwen3.8:27b", None),
+            ("smollm3:3b", None),
         ]
     );
 
     // R3.4: the cache holds a variant only at the commit the library names; a document naming one it lacks lists every
     // variant as not pulled.
     let mut moved = common::library()?;
-    for model in &mut moved.models {
-        if let Some(browser) = &mut model.browser {
+    for size in moved.models.iter_mut().flat_map(|family| &mut family.sizes) {
+        if let Some(browser) = &mut size.browser {
             browser.commit = "1111111111111111111111111111111111111111".into();
         }
     }
@@ -133,7 +133,7 @@ async fn browser_routes() -> Result<()> {
     )?;
     let (_, elsewhere) = common::models_from(
         "browser-routes-moved",
-        &["decider-2b"],
+        &["decider:2b"],
         ModelOptions::default(),
         LibrarySource::File(document),
     )?;
@@ -146,28 +146,32 @@ async fn browser_routes() -> Result<()> {
         .collect();
     assert!(pulled.is_empty(), "{pulled:?}");
 
-    // Every other name and file is the API's 404, before any pull; other methods are its 405.
+    // Every other name and file is the API's 404, before any pull: a size's canonical name is looked up whole (Q19), so
+    // a family, another spelling and a size without a browser variant name nothing; other methods are its 405.
     for uri in [
         "/v1/browser",
-        "/v1/browser/decider-0.8b",
-        "/v1/browser/decider-0.8b/",
-        "/v1/browser/decider-0.8b/model.onnx/extra",
-        "/v1/browser/decider-4b/model.onnx",
-        "/v1/browser/smollm3-3b/profile",
+        "/v1/browser/decider:0.8b",
+        "/v1/browser/decider:0.8b/",
+        "/v1/browser/decider:0.8b/model.onnx/extra",
+        "/v1/browser/decider/model.onnx",
+        "/v1/browser/decider:latest/model.onnx",
+        "/v1/browser/decider:4b/model.onnx",
+        "/v1/browser/gemma-4:e2b/model.onnx",
+        "/v1/browser/smollm3:3b/profile",
         "/v1/browser/stock/profile",
         "/v1/browser/nope/tokenizer.json",
-        "/v1/browser/DECIDER-0.8B/profile",
-        "/v1/browser/decider-0.8b:q8_0/profile",
-        "/v1/browser/decider-0.8b/README.md",
-        "/v1/browser/decider-0.8b/decider_config.json",
-        "/v1/browser/decider-0.8b/tokenizer_config.json",
-        "/v1/browser/decider-0.8b/chat_template.jinja",
-        "/v1/browser/decider-0.8b/model.onnx.datax",
-        "/v1/browser/decider-0.8b/Profile",
-        "/v1/browser/decider-0.8b/..%2Fdecider-0.8b-GGUF%2Fdecider_config.json",
+        "/v1/browser/DECIDER:0.8B/profile",
+        "/v1/browser/decider:0.8b-q8_0/profile",
+        "/v1/browser/decider:0.8b/README.md",
+        "/v1/browser/decider:0.8b/decider_config.json",
+        "/v1/browser/decider:0.8b/tokenizer_config.json",
+        "/v1/browser/decider:0.8b/chat_template.jinja",
+        "/v1/browser/decider:0.8b/model.onnx.datax",
+        "/v1/browser/decider:0.8b/Profile",
+        "/v1/browser/decider:0.8b/..%2Fdecider-0.8b-GGUF%2Fdecider_config.json",
         "/v1/browser/..%2F..%2F..%2Fmodels.toml/profile",
-        "/v1/browser/decider-0.8b/%2e%2e",
-        "/v1/browser/decider-0.8b/%FF",
+        "/v1/browser/decider:0.8b/%2e%2e",
+        "/v1/browser/decider:0.8b/%FF",
     ] {
         let reply = get(&app, uri).await?;
         assert_eq!(
@@ -181,7 +185,7 @@ async fn browser_routes() -> Result<()> {
         let reply = send(
             &app,
             method,
-            "/v1/browser/decider-0.8b/model.onnx",
+            "/v1/browser/decider:0.8b/model.onnx",
             &[],
             Vec::new(),
         )
@@ -211,7 +215,7 @@ async fn browser_routes() -> Result<()> {
     let keyed = router(models, Some("secret".into()));
     for (uri, status) in [
         ("/v1/models", 403),
-        ("/v1/browser/decider-0.8b/profile", 403),
+        ("/v1/browser/decider:0.8b/profile", 403),
         ("/v1/browser/nope/profile", 403),
         ("/health", 200),
     ] {
@@ -260,14 +264,14 @@ async fn same_bytes(body: Body, path: &Path) -> Result<u64> {
 #[ignore = "e2e: the browser variants `cargo xtask onnx convert` builds into tmp/hf"]
 async fn browser_files() -> Result<()> {
     let repo = "ardana-ai/decider-0.8b-ONNX";
-    let (_, models) = models("browser-files", &["decider-2b"], ModelOptions::default())?;
+    let (_, models) = models("browser-files", &["decider:2b"], ModelOptions::default())?;
     let app = router(models.clone(), None);
 
     // Requests for one model share one pull, and the variant it pulled serves every later request.
     let pulls: Vec<_> = (0..8)
         .map(|_| {
             let models = models.clone();
-            tokio::spawn(async move { models.browser("decider-0.8b").await })
+            tokio::spawn(async move { models.browser("decider:0.8b").await })
         })
         .collect();
     let mut pulled = Vec::new();
@@ -281,9 +285,10 @@ async fn browser_files() -> Result<()> {
     let model = pulled[0].clone();
     // R3.4: the files of the commit the library entry names.
     let library = common::library()?;
-    let (_, browser) = library
-        .browser("decider-0.8b")
-        .context("decider-0.8b has a browser variant")?;
+    let pick = library
+        .browser("decider:0.8b")
+        .context("decider:0.8b has a browser variant")?;
+    let browser = pick.size.browser.context("a browser variant")?;
     assert_eq!(model.commit, browser.commit);
     assert_eq!(model.reference, format!("hf.co/{repo}"));
     let snapshot = PathBuf::from(std::env::var_os("HF_HOME").context("HF_HOME is not set")?)
@@ -302,7 +307,7 @@ async fn browser_files() -> Result<()> {
         ("model.onnx.data", "application/octet-stream"),
         ("tokenizer.json", "application/json"),
     ] {
-        let uri = format!("/v1/browser/decider-0.8b/{file}");
+        let uri = format!("/v1/browser/decider:0.8b/{file}");
         let request = Request::builder()
             .uri(&uri)
             .header("accept-encoding", "br, gzip, deflate")
@@ -350,7 +355,7 @@ async fn browser_files() -> Result<()> {
     // not parse are the whole file; a range past the end is a 416 that names the length. The profile is always whole.
     let version = format!("\"{}\"", model.commit);
     for file in ["model.onnx", "model.onnx.data"] {
-        let uri = format!("/v1/browser/decider-0.8b/{file}");
+        let uri = format!("/v1/browser/decider:0.8b/{file}");
         let path = browser_file(repo, file)?;
         let len = std::fs::metadata(&path)?.len();
         let slice = |start: u64, end: u64| -> Result<Vec<u8>> {
@@ -452,7 +457,7 @@ async fn browser_files() -> Result<()> {
     let (status, headers, body) = raw(
         &app,
         "GET",
-        "/v1/browser/decider-0.8b/profile",
+        "/v1/browser/decider:0.8b/profile",
         &[("range", "bytes=0-15")],
     )
     .await?;
@@ -462,8 +467,8 @@ async fn browser_files() -> Result<()> {
     let listed = get(&app, "/v1/models").await?;
     let listed = listed.body["models"]
         .as_array()
-        .and_then(|models| models.iter().find(|m| m["name"] == "decider-0.8b"))
-        .context("decider-0.8b is listed")?
+        .and_then(|models| models.iter().find(|m| m["name"] == "decider:0.8b"))
+        .context("decider:0.8b is listed")?
         .clone();
     assert_eq!(
         listed["x_browser"],
@@ -475,8 +480,8 @@ async fn browser_files() -> Result<()> {
         "the hub cache holds the variant whole: a request for its files pulls nothing"
     );
 
-    // The profile, as `ardana pull decider-0.8b` derives it from the same decider_config.json.
-    let profile = get(&app, "/v1/browser/decider-0.8b/profile").await?;
+    // The profile, as `ardana pull decider:0.8b` derives it from the same decider_config.json.
+    let profile = get(&app, "/v1/browser/decider:0.8b/profile").await?;
     isolated("profile", &profile.headers);
     assert_eq!(profile.status, 200);
     assert_eq!(
@@ -493,9 +498,9 @@ async fn browser_files() -> Result<()> {
     assert_eq!(profile.body["name"], "decider-0.8b-v1");
     assert_eq!(profile.body["layout"], json!({"kind": "plain"}));
 
-    // qwen3.5-0.8b has no decider_config.json: the stock profile in the chat layout of the chat template beside its
-    // tokenizer, which equals the one the native model reads from Qwen/Qwen3.5-0.8B.
-    let qwen = get(&app, "/v1/browser/qwen3.5-0.8b/profile").await?;
+    // qwen3.5:0.8b has no decider_config.json: the stock profile, named canonically, in the chat layout of the chat
+    // template beside its tokenizer, which equals the one the native model reads from Qwen/Qwen3.5-0.8B.
+    let qwen = get(&app, "/v1/browser/qwen3.5:0.8b/profile").await?;
     assert_eq!(qwen.status, 200, "{qwen:?}");
     let native_tokenizer = hf_file("Qwen/Qwen3.5-0.8B", "tokenizer.json")?;
     let mut native = ardana_registry::read_profile(
@@ -503,10 +508,11 @@ async fn browser_files() -> Result<()> {
         &ardana_registry::load_tokenizer(&native_tokenizer)?,
         None,
         LayoutKind::Chat,
-        "qwen3.5-0.8b",
+        "qwen3.5:0.8b",
     )?;
     native.release_date = Some("2026-02-28".into());
     assert_eq!(qwen.body, serde_json::to_value(&native)?);
+    assert_eq!(qwen.body["name"], "qwen3.5:0.8b");
     assert!(
         matches!(native.layout, Layout::Chat { .. }),
         "{:?}",

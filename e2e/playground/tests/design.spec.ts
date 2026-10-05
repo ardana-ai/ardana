@@ -1,5 +1,5 @@
 // The design suite's in-tab states (`cargo xtask e2e design` runs only `@design` tests; `cargo xtask e2e playground`
-// leaves them out). The real page runs decider-0.8b's browser variant on the design server; the moment its download
+// leaves them out). The real page runs decider:0.8b's browser variant on the design server; the moment its download
 // passes a quarter, and again once the answers are drawn, the DOM is cloned and written out as one self-contained
 // page (no script; the stylesheets as served, their fonts inlined) that `impeccable detect` renders by file URL at the
 // same viewport. A rendered scan of the live URL cannot catch these states: a download holds the network busy, and the
@@ -75,7 +75,7 @@ test('browser_states', { tag: '@design' }, async ({ page }, testInfo) => {
   const out = process.env.ARDANA_DESIGN_OUT;
   expect(out, 'cargo xtask e2e design passes the directory the states go to').toBeTruthy();
   await page.goto('/');
-  await pickInBrowser(page, 'decider-0.8b');
+  await pickInBrowser(page, 'decider:0.8b');
   await loadPreset(page, 'Ticket routing');
   await installFreezer(page);
   await runKey(page).click();

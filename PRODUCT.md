@@ -13,7 +13,7 @@ ticket, a transcript, a resume, a JSON record) and a handful of questions they w
 
 ## Product Purpose
 Ardana is a local-first tool that pulls and runs open System 1 decision models the way Ollama does (`ardana pull
-decider-2b`, or just a first request naming it), from one `ardana` binary. A decision is
+decider:2b`, or just a first request naming it), from one `ardana` binary. A decision is
 one forward pass: the model reads the state and every question once and returns calibrated probabilities, never
 generated text. The playground bundled in the binary is where a developer tries a state and questions against a local
 model, reads the calibrated answers, and copies the exact request into code. Success is a developer who trusts the
@@ -35,14 +35,15 @@ language: real local model names, never Jev's.
   commands: `ardana pull` to put it on this server and the `ardana run` command that sends the same request (in the
   standalone build, ardana.ai's install line takes the pull's place).
 - Share links (`#share/<lz-string payload>`), including those on docs.typesafe.ai, open in it.
-- Models come from Ardana's library (`decider-2b` by default) or any `hf.co/` GGUF, pulled with `ardana pull`, `ardana
+- Models come from Ardana's library (`decider:2b` by default) or any `hf.co/` GGUF, pulled with `ardana pull`, `ardana
   run` or an API request's first use, and are listed by `/v1/models`: decider-format System 1 models and stock instruct
-  models read in chat layout. The playground never makes the server pull one, under any spelling of its name: a model
-  the server has not pulled shows `ardana pull <name>`, to run where the server runs, and the page runs it on the
+  models read in chat layout. The playground never makes the server pull one: it knows the names `/v1/models` lists
+  and runs only a pulled one on the server; any other name, a model the server has not pulled or one it does not
+  list, shows `ardana pull <name>` as written, to run where the server runs, and the page runs it on the
   server once the list it reads again (after each run, and whenever its tab comes back) says it is pulled; the
   standalone build, which no server serves, shows how to install ardana and run it, and offers the browser default in the tab
-  instead; and a server with nothing pulled opens on the browser default (decider-0.8b) in the tab.
-- A library model with a browser variant (decider-0.8b, decider-2b, qwen3.5-0.8b) can also run in the visitor's tab:
+  instead; and a server with nothing pulled opens on the browser default (decider:0.8b) in the tab.
+- A library model with a browser variant (decider:0.8b, decider:2b, qwen3.5:0.8b) can also run in the visitor's tab:
   the server pulls its ONNX files once and serves them, the tab downloads them once and keeps them (where the page is a
   secure context; elsewhere it downloads them on each visit, and says so), and onnxruntime-web (vendored, same origin)
   runs them on WebGPU, else WASM. Before a first run the page says what Run will download, and what the model then
@@ -75,7 +76,7 @@ language: real local model names, never Jev's.
 ## Evidence on Hand
 - Real requests: `tests/fixtures/requests/ticket.json`, `sentiment.json`; JevBench's 231 public items under
   `tmp/src/jevbench/datasets/public/`.
-- Real model output from decider-2b, Qwen3.5-0.8B, SmolLM3-3B and Ollama `llama3.2`.
+- Real model output from decider:2b, Qwen3.5-0.8B, SmolLM3-3B and Ollama `llama3.2`.
 - No customers, testimonials, benchmarks for marketing, or pricing exist; none may be invented.
 
 ## Product Principles

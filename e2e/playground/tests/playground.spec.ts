@@ -1,4 +1,4 @@
-// W6 cases of the embedded playground, against the release `ardana` serving decider-2b (see playwright.config.ts).
+// W6 cases of the embedded playground, against the release `ardana` serving decider:2b (see playwright.config.ts).
 // The share links here are written as Jev's playground writes them, with its `jev-latest` alias; the picker reads
 // the alias as the server's default model and names that model.
 import fs from 'node:fs';
@@ -94,7 +94,7 @@ test('embedded_binary', async ({ page, baseURL }, testInfo) => {
 
   // Picking an "In browser" row loads the runtime from this origin; the module the page loaded is 1.30.0.
   const loaded = page.waitForResponse((r) => new URL(r.url()).pathname === '/ort/1.30.0/ort.webgpu.bundle.min.mjs');
-  await pickInBrowser(page, 'decider-0.8b');
+  await pickInBrowser(page, 'decider:0.8b');
   expect((await loaded).status()).toBe(200);
   expect(await page.evaluate("import('/ort/1.30.0/ort.webgpu.bundle.min.mjs').then((ort) => ort.env.versions.web)")).toBe(
     '1.30.0',
@@ -119,7 +119,7 @@ test('answers_match_api', async ({ page }, testInfo) => {
   await expect(page.getByTestId('channel')).toHaveCount(Object.keys(ticket.questions).length);
   const models = (await (await page.request.get('/v1/models')).json()) as { models: ModelInfo[] };
   const defaultModel = models.models.find((m) => m.x_default)!.name;
-  expect(defaultModel).toBe('decider-2b');
+  expect(defaultModel).toBe('decider:2b');
   await expect(page.locator('#model')).toHaveValue(defaultModel);
   await expect(page.locator(`#model option[value="${defaultModel}"]`)).toHaveText(defaultModel);
   await screenshot(page, testInfo, 'answers_match_api', 'loaded');
@@ -210,8 +210,8 @@ test('picker_raw_errors', async ({ page, baseURL }, testInfo) => {
   const pulled = models.models.filter((m) => m.x_pulled !== false);
   const inBrowser = models.models.filter((m) => m.x_browser !== undefined);
   const library = models.models.filter((m) => m.x_pulled === false);
-  expect(pulled.map((m) => m.name)).toEqual(['decider-2b']);
-  expect(inBrowser.map((m) => m.name)).toEqual(['decider-2b', 'decider-0.8b', 'qwen3.5-0.8b']);
+  expect(pulled.map((m) => m.name)).toEqual(['decider:2b']);
+  expect(inBrowser.map((m) => m.name)).toEqual(['decider:2b', 'decider:0.8b', 'qwen3.5:0.8b']);
   expect(library.length).toBeGreaterThan(0);
   const ticket = fixture('ticket.json');
   await page.goto(`/${shareHash(ticket)}`);

@@ -157,13 +157,14 @@ pub struct RunArgs {
 
 #[derive(Debug, Args)]
 pub struct PullArgs {
-    /// A library model, hf.co/<org>/<repo>[:<quant or file.gguf>], ollama:<name>[:<tag>] or a GGUF path
+    /// A library model <family>[:<size>[-<quant>]], hf.co/<org>/<repo>[:<quant or file.gguf>], ollama:<name>[:<tag>] or
+    /// a GGUF path
     #[arg(value_name = "MODEL")]
     pub reference: String,
     /// The tokenizer, when the weights come without one: hf.co/<org>/<repo> or a tokenizer.json
     #[arg(long, value_name = "TOKENIZER")]
     pub tokenizer: Option<String>,
-    /// The name to pull it as; default the library name or the repository name
+    /// The name to pull it as; default the library model's canonical name or the repository name
     #[arg(long)]
     pub name: Option<String>,
     /// plain for decider models, chat for instruct models; default plain when decider_config.json is present
@@ -298,7 +299,8 @@ fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
     })
 }
 
-/// `ardana pull`: resolve the library name (its manifest fetched, Q8) or reference and record it in the registry.
+/// `ardana pull`: resolve the library name (its family's manifest fetched, Q16) or reference and record it in the
+/// registry under the canonical name (Q7, Q10).
 fn pull(args: &PullArgs) -> Result<()> {
     let opts = PullOptions {
         name: args.name.clone(),
@@ -334,14 +336,14 @@ fn record(model: ResolvedModel) -> Result<(ResolvedModel, Registry)> {
     Ok((model, registry))
 }
 
-/// What `name` means in `registry`: a pulled entry under its exact name, with the library untouched; else the library's
-/// answer for it (Q8: under a URL source the model's manifest, fetched now, the cached copy standing in when the GET
-/// fails), which may be an entry pulled under another spelling.
+/// What `name` means in `registry`: a pulled entry under its exact name, with the library untouched (Q25); else the
+/// library's answer for it (under a URL source the family's manifest, fetched now, the cached copy standing in when the
+/// GET fails, Q16), which may be an entry pulled under its canonical name (Q10).
 fn named<'a>(registry: &'a Registry, name: &str) -> Result<Named<'a>> {
     if let Ok(model) = registry.entry(name) {
         return Ok(Named::Pulled(model));
     }
-    // A pulled model sends nothing under any spelling (Q8): its pull cached the manifest that names it.
+    // A pulled model sends nothing under any spelling: its pull cached the manifest that names it.
     let client = LibraryClient::from_env()?;
     if let Ok(library) = client.cached(name)
         && let Ok(Named::Pulled(model)) = registry.named(name, &library)
@@ -386,8 +388,8 @@ fn list() -> Result<()> {
     Ok(())
 }
 
-/// `ardana show`: a pulled model's entry and profile, or a library model's download as the library cache describes
-/// it (no request is sent, Q8).
+/// `ardana show`: a pulled model's entry and profile, or a library quant's download as the library cache describes it
+/// (no request is sent).
 fn show(args: &ShowArgs) -> Result<()> {
     let registry = Registry::open_default()?;
     let library = LibraryClient::from_env()?.cached(&args.name)?;
@@ -398,8 +400,8 @@ fn show(args: &ShowArgs) -> Result<()> {
             let entry = json!({
                 "name": pick.name(),
                 "source": pick.reference(),
-                "size": pick.size(),
-                "release_date": pick.model.release_date,
+                "size": pick.quant.bytes,
+                "release_date": pick.size.release_date,
                 "pulled": false,
             });
             println!("{}", serde_json::to_string_pretty(&entry)?);
@@ -465,18 +467,22 @@ fn show_pulled(model: &ResolvedModel) -> String {
 }
 
 fn show_library(pick: &LibraryPick) -> String {
-    let mut about = vec![("name", pick.name()), ("source", pick.reference())];
-    if let Some(bytes) = pick.size() {
-        about.push(("size", format!("{} to download", human_size(bytes))));
-    }
-    about.push(("released", pick.model.release_date.clone()));
-    about.push((
-        "status",
-        format!(
-            "not pulled yet; `ardana pull {}` or its first run downloads it",
-            pick.name()
+    let about = vec![
+        ("name", pick.name()),
+        ("source", pick.reference()),
+        (
+            "size",
+            format!("{} to download", human_size(pick.quant.bytes)),
         ),
-    ));
+        ("released", pick.size.release_date.clone()),
+        (
+            "status",
+            format!(
+                "not pulled yet; `ardana pull {}` or its first run downloads it",
+                pick.name()
+            ),
+        ),
+    ];
     render::sections(&[("Model", about)])
 }
 
@@ -655,11 +661,12 @@ fn run_named(name: &str, args: &RunArgs, request: &SystemOneRequest) -> Result<A
     let name = match named(&registry, name)? {
         Named::Pulled(model) => model.name.clone(),
         Named::Library(pick) => {
-            let size = pick
-                .size()
-                .map(|bytes| format!(", {}", human_size(bytes)))
-                .unwrap_or_default();
-            eprintln!("pulling {} ({}{size})", pick.name(), pick.reference());
+            eprintln!(
+                "pulling {} ({}, {})",
+                pick.name(),
+                pick.reference(),
+                human_size(pick.quant.bytes)
+            );
             let opts = PullOptions {
                 progress: true,
                 ..PullOptions::default()
@@ -776,7 +783,7 @@ mod tests {
             .try_get_matches_from([
                 "ardana",
                 "run",
-                "decider-2b",
+                "decider:2b",
                 "state",
                 "--score",
                 "How upset?",

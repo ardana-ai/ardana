@@ -61,7 +61,7 @@ pub struct ServeArgs {
     /// Require this key on /v1 (Authorization: Bearer <key>); without one the API is open
     #[arg(long, env = "ARDANA_API_KEY", hide_env_values = true)]
     pub api_key: Option<String>,
-    /// The model for requests that name none (or Jev's jev-latest); default the first pulled model, else decider-2b
+    /// The model for requests that name none (or Jev's jev-latest); default the first pulled model, else decider
     #[arg(
         long,
         value_name = "MODEL",

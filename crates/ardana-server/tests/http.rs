@@ -1,7 +1,9 @@
 //! R5.4 to R5.6 and R5.8 through the router: the API surface, model resolution, every error shape, and the
-//! `ardana serve` defaults; R4.4: a name the library's index lacks is asked of the library once. Requests are read
-//! with decider-2b's real tokenizer and profile; the weights are the fake runtime's, since these tests check what
-//! happens around a decode (the real model runs in `cargo xtask e2e jevcompat|sdk|jevbench`).
+//! `ardana serve` defaults; R3.1 to R3.4: one `/v1/models` row per library size under its canonical name, every
+//! spelling of a model answered by its one entry, the default model under any spelling, and a name the library's index
+//! does not resolve asked of the library once. Requests are read with decider:2b's real tokenizer and profile; the
+//! weights are the fake runtime's, since these tests check what happens around a decode (the real model runs in
+//! `cargo xtask e2e jevcompat|sdk|jevbench`).
 
 mod common;
 
@@ -61,7 +63,7 @@ fn validation_shape(reply: &Reply) {
 async fn surface() -> Result<()> {
     let (fake, models) = models(
         "http-surface",
-        &["decider-2b", "stock"],
+        &["decider:2b", "stock"],
         ModelOptions::default(),
     )?;
     let app = router(models.clone(), None);
@@ -70,7 +72,7 @@ async fn surface() -> Result<()> {
     assert_eq!(health.status, 200);
     assert_eq!(health.body["status"], "ok");
     assert_eq!(health.body["x_loaded"], json!([]));
-    let temperatures = &health.body["x_temperature_by_type"]["decider-2b"];
+    let temperatures = &health.body["x_temperature_by_type"]["decider:2b"];
     for t in ["choice", "noul", "score"] {
         assert!(
             temperatures[t].as_f64().is_some_and(|v| v > 0.0),
@@ -83,32 +85,34 @@ async fn surface() -> Result<()> {
     assert_eq!(
         listed.body,
         with_held_variants(json!({"models": [
-            {"name": "decider-2b", "description": "hf.co/test/decider-2b-GGUF", "release_date": "2026-09-24",
+            {"name": "decider:2b", "description": "hf.co/test/decider:2b-GGUF", "release_date": "2026-09-24",
              "x_pulled": true, "x_default": true, "x_browser": 1_121_602_009},
             {"name": "stock", "description": "hf.co/test/stock-GGUF", "release_date": "2026-09-28", "x_pulled": true},
-            {"name": "decider-0.8b", "description": "hf.co/ardana-ai/decider-0.8b-GGUF:Q8_0",
+            {"name": "decider:0.8b", "description": "hf.co/ardana-ai/decider-0.8b-GGUF:decider-0.8b-Q8_0.gguf",
              "release_date": "2026-09-19", "x_pulled": false, "x_size": 811_843_552, "x_browser": 467_748_928,
              "x_browser_default": true},
-            {"name": "decider-4b", "description": "hf.co/Mapika/decider-4b-GGUF:Q4_K_M", "release_date": "2026-09-24",
-             "x_pulled": false, "x_size": 2_708_804_640_u64},
-            {"name": "qwen3.5-0.8b", "description": "hf.co/ggml-org/Qwen3.5-0.8B-GGUF:Q4_0",
-             "release_date": "2026-02-28", "x_pulled": false, "x_size": 563_036_064, "x_browser": 904_574_185},
-            {"name": "smollm3-3b", "description": "hf.co/ggml-org/SmolLM3-3B-GGUF:Q4_K_M",
-             "release_date": "2025-07-08", "x_pulled": false, "x_size": 1_915_305_312},
-            {"name": "gemma-4-e2b", "description": "hf.co/ggml-org/gemma-4-E2B-it-GGUF:Q4_0",
+            {"name": "decider:4b", "description": "hf.co/Mapika/decider-4b-GGUF:decider-4b-v2.1-Q4_K_M.gguf",
+             "release_date": "2026-09-24", "x_pulled": false, "x_size": 2_708_804_640_u64},
+            {"name": "gemma-4:e2b", "description": "hf.co/ggml-org/gemma-4-E2B-it-GGUF:gemma-4-E2B-it-Q4_0.gguf",
              "release_date": "2026-03-02", "x_pulled": false, "x_size": 2_841_481_184_u64},
-            {"name": "gemma-4-e4b", "description": "hf.co/ggml-org/gemma-4-E4B-it-GGUF:Q4_0",
+            {"name": "gemma-4:e4b", "description": "hf.co/ggml-org/gemma-4-E4B-it-GGUF:gemma-4-E4B-it-Q4_0.gguf",
              "release_date": "2026-03-02", "x_pulled": false, "x_size": 4_590_807_392_u64},
-            {"name": "gemma-4-12b", "description": "hf.co/ggml-org/gemma-4-12B-it-GGUF:Q4_0",
+            {"name": "gemma-4:12b", "description": "hf.co/ggml-org/gemma-4-12B-it-GGUF:gemma-4-12B-it-Q4_0.gguf",
              "release_date": "2026-05-23", "x_pulled": false, "x_size": 7_219_673_216_u64},
-            {"name": "gemma-4-26b-a4b", "description": "hf.co/ggml-org/gemma-4-26B-A4B-it-GGUF:Q4_0",
+            {"name": "gemma-4:26b-a4b",
+             "description": "hf.co/ggml-org/gemma-4-26B-A4B-it-GGUF:gemma-4-26B-A4B-it-Q4_0.gguf",
              "release_date": "2026-03-11", "x_pulled": false, "x_size": 14_618_145_824_u64},
-            {"name": "gemma-4-31b", "description": "hf.co/ggml-org/gemma-4-31B-it-GGUF:Q4_0",
+            {"name": "gemma-4:31b", "description": "hf.co/ggml-org/gemma-4-31B-it-GGUF:gemma-4-31B-it-Q4_0.gguf",
              "release_date": "2026-03-11", "x_pulled": false, "x_size": 17_992_313_088_u64},
-            {"name": "qwen3.6-35b-a3b", "description": "hf.co/ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M",
+            {"name": "qwen3.5:0.8b", "description": "hf.co/ggml-org/Qwen3.5-0.8B-GGUF:Qwen3.5-0.8B-Q4_0.gguf",
+             "release_date": "2026-02-28", "x_pulled": false, "x_size": 563_036_064, "x_browser": 904_574_185},
+            {"name": "qwen3.6:35b-a3b",
+             "description": "hf.co/ggml-org/Qwen3.6-35B-A3B-GGUF:Qwen3.6-35B-A3B-Q4_K_M.gguf",
              "release_date": "2026-04-15", "x_pulled": false, "x_size": 20_419_565_568_u64},
-            {"name": "qwen3.8-27b", "description": "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
+            {"name": "qwen3.8:27b", "description": "hf.co/ggml-org/Qwen3.8-27B-GGUF:Qwen3.8-27B-Q4_K_M.gguf",
              "release_date": "2026-08-05", "x_pulled": false, "x_size": 18_973_870_528_u64},
+            {"name": "smollm3:3b", "description": "hf.co/ggml-org/SmolLM3-3B-GGUF:SmolLM3-Q4_K_M.gguf",
+             "release_date": "2025-07-08", "x_pulled": false, "x_size": 1_915_305_312},
         ]}))
         .await?
     );
@@ -120,12 +124,12 @@ async fn surface() -> Result<()> {
     )
     .await?;
     assert_eq!(empty.status, 200, "{empty:?}");
-    assert_eq!(empty.body["model"], "decider-2b");
+    assert_eq!(empty.body["model"], "decider:2b");
     assert_eq!(empty.body["answers"], json!({}));
     assert_eq!(empty.body["usage"]["output_tokens"], 0);
     assert_eq!(
         get(&app, "/health").await?.body["x_loaded"],
-        json!(["decider-2b"])
+        json!(["decider:2b"])
     );
 
     let answered = post(
@@ -162,6 +166,109 @@ async fn surface() -> Result<()> {
         (reply.status.as_u16(), reply.body),
         (405, json!({"detail": "Method Not Allowed"}))
     );
+    Ok(())
+}
+
+/// R3.1 (Q18): over the snapshot, an empty registry lists every size in document order under its canonical name, with
+/// its default quant's bytes, the document's default and browser default marked once each; pulled entries come first,
+/// another quant its own row, and no library row repeats a pulled size.
+#[tokio::test]
+async fn sizes_are_rows() -> Result<()> {
+    let (fake, models) = models("http-sizes-are-rows", &[], ModelOptions::default())?;
+    let listed = get(&router(models, None), "/v1/models").await?.body;
+    let rows = listed["models"].as_array().context("models")?;
+    /// (name, x_size, x_default, x_browser, x_browser_default)
+    type Row<'a> = (&'a str, Option<u64>, bool, Option<u64>, bool);
+    let flags: Vec<Row> = rows
+        .iter()
+        .map(|m| {
+            assert_eq!(m["x_pulled"], false, "{m}");
+            (
+                m["name"].as_str().unwrap_or_default(),
+                m["x_size"].as_u64(),
+                m["x_default"] == true,
+                m["x_browser"].as_u64(),
+                m["x_browser_default"] == true,
+            )
+        })
+        .collect();
+    assert_eq!(
+        flags,
+        [
+            (
+                "decider:0.8b",
+                Some(811_843_552),
+                false,
+                Some(467_748_928),
+                true
+            ),
+            (
+                "decider:2b",
+                Some(1_274_396_800),
+                true,
+                Some(1_121_602_009),
+                false
+            ),
+            ("decider:4b", Some(2_708_804_640), false, None, false),
+            ("gemma-4:e2b", Some(2_841_481_184), false, None, false),
+            ("gemma-4:e4b", Some(4_590_807_392), false, None, false),
+            ("gemma-4:12b", Some(7_219_673_216), false, None, false),
+            ("gemma-4:26b-a4b", Some(14_618_145_824), false, None, false),
+            ("gemma-4:31b", Some(17_992_313_088), false, None, false),
+            (
+                "qwen3.5:0.8b",
+                Some(563_036_064),
+                false,
+                Some(904_574_185),
+                false
+            ),
+            ("qwen3.6:35b-a3b", Some(20_419_565_568), false, None, false),
+            ("qwen3.8:27b", Some(18_973_870_528), false, None, false),
+            ("smollm3:3b", Some(1_915_305_312), false, None, false),
+        ]
+    );
+    assert_eq!(
+        flags.iter().map(|f| f.0).collect::<Vec<_>>(),
+        common::library()?.names(),
+        "the snapshot's order"
+    );
+
+    let (_, models) = common::models(
+        "http-sizes-are-rows-pulled",
+        &["decider:2b", "decider:2b-q8_0"],
+        ModelOptions::default(),
+    )?;
+    let listed = get(&router(models, None), "/v1/models").await?.body;
+    let rows: Vec<(&str, bool)> = listed["models"]
+        .as_array()
+        .context("models")?
+        .iter()
+        .map(|m| {
+            (
+                m["name"].as_str().unwrap_or_default(),
+                m["x_pulled"] == true,
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("decider:2b", true),
+            ("decider:2b-q8_0", true),
+            ("decider:0.8b", false),
+            ("decider:4b", false),
+            ("gemma-4:e2b", false),
+            ("gemma-4:e4b", false),
+            ("gemma-4:12b", false),
+            ("gemma-4:26b-a4b", false),
+            ("gemma-4:31b", false),
+            ("qwen3.5:0.8b", false),
+            ("qwen3.6:35b-a3b", false),
+            ("qwen3.8:27b", false),
+            ("smollm3:3b", false),
+        ]
+    );
+    assert_eq!(fake.loads(), 0, "listing loads nothing");
     Ok(())
 }
 
@@ -229,12 +336,12 @@ async fn model_resolution() -> Result<()> {
 
     // A library model may be the default before it is pulled; a registry entry of its name is the pulled one.
     let opts = ModelOptions {
-        default_model: Some("decider-4b:q4_k_m".into()),
+        default_model: Some("decider:4b-q4_k_m".into()),
         ..ModelOptions::default()
     };
     let (_, models) = common::models(
         "http-model-resolution-library-default",
-        &["decider-2b"],
+        &["decider:2b"],
         opts,
     )?;
     let listed = get(&router(models, None), "/v1/models").await?.body;
@@ -253,28 +360,54 @@ async fn model_resolution() -> Result<()> {
     assert_eq!(
         flags,
         [
-            ("decider-2b", true, false),
-            ("decider-0.8b", false, false),
-            ("decider-4b", false, true),
-            ("qwen3.5-0.8b", false, false),
-            ("smollm3-3b", false, false),
-            ("gemma-4-e2b", false, false),
-            ("gemma-4-e4b", false, false),
-            ("gemma-4-12b", false, false),
-            ("gemma-4-26b-a4b", false, false),
-            ("gemma-4-31b", false, false),
-            ("qwen3.6-35b-a3b", false, false),
-            ("qwen3.8-27b", false, false),
+            ("decider:2b", true, false),
+            ("decider:0.8b", false, false),
+            ("decider:4b", false, true),
+            ("gemma-4:e2b", false, false),
+            ("gemma-4:e4b", false, false),
+            ("gemma-4:12b", false, false),
+            ("gemma-4:26b-a4b", false, false),
+            ("gemma-4:31b", false, false),
+            ("qwen3.5:0.8b", false, false),
+            ("qwen3.6:35b-a3b", false, false),
+            ("qwen3.8:27b", false, false),
+            ("smollm3:3b", false, false),
         ]
+    );
+
+    // R3.2 (Q10): every spelling of a library size reaches its one entry, under its canonical name.
+    let (fake, models) = common::models(
+        "http-model-resolution-spellings",
+        &["decider:2b"],
+        ModelOptions::default(),
+    )?;
+    let app = router(models, None);
+    for model in [
+        "decider",
+        "Decider:LATEST",
+        "decider:2b-q4_k_m",
+        "decider:2b",
+    ] {
+        let reply = post(&app, &ask(Some(model))).await?;
+        assert_eq!(
+            (reply.status.as_u16(), &reply.body["model"]),
+            (200, &json!("decider:2b")),
+            "{model}"
+        );
+    }
+    assert_eq!(fake.loads(), 1, "one entry, loaded once");
+    assert_eq!(
+        get(&app, "/health").await?.body["x_loaded"],
+        json!(["decider:2b"])
     );
 
     // With nothing pulled, the library default is the default model and an unknown name points to the library.
     let (_, models) = common::models("http-model-resolution-empty", &[], ModelOptions::default())?;
     let app = router(models, None);
     let listed = get(&app, "/v1/models").await?.body;
-    assert_eq!(listed["models"][0]["name"], "decider-2b");
-    assert_eq!(listed["models"][0]["x_default"], true);
-    assert_eq!(listed["models"][0]["x_size"], 1_274_396_800_u64);
+    assert_eq!(listed["models"][1]["name"], "decider:2b");
+    assert_eq!(listed["models"][1]["x_default"], true);
+    assert_eq!(listed["models"][1]["x_size"], 1_274_396_800_u64);
     assert_eq!(
         listed["models"].as_array().map(Vec::len),
         Some(12),
@@ -351,7 +484,7 @@ async fn errors() -> Result<()> {
         max_queued_rows: 2,
         ..ModelOptions::default()
     };
-    let (fake, models) = models("http-errors", &["decider-2b"], opts)?;
+    let (fake, models) = models("http-errors", &["decider:2b"], opts)?;
     let app = router(models.clone(), None);
     let json_type = [("content-type", "application/json")];
 
@@ -518,10 +651,14 @@ async fn errors() -> Result<()> {
     Ok(())
 }
 
-/// A loopback library (C2) publishing `index` at `/models.json` and each of its models' manifests at
-/// `/models/<name>.json`, 404 elsewhere; the paths it answered, in order.
-async fn library_server(index: Value) -> Result<(String, Arc<Mutex<Vec<String>>>)> {
-    let models: Arc<Vec<Value>> = Arc::new(index["models"].as_array().cloned().unwrap_or_default());
+/// A loopback library (C2) publishing `index` at `/models.json` and each family of the document `published` as its
+/// manifest at `/models/<family>.json`, 404 elsewhere; the paths it answered, in order.
+async fn library_server(
+    index: Value,
+    published: &Value,
+) -> Result<(String, Arc<Mutex<Vec<String>>>)> {
+    let models: Arc<Vec<Value>> =
+        Arc::new(published["models"].as_array().cloned().unwrap_or_default());
     let paths: Arc<Mutex<Vec<String>>> = Arc::default();
     let seen = paths.clone();
     let manifest = move |Path(file): Path<String>| {
@@ -556,19 +693,29 @@ async fn library_server(index: Value) -> Result<(String, Arc<Mutex<Vec<String>>>
     Ok((url, paths))
 }
 
-/// R4.4: under a URL source, a request naming a model the index lacks sends one manifest GET; on a 404 the answer is
-/// the unknown-model 404, and the same name (in any spelling) sends no further GET until the next index refresh. A
-/// reference is no library name and asks nothing.
+/// The library snapshot (C5) as JSON.
+fn snapshot() -> Result<Value> {
+    let path = std::env::var_os("ARDANA_LIBRARY").context("cargo sets ARDANA_LIBRARY")?;
+    Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
+}
+
+/// R3.4 (Q11, Q16): under a URL source whose index lacks the size decider:4b, a request naming a family the index
+/// lacks, and one naming a tag the index's family lacks, each send one GET of the family's manifest and pull nothing; a
+/// family the manifest 404s is the unknown-model 404, a tag the manifest lacks Q12's 404 listing the manifest's tags,
+/// and a tag it lists is served; no name of the family (in any spelling) sends another GET until the next index
+/// refresh. A reference is no library name and asks nothing.
 #[tokio::test]
 async fn unknown_names_ask_the_library_once() -> Result<()> {
-    let snapshot = common::library()?;
-    let index: Value = serde_json::from_str(&std::fs::read_to_string(
-        std::env::var_os("ARDANA_LIBRARY").context("cargo sets ARDANA_LIBRARY")?,
-    )?)?;
-    let (url, paths) = library_server(index).await?;
-    let (_, models) = common::models_from(
+    let published = snapshot()?;
+    let mut index = published.clone();
+    index["models"][0]["sizes"]
+        .as_array_mut()
+        .context("decider's sizes")?
+        .retain(|size| size["size"] != "4b");
+    let (url, paths) = library_server(index, &published).await?;
+    let (fake, models) = common::models_from(
         "http-unknown-names",
-        &["alpha"],
+        &["alpha", "decider:4b"],
         ModelOptions::default(),
         LibrarySource::Url(url),
     )?;
@@ -580,7 +727,7 @@ async fn unknown_names_ask_the_library_once() -> Result<()> {
     let listed = get(&app, "/v1/models").await?.body;
     assert_eq!(
         listed["models"].as_array().map(Vec::len),
-        Some(1 + snapshot.models.len())
+        Some(2 + common::library()?.names().len() - 1)
     );
 
     let ask = |model: &str| json!({"model": model, "state": "s", "questions": {}});
@@ -588,7 +735,8 @@ async fn unknown_names_ask_the_library_once() -> Result<()> {
     assert_eq!(reply.status, 404);
     assert_eq!(
         error_shape(&reply, "not_found_error"),
-        "no model named \"gamma\"; pulled: alpha; the library at https://ardana.ai/models/ is pulled on first use"
+        "no model named \"gamma\"; pulled: alpha, decider:4b; the library at https://ardana.ai/models/ is pulled on \
+         first use"
     );
     assert_eq!(seen(), ["/models.json", "/models/gamma.json"]);
     for again in ["gamma", "Gamma", "gamma:q8_0"] {
@@ -600,13 +748,80 @@ async fn unknown_names_ask_the_library_once() -> Result<()> {
     assert_eq!(reply.status, 404);
     assert_eq!(seen().len(), 2, "a reference is asked of no library");
 
+    let unknown_tag =
+        "decider has no tag \"9b\"; its tags are 0.8b, 2b, 2b-q8_0, 2b-bf16, 4b, 4b-q8_0, 4b-bf16";
+    let reply = post(&app, &ask("decider:9b")).await?;
+    assert_eq!(reply.status, 404, "{reply:?}");
+    assert_eq!(error_shape(&reply, "not_found_error"), unknown_tag);
+    assert_eq!(seen()[2..], ["/models/decider.json"]);
+    let reply = post(&app, &ask("Decider:9B")).await?;
+    assert_eq!(
+        error_shape(&reply, "not_found_error"),
+        unknown_tag.replace("\"9b\"", "\"9B\"")
+    );
+    for spelling in ["decider:4b", "Decider:4B-Q4_K_M"] {
+        let reply = post(&app, &ask(spelling)).await?;
+        assert_eq!(
+            (reply.status.as_u16(), &reply.body["model"]),
+            (200, &json!("decider:4b")),
+            "{spelling}"
+        );
+    }
+    assert_eq!(seen().len(), 3, "the family's manifest is asked once");
+    assert_eq!(fake.loads(), 1, "nothing pulled, decider:4b loaded");
+
     models.refresh_library().await;
-    assert_eq!(seen().len(), 3);
-    assert_eq!(seen()[2], "/models.json");
-    let reply = post(&app, &ask("gamma")).await?;
-    assert_eq!(reply.status, 404);
-    assert_eq!(seen()[3], "/models/gamma.json");
-    assert_eq!(seen().len(), 4);
+    assert_eq!(seen()[3..], ["/models.json"]);
+    for (model, path) in [
+        ("gamma", "/models/gamma.json"),
+        ("decider:9b", "/models/decider.json"),
+    ] {
+        assert_eq!(post(&app, &ask(model)).await?.status, 404, "{model}");
+        assert_eq!(seen().last().map(String::as_str), Some(path), "{model}");
+    }
+    assert_eq!(seen().len(), 6);
+    Ok(())
+}
+
+/// R3.4 (Q11, Q12): a tag the family does not list is a 404 that names the family and lists its canonical tags in
+/// document order, and pulls nothing; an unknown family keeps the unknown-model 404.
+#[tokio::test]
+async fn an_unknown_tag_lists_the_family() -> Result<()> {
+    let (fake, models) = models("http-unknown-tag", &["alpha"], ModelOptions::default())?;
+    let app = router(models.clone(), None);
+    let ask = |model: &str| json!({"model": model, "state": "s", "questions": {}});
+    for (model, message) in [
+        (
+            "gemma-4:9b",
+            "gemma-4 has no tag \"9b\"; its tags are e2b, e2b-q8_0, e2b-bf16, e4b, e4b-q8_0, e4b-bf16, 12b, \
+             12b-q8_0, 12b-bf16, 26b-a4b, 26b-a4b-q8_0, 26b-a4b-bf16, 31b, 31b-q8_0, 31b-bf16",
+        ),
+        (
+            "Decider:2b-Q5_K_M",
+            "decider has no tag \"2b-Q5_K_M\"; its tags are 0.8b, 2b, 2b-q8_0, 2b-bf16, 4b, 4b-q8_0, 4b-bf16",
+        ),
+        (
+            "smollm3:",
+            "smollm3 has no tag \"\"; its tags are 3b, 3b-q8_0, 3b-f16",
+        ),
+        (
+            "gemma-5",
+            "no model named \"gemma-5\"; pulled: alpha; the library at https://ardana.ai/models/ is pulled on first use",
+        ),
+    ] {
+        let reply = post(&app, &ask(model)).await?;
+        assert_eq!(reply.status, 404, "{model}: {reply:?}");
+        assert_eq!(error_shape(&reply, "not_found_error"), message, "{model}");
+    }
+    assert_eq!(fake.loads(), 0);
+    assert_eq!(
+        models
+            .registry()
+            .map_err(|err| anyhow::anyhow!("{err:?}"))?
+            .names(),
+        ["alpha"],
+        "nothing pulled"
+    );
     Ok(())
 }
 
@@ -617,8 +832,11 @@ struct Serve {
     args: ServeArgs,
 }
 
-#[test]
-fn defaults() -> Result<()> {
+/// The `serve` flags' defaults and environment variables; R3.3 (Q10, Q15): `--default-model` under any spelling is
+/// the one entry it means for requests without a model and `jev-*`, once the library resolves it (at start, or at a
+/// URL source's first read); else the first pulled entry, else the document's default.
+#[tokio::test]
+async fn defaults() -> Result<()> {
     let args = Serve::try_parse_from(["serve"])?.args;
     assert_eq!(args.addr(), "127.0.0.1:8000");
     assert_eq!(args.keep_alive, Duration::from_secs(300));
@@ -706,5 +924,86 @@ fn defaults() -> Result<()> {
         );
     }
     assert!(ardana_server::parse_duration("5 days").is_err());
+
+    let ask = |model: Option<&str>| {
+        let mut body = json!({"state": "s", "questions": {}});
+        if let Some(model) = model {
+            body["model"] = json!(model);
+        }
+        body
+    };
+    let default_model = |name: &str| ModelOptions {
+        default_model: Some(name.into()),
+        ..ModelOptions::default()
+    };
+    let marked = |listed: &Value| -> Vec<String> {
+        listed["models"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|m| m["x_default"] == true)
+            .filter_map(|m| m["name"].as_str().map(String::from))
+            .collect()
+    };
+    for spelling in [
+        "gemma-4",
+        "Gemma-4:LATEST",
+        "gemma-4:e4b-q4_0",
+        "gemma-4:e4b",
+    ] {
+        let (_, models) = common::models(
+            "http-defaults-spelling",
+            &["alpha", "gemma-4:e4b"],
+            default_model(spelling),
+        )?;
+        assert_eq!(models.default_model(), "gemma-4:e4b", "{spelling}");
+        let app = router(models, None);
+        for model in [None, Some("jev-latest")] {
+            assert_eq!(
+                post(&app, &ask(model)).await?.body["model"],
+                "gemma-4:e4b",
+                "{spelling}, {model:?}"
+            );
+        }
+        assert_eq!(
+            marked(&get(&app, "/v1/models").await?.body),
+            ["gemma-4:e4b"]
+        );
+    }
+    // Not pulled yet, the library row is the default.
+    let (_, models) = common::models(
+        "http-defaults-library",
+        &["alpha"],
+        default_model("gemma-4"),
+    )?;
+    assert_eq!(
+        marked(&get(&router(models, None), "/v1/models").await?.body),
+        ["gemma-4:e4b"]
+    );
+    // A URL source's empty cache resolves nothing at start: the spelling is the default until the first read.
+    let published = snapshot()?;
+    let (url, _) = library_server(published.clone(), &published).await?;
+    let (_, models) = common::models_from(
+        "http-defaults-url",
+        &[],
+        default_model("Gemma-4"),
+        LibrarySource::Url(url),
+    )?;
+    assert_eq!(models.default_model(), "gemma-4");
+    models.refresh_library().await;
+    assert_eq!(models.default_model(), "gemma-4:e4b");
+    assert_eq!(
+        marked(&get(&router(models, None), "/v1/models").await?.body),
+        ["gemma-4:e4b"]
+    );
+    // Without `--default-model`: the first pulled entry, else the document's default.
+    let (_, models) = common::models(
+        "http-defaults-pulled",
+        &["alpha", "beta"],
+        ModelOptions::default(),
+    )?;
+    assert_eq!(models.default_model(), "alpha");
+    let (_, models) = common::models("http-defaults-none", &[], ModelOptions::default())?;
+    assert_eq!(models.default_model(), "decider:2b");
     Ok(())
 }

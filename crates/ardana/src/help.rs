@@ -1,5 +1,6 @@
-//! The examples and notes under each command's `--help`. They name no library model but the default one and point
-//! to the library's page instead (Q11), and read nothing when clap builds the command.
+//! The examples and notes under each command's `--help`. They name no library model but the family `decider`, the
+//! default one, write any other as `<family>:<size>-<quant>` and point to the library's page instead (Q12, Q15), and
+//! read nothing when clap builds the command.
 
 use ardana_registry::library::{DEFAULT_MODEL, LIBRARY_OFF, LIBRARY_URL, LIBRARY_VAR, MODELS_PAGE};
 use ardana_server::LIBRARY_REFRESH_VAR;
@@ -8,7 +9,7 @@ pub fn main() -> String {
     format!(
         "Examples:
   ardana run {DEFAULT_MODEL} \"My card was charged twice.\" --noul \"Does the customer ask for a refund?\"
-  ardana pull {DEFAULT_MODEL}:q8_0
+  ardana pull <family>:<size>-<quant>
   ardana serve
 
 Models: the library at {MODELS_PAGE} ({DEFAULT_MODEL} is the default), or any GGUF on Hugging Face
@@ -47,9 +48,9 @@ The state comes before the questions. A library model ({MODELS_PAGE}) that is no
 pub fn pull() -> String {
     format!(
         "Examples:
-  A library model, or another quantization of it:
+  A library model, or one size of it in another quantization:
     ardana pull {DEFAULT_MODEL}
-    ardana pull {DEFAULT_MODEL}:q8_0
+    ardana pull <family>:<size>-<quant>
 
   Any GGUF repository on Hugging Face (add the tokenizer's repository when the GGUF one has none):
     ardana pull hf.co/unsloth/Qwen3-4B-GGUF
@@ -59,7 +60,7 @@ pub fn pull() -> String {
     ardana pull ollama:llama3.2
     ardana pull ./model.gguf --tokenizer ./tokenizer.json --name my-model
 
-Library: {MODELS_PAGE}; a library model's manifest is read from {LIBRARY_VAR} (default {LIBRARY_URL}).
+Library: {MODELS_PAGE}; a library family's manifest is read from {LIBRARY_VAR} (default {LIBRARY_URL}).
 Weights download to the Hugging Face cache; Ollama and local files are read where they are."
     )
 }
@@ -75,7 +76,7 @@ pub fn show() -> String {
         "Examples:
   ardana show {DEFAULT_MODEL}
   ardana show {DEFAULT_MODEL} --json
-  ardana show {DEFAULT_MODEL}:q8_0       A library model not pulled yet, from the library cache"
+  ardana show <family>:<size>-<quant>    A library model not pulled yet, from the library cache"
     )
 }
 
@@ -85,13 +86,13 @@ pub fn ps() -> String {
 }
 
 pub fn rm() -> String {
-    format!(
-        "Examples:
-  ardana rm {DEFAULT_MODEL}
-  ardana rm {DEFAULT_MODEL} my-model
+    "Examples:
+  ardana rm <name>
+  ardana rm <name> my-model
 
-Only the entries are removed: the weights stay in the Hugging Face cache, the Ollama store or where they were."
-    )
+A name is an entry's as `ardana list` prints it. Only the entries are removed: the weights stay in the Hugging Face
+cache, the Ollama store or where they were."
+        .to_string()
 }
 
 pub fn serve() -> String {

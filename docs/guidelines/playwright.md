@@ -34,7 +34,7 @@ share-link decoding.
   browser lands in `tmp/` and the home guard stays clean; browser profiles go to the OS temp dir, which is `tmp/sys`.
 - Run Playwright only through `cargo xtask e2e playground` (guarded) or, when iterating, `npx playwright test` in a
   shell that has evaluated `cargo xtask env`. Never from a shell with the real `HOME` caches.
-- Run end-to-end requirements against the real `ardana` server and a real model (decider-2b Q4_K_M from `tmp/hf`).
+- Run end-to-end requirements against the real `ardana` server and a real model (decider:2b Q4_K_M from `tmp/hf`).
   Use `page.route` / `route.fulfill` only in clearly separate unit-ish specs (e.g. a stub `422` body to exercise
   rendering) and name them so; never let a routed spec satisfy an R6.x/R7.x case.
 - Bind the server to `127.0.0.1` on an explicit port and point `use.baseURL` at `http://127.0.0.1:<port>`; tests call
@@ -69,7 +69,7 @@ share-link decoding.
   viewport: { width: 1280, height: 800 } } }` and `{ name: 'mobile', use: { channel: 'chrome', viewport: { width: 390,
   height: 844 } } }`. Do not spread `devices['iPhone ...']` descriptors: they switch the browser type away from Chrome.
 - Ardana's choice: `cargo xtask e2e playground` starts the server (the release binary copied alone into
-  `tmp/e2e/playground-binary`, decider-2b pulled offline, `crates/ardana-playground/dist` moved away while it runs)
+  `tmp/e2e/playground-binary`, decider:2b pulled offline, `crates/ardana-playground/dist` moved away while it runs)
   and passes `ARDANA_BASE_URL` and `ARDANA_REPO_ROOT`; the config has no `webServer` and throws without
   `ARDANA_BASE_URL`. It runs `playwright test --grep-invert "@design|@standalone"`: tests tagged `@design` belong to
   `cargo xtask e2e design`, which runs `--grep @design --reporter list --output tmp/playwright/design-results`, and
@@ -132,62 +132,66 @@ share-link decoding.
 - Docs share links (R7.3): `fixtures/jev-share-links.json` vendors every `console.typesafe.ai/playground#share/` link
   found on docs.typesafe.ai (17, all on cookbook pages) with its page. `jev_share_links` has one test per link: the
   editors hold the decoded `documentText` and `promptsText`, the picker the first `selectedModels` entry (the
-  server's default model, decider-2b, when absent or a `jev-*` alias), and every question id gets a displayed answer. Two links name `speed_latest`, which
-  Ardana does not serve: the test first checks the 404 fault naming it (Q7), then picks decider-2b and runs. The
+  server's default model, decider:2b, when absent or a `jev-*` alias), and every question id gets a displayed answer. Two links name `speed_latest`, which
+  no row carries: the test first checks the ardana CLI's commands under that name and that Run sends nothing (Q20),
+  then picks decider:2b and runs. The
   largest links take minutes (every row decodes a 12k-token state), hence `test.setTimeout(900_000)`.
 - First run (`first_run`, R3.5): xtask starts one more `ardana serve` on an empty `ARDANA_HOME` with
   `HF_HUB_OFFLINE=1` (`Server::start_empty`) and passes it as `ARDANA_EMPTY_URL`; a run in the tab pulls no model, so
-  both projects find the registry empty. The case checks `/v1/models` (nothing pulled, decider-2b the default,
-  decider-0.8b alone `x_browser_default`), opens a Jev-style share link (`jev-latest`), checks the picker opens on
-  decider-0.8b's "In browser" row with its note and that no readable text (`visibleText`: body text, option and
+  both projects find the registry empty. The case checks `/v1/models` (nothing pulled, decider:2b the default,
+  decider:0.8b alone `x_browser_default`), opens a Jev-style share link (`jev-latest`), checks the picker opens on
+  decider:0.8b's "In browser" row with its note and that no readable text (`visibleText`: body text, option and
   optgroup labels, `placeholder`, `aria-label`, `title`) contains "jev", then presses Run: the answer comes from the
   tab (`decider-0.8b-v1`, "in this tab on"), every `data-value` matches its raw panel, no request goes to
   `/v1/systemone`, and the registry is still empty.
 - A model the server cannot run (`run_command`, R3.3 as the user amended it, in `tests/cli.spec.ts`): on the
-  decider-2b server, a share link naming decider-4b opens on its server row; Run is held (`aria-disabled`, its
-  description and the banner say "This server has not pulled decider-4b: pull it with the ardana CLI"), the snippets
-  show `ardana pull decider-4b` (`pull`, with what it downloads in `pull-note`) and `ardana run <name> --request -`
+  decider:2b server, a share link naming decider:4b opens on its server row; Run is held (`aria-disabled`, its
+  description and the banner say "This server has not pulled decider:4b: pull it with the ardana CLI"), the snippets
+  show `ardana pull decider:4b` (`pull`, with what it downloads in `pull-note`) and `ardana run <name> --request -`
   whose heredoc (`ardanaCommand`) is exactly `JSON.stringify(request, null, 2)` of the request Run would send, and no
   `install` line (a local server runs ardana already); neither Run (clicked with `force`: Playwright waits on
   `aria-disabled` buttons) nor Ctrl+Enter sends anything (the Run label, `aria-busy`, an unchanged `run-status` and the
   request log), and the held Run shows no tooltip when hovered (its `::after` is `display: none`). "Show the command"
   focuses the Snippets summary with the pull in view, every other model the server has not pulled shows the same, so
-  does a link naming `Decider-4B` (on decider-4b's row) and one naming `decider-4b:q8_0` (a quant the server would
-  pull, which the list does not size) with and without `?autorun=1`, with no `POST /v1/systemone` from any; an "In
-  browser" row shows the ardana command without the install line, after `ardana pull` for decider-0.8b (not pulled
-  here) and alone for decider-2b (pulled); and decider-2b then runs on the server again.
+  does a link naming `Decider:4B` (a name is the row it equals, ASCII case ignored: decider:4b's row), and so do links
+  naming what no row carries, `decider`, `decider:2b-q8_0`, `decider-2b` and `nomodel`, under the name as written and
+  never split (the list does not size them), with and without `?autorun=1`, with no `POST /v1/systemone` from any; an
+  "In browser" row shows the ardana command without the install line, after `ardana pull` for decider:0.8b (not pulled
+  here) and alone for decider:2b (pulled); and a link naming `Decider:2B` opens on decider:2b's row, which runs on the
+  server again.
 - The standalone build (`tests/standalone.spec.ts`, `@standalone`): the page at `/playground/` GETs `/models.json`
   once on load, requests nothing under `/v1/` and nothing from another origin until a run in the tab, every other
   request under `/playground/` and none failed (`requestfailed`, or a status of 400 and over), and lists the served
-  document's entries in its order (the snapshot's at first, `crates/ardana-registry/tests/data/models.json`, which
-  `run_command` reads too for the models the server lacks); `standalone_browser_run` runs in a persistent profile of
-  its own, as `browser_run` does, takes `ardana run decider-0.8b --request - --json` (`ARDANA_BIN`, a home of its own,
-  `HF_HUB_OFFLINE=1`) as the answer to match, and expects exactly the three file URLs
-  `<hub>/<org>/<repo>/resolve/<browser.commit>/<file>` from the stand-in; after a reload it sums the stand-in's
-  `responseBodySize`s. The server rows hold Run behind ardana.ai's install line (`INSTALL`), and nothing goes out when
-  Run is pressed. `standalone_library_update` adds an entry to the served file and sends the tab's return (the
-  `focus` and `visibilitychange` events, as `pull_while_open` does), expecting the row with no reload (a value the
-  page's script held survives); `standalone_library_unavailable` removes the file before the load (the `models-fault`
-  alert under the picker, an empty picker with no note, Run held by "The model library is unavailable", Snippets'
-  `ardana run <model>`), serves it again with an entry for a later `ardana` and one that does not read (both left
-  out, the browser default's row picked, the editors kept), removes it again (the alert, the list and the pick kept,
-  Run free) and serves a `schema: 2` document (the alert with the schema reason), counting the document's GETs: one
-  per load and per return.
+  document's sizes in its order, one `<family>:<size>` row each with its default quant's bytes (`rows` in the spec;
+  the snapshot's at first, `crates/ardana-registry/tests/data/models.json`, which `run_command` reads too for the
+  models the server lacks); `standalone_browser_run` runs in a persistent profile of its own, as `browser_run` does,
+  takes `ardana run decider:0.8b --request - --json` (`ARDANA_BIN`, a home of its own, `HF_HUB_OFFLINE=1`) as the
+  answer to match, and expects exactly the three file URLs `<hub>/<org>/<repo>/resolve/<browser.commit>/<file>` from
+  the stand-in; after a reload it sums the stand-in's `responseBodySize`s. The server rows hold Run behind ardana.ai's
+  install line (`INSTALL`), and nothing goes out when Run is pressed. `standalone_library_update` adds a size to the
+  `decider` family of the served file (its row then comes after `decider:4b`, before the next family's) and sends the
+  tab's return (the `focus` and `visibilitychange` events, as `pull_while_open` does), expecting the row with no
+  reload (a value the page's script held survives); `standalone_library_unavailable` removes the file before the load
+  (the `models-fault` alert under the picker, an empty picker with no note, Run held by "The model library is
+  unavailable", Snippets' `ardana run <model>`), serves it again with a family and a size for a later `ardana` and a
+  family and a size that do not read (all left out, the browser default's row picked, the editors kept), removes it
+  again (the alert, the list and the pick kept, Run free) and serves a `schema: 2` document (the alert with the schema
+  reason), counting the document's GETs: one per load and per return.
 - A pull while the page is open (`pull_while_open`): on one more empty server (`ARDANA_PULL_URL`, its home in
   `ARDANA_PULL_HOME`), so the other servers' lists stay as their cases expect, the case first undoes the other
-  project's pull (`ardana rm`, entries only), picks qwen3.5-0.8b's server row (the pull shown, Run held), runs the shown
-  `ardana pull qwen3.5-0.8b` with the binary under test (`ARDANA_BIN` first on `PATH`, `HF_HUB_OFFLINE=1` over
+  project's pull (`ardana rm`, entries only), picks qwen3.5:0.8b's server row (the pull shown, Run held), runs the shown
+  `ardana pull qwen3.5:0.8b` with the binary under test (`ARDANA_BIN` first on `PATH`, `HF_HUB_OFFLINE=1` over
   `tmp/hf`) and sees the server list it while the page still holds Run; the tab coming back lists the models again, the
   row is a "Pulled" server row, and Run's `POST /v1/systemone` answers from the server, every figure matching; removed
   again with `ardana rm`, the page shown again holds Run with the pull once more. Headless Chrome keeps every page
   visible and focused (`bringToFront` and a minimised window send nothing), so the case dispatches the events a tab
   switch sends: `focus` at the window, then `visibilitychange` at the document.
 - In the tab (`browser_run`, W2): xtask starts one more server on an empty registry (`ARDANA_BROWSER_URL`), since the
-  case compares the tab with `POST /v1/systemone` for decider-0.8b, which pulls and loads its GGUF there; the other
-  cases keep a server holding decider-2b alone. Each project runs in a persistent Chrome profile of its own under its
+  case compares the tab with `POST /v1/systemone` for decider:0.8b, which pulls and loads its GGUF there; the other
+  cases keep a server holding decider:2b alone. Each project runs in a persistent Chrome profile of its own under its
   output directory, emptied first (`chromium.launchPersistentContext`): a visitor whose browser keeps the files, where
-  an incognito context's Cache Storage refuses the 447 MB weights. The case picks decider-0.8b's "In browser" row
-  (`pickInBrowser`, the value `browserRow(name)`), sees the banner's size line ("Run downloads decider-0.8b into this
+  an incognito context's Cache Storage refuses the 447 MB weights. The case picks decider:0.8b's "In browser" row
+  (`pickInBrowser`, the value `browserRow(name)`), sees the banner's size line ("Run downloads decider:0.8b into this
   tab once: ..."), loads the ticket preset and runs it while a `MutationObserver` records the Run label, the banner's
   words (`#run-note-text`) and the download bar's value, and every text of the `run-status` region. The server holds the
   variant whole in `tmp/hf` (`x_browser_pulled`), so although the first run's requests wait 1 s each (CDP's
@@ -214,14 +218,14 @@ share-link decoding.
   every request stays on that origin. A run stopped mid-download says the next run starts the download over, and no
   request carries a `Range` (the page keeps nothing to resume from). The test's own requests (`page.request`) go to
   `127.0.0.1`: only the browser resolves the mapped name.
-- Stopping a run in the tab (`browser_stop`, on the empty server, a fresh context): an autorun link onto decider-0.8b's
+- Stopping a run in the tab (`browser_stop`, on the empty server, a fresh context): an autorun link onto decider:0.8b's
   "In browser" row asks for no `/v1/browser/` file before the tap, shows the size line in the main column (in view at
   both widths) as Run's description and leaves Run idle; after the tap, with the pipe narrowed to 16 MB/s, Stop in the
   banner cancels the weights' request (`requestfailed` with `net::ERR_ABORTED`), starts no other, says "Stopped, not
   answered. The next run resumes the download." in the status, puts Run back with the focus on it and lands no
-  answer; picking decider-2b's server row mid-download does the same.
-- Focus under the sticky banner (`banner_focus`, WCAG 2.4.11, on the decider-2b server): a server run's answers stay on
-  the page, the last question's builder open, while decider-0.8b downloads into the tab at 2 MB/s (`throttle` in
+  answer; picking decider:2b's server row mid-download does the same.
+- Focus under the sticky banner (`banner_focus`, WCAG 2.4.11, on the decider:2b server): a server run's answers stay on
+  the page, the last question's builder open, while decider:0.8b downloads into the tab at 2 MB/s (`throttle` in
   `tests/helpers.ts`, which `browser.spec.ts` shares); Shift+Tab from Add question and Tab from the state editor, 24
   stops each (`walkFocus`, as `banner_reflow` walks), focus only what shows whole below the top bar's and the banner's
   bottom, or, taller than the room the page scrolls it into (below them and the 12px under them), fills that room or,
@@ -230,8 +234,8 @@ share-link decoding.
   project's viewport and on the phone project also at 320x640 and 430x932, each viewport but 430x932 with 200% text too
   (`html { font-size: 200% }`); the case then stops the download. Before the "In browser" pick, the page has asked
   for neither the engine module (`/engine/ardana-engine*`) nor onnxruntime-web; the pick imports both.
-- What stays on screen in flight (`banner_reflow`, on the decider-2b server, `inFlight` in `tests/helpers.ts`: a
-  server run's answers, then decider-0.8b downloading at 2 MB/s): at 320x256 (1280x1024 at 400% zoom), 320x640,
+- What stays on screen in flight (`banner_reflow`, on the decider:2b server, `inFlight` in `tests/helpers.ts`: a
+  server run's answers, then decider:0.8b downloading at 2 MB/s): at 320x256 (1280x1024 at 400% zoom), 320x640,
   844x390 and 932x430 with 200% text, and 320x256 with 200% text, the page scrolled to its questions, the top bar's and
   the banner's bottoms hold at most a third of the viewport; Run, then Tab, focuses Stop, whole in the viewport and
   under the pointer; and `walkFocus` (Shift+Tab from Add question, Tab from the state editor, 24 stops each, the last
@@ -288,9 +292,9 @@ share-link decoding.
   imported `ort.webgpu.bundle.min.mjs?retry=1`.
 - The server's pull (`browser_pull`, on one more server over an empty Hub cache of its own, `ARDANA_UNCACHED_URL`):
   `/v1/models` marks no browser variant pulled, and the first run in the tab, every request waiting 1.5 s, says
-  "Pulling the browser files of decider-0.8b (467.7 MB) on the server" with the label "Pulling" and Stop, the status
+  "Pulling the browser files of decider:0.8b (467.7 MB) on the server" with the label "Pulling" and Stop, the status
   region hears it once; the pull fails offline, and the run says "The server could not provide the browser files of
-  decider-0.8b. Try again later."
+  decider:0.8b. Try again later."
 - Resuming (`browser_resume`, on the browser server, a persistent profile): the page runs behind a proxy the test starts
   in front of the server (Node's `http`, every request and response forwarded as they are), which cuts the weights'
   responses in flight on demand, as a dropped connection does: Chrome's CDP `offline` leaves a response under way
@@ -309,11 +313,11 @@ share-link decoding.
   received), Python with `tmp/py/sdk/bin/python` and `TYPESAFE_BASE_URL`, TypeScript with the running Node
   (`decide.mts`, type stripping) through a `node_modules` symlink to `e2e/playground/node_modules`. Both SDKs get a
   placeholder `TYPESAFE_API_KEY`; the SDK outputs must equal every displayed figure except Ardana's `x_` extras,
-  which the SDK models drop. With decider-0.8b's "In browser" row picked (R3.4 as amended) the language toggle gives
-  way to the ardana commands, without the install line on this local server: `ardana pull decider-0.8b`, which runs as
+  which the SDK models drop. With decider:0.8b's "In browser" row picked (R3.4 as amended) the language toggle gives
+  way to the ardana commands, without the install line on this local server: `ardana pull decider:0.8b`, which runs as
   `pull.sh`, then `ardana run`, as `ardana.sh`, each with `bash` and the binary under test first on `PATH`
-  (`ARDANA_BIN`, the copy xtask serves), in a home of their own with `HF_HUB_OFFLINE=1`: the pull takes decider-0.8b's
-  GGUF from `tmp/hf` and the run titles each answer with its question. Picking decider-2b brings curl, Python and
+  (`ARDANA_BIN`, the copy xtask serves), in a home of their own with `HF_HUB_OFFLINE=1`: the pull takes decider:0.8b's
+  GGUF from `tmp/hf` and the run titles each answer with its question. Picking decider:2b brings curl, Python and
   TypeScript back at the page origin.
 - Recovery and announcements: `stale_and_restore` checks the `changed` tag, the "From last run · inputs changed"
   tags (only the edited question when one spec changes, every question when the state changes), unchanged
@@ -333,14 +337,14 @@ share-link decoding.
 
 ## impeccable detect alongside (Q24)
 - `cargo xtask e2e design` builds the share links with `lz-str` (the ticket fixture, and the same with a one-option
-  `department` choice for the 422 state), warms decider-2b with one request, writes each JSON report to
+  `department` choice for the 422 state), warms decider:2b with one request, writes each JSON report to
   `tmp/evals/design/<state>-<desktop|mobile>.json`, and first checks R6.1's context (doctor, PRODUCT.md, DESIGN.md,
   the surface brief's Operate mode and six contract blocks, `.impeccable/config.json`, the hook in
   `.claude/settings.local.json`). Doctor's `mention`-severity findings are printed, not failed: the sidecar-stale
   one compares file mtimes, which a checkout reorders.
 - `cargo xtask e2e design` runs `$IMPECCABLE_BIN detect --json --viewport 1280x800 <url>` and `--viewport 390x844` on
   `/`, `/#share/<ticket>`, `/?autorun=1#share/<ticket>`, `/?autorun=1#share/<invalid>` and `run-command`
-  (`/#share/<ticket naming decider-4b>`: a model the server has not pulled) of a server holding decider-2b; exit 0 is
+  (`/#share/<ticket naming decider:4b>`: a model the server has not pulled) of a server holding decider:2b; exit 0 is
   clean, 1 means a target was not scanned, 2 means primary findings. Treat any non-zero exit as a failure.
 - Its "finish" check (R7.7) then wants a critique record under `.impeccable/critique/` (any file but `ignore.md`),
   `docs/design/audit.md` with the line `P0: 0 · P1: 0`, every scan of this run clean, and `.impeccable/config.json`
@@ -349,7 +353,7 @@ share-link decoding.
   page shows real findings. Use the same viewports and URLs as the Playwright projects so screenshots and findings match.
 - The in-tab states `browser-download` and `browser-results` (R2.7) cannot be reached by a URL: detect waits for the
   network to go idle, which a download in progress never is, and a run in the tab answers after it. The `@design`
-  test (`browser_states`) runs decider-0.8b's browser variant on the design server at each viewport and freezes the
+  test (`browser_states`) runs decider:0.8b's browser variant on the design server at each viewport and freezes the
   real page twice: inside the mutation that moves the download bar past a quarter, and once the answers are drawn. A
   frozen page is the cloned document with its form state written into the markup, no script or link, and the
   stylesheets as served inline with their fonts as data URLs (a `file://` page cannot load the server's

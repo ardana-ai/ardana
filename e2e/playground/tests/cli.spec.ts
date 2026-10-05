@@ -2,7 +2,7 @@
 // already, a model it has not pulled shows `ardana pull <name>` and `ardana run <name> --request -` with the exact
 // request, never ardana.ai's install line, and once `ardana pull` has added it the page runs it on the server. Run
 // sends nothing for a model the server would have to pull, autorun included. `run_command` runs on the release
-// `ardana serve` holding decider-2b, `pull_while_open` on an empty server of its own (the playground suite).
+// `ardana serve` holding decider:2b, `pull_while_open` on an empty server of its own (the playground suite).
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,13 +35,16 @@ async function listed(page: Page, origin = ''): Promise<ModelInfo[]> {
   return ((await (await page.request.get(`${origin}/v1/models`)).json()) as { models: ModelInfo[] }).models;
 }
 
-/** The names of the models the library snapshot (C5) lists, in its order: the library the servers under test read. */
+/**
+ * The canonical names of the sizes the library snapshot (C5) lists, `<family>:<size>` in its order: the library the
+ * servers under test read.
+ */
 const snapshotNames = (): string[] =>
   (
     JSON.parse(fs.readFileSync(path.join(root, 'crates/ardana-registry/tests/data/models.json'), 'utf8')) as {
-      models: { name: string }[];
+      models: { name: string; sizes: { size: string }[] }[];
     }
-  ).models.map((m) => m.name);
+  ).models.flatMap((family) => family.sizes.map((size) => `${family.name}:${size.size}`));
 
 /**
  * On a local server, the server row of `model`, which it has not pulled: Run is held and says how the model gets onto
@@ -62,17 +65,17 @@ async function expectPull(page: Page, model: string, request: Request, requests:
 }
 
 test('run_command', async ({ page }, testInfo) => {
-  // This server has pulled decider-2b alone: every other library model is one it lacks.
+  // This server has pulled decider:2b alone: every other library model is one it lacks.
   const lacked = (await listed(page)).filter((m) => m.x_pulled === false);
-  expect(lacked.map((m) => m.name)).toEqual(snapshotNames().filter((name) => name !== 'decider-2b'));
+  expect(lacked.map((m) => m.name)).toEqual(snapshotNames().filter((name) => name !== 'decider:2b'));
   const requests: string[] = [];
   page.on('request', (r) => requests.push(r.url()));
 
   // A share link naming a model this server has not pulled and no tab runs opens on its row.
   const ticket = fixture('ticket.json');
-  await page.goto(`/${shareHash({ ...ticket, model: 'decider-4b' })}`);
-  await expectPull(page, 'decider-4b', ticket, requests);
-  const size = decimalSize(lacked.find((m) => m.name === 'decider-4b')!.x_size!);
+  await page.goto(`/${shareHash({ ...ticket, model: 'decider:4b' })}`);
+  await expectPull(page, 'decider:4b', ticket, requests);
+  const size = decimalSize(lacked.find((m) => m.name === 'decider:4b')!.x_size!);
   await expect(page.getByTestId('model-note')).toHaveText(
     `Not pulled on this server. Pull it with the ardana CLI where the server runs (${size}), then Run answers here.`,
   );
@@ -91,60 +94,63 @@ test('run_command', async ({ page }, testInfo) => {
   await expect(page.getByTestId('pull')).toBeInViewport();
   await screenshot(page, testInfo, 'run_command', 'command');
 
-  // Every other server row of a model this server has not pulled, decider-0.8b's among them: the same.
-  for (const model of lacked.map((m) => m.name).filter((name) => name !== 'decider-4b')) {
+  // Every other server row of a model this server has not pulled, decider:0.8b's among them: the same.
+  for (const model of lacked.map((m) => m.name).filter((name) => name !== 'decider:4b')) {
     await pickModel(page, model);
     await expectPull(page, model, ticket, requests);
   }
 
-  // Any spelling of a model the server has not pulled: a link naming decider-4b in other letters opens on its row, and
-  // one naming another quant of it, a file the server would pull and the list does not size, holds Run with that pull,
-  // with and without `?autorun=1`; nothing is sent.
-  await page.goto(`/${shareHash({ ...ticket, model: 'Decider-4B' })}`);
-  await expectPull(page, 'decider-4b', ticket, requests);
-  const quant = 'decider-4b:q8_0';
-  for (const autorun of ['', '?autorun=1']) {
-    await page.goto(`/${autorun}${shareHash({ ...ticket, model: quant })}`);
-    await expectPull(page, quant, ticket, requests);
-    await expect(page.getByTestId('model-note')).toHaveText(
-      'Not pulled on this server. Pull it with the ardana CLI where the server runs, then Run answers here.',
-    );
-    await expect(page.getByTestId('pull-note')).toHaveText('Then Run answers here.');
-    expect(requests.filter(isSystemOne), autorun).toEqual([]);
+  // A name is the row it equals, ASCII case ignored (Q20): a link naming decider:4b in other letters opens on its row.
+  // Every name no row carries, a family, another quant, a former name, anything, is never split: Run holds with the
+  // ardana CLI's commands under the name as written, with and without `?autorun=1`, and sends nothing.
+  await page.goto(`/${shareHash({ ...ticket, model: 'Decider:4B' })}`);
+  await expectPull(page, 'decider:4b', ticket, requests);
+  for (const name of ['decider', 'decider:2b-q8_0', 'decider-2b', 'nomodel']) {
+    for (const autorun of ['', '?autorun=1']) {
+      await page.goto(`/${autorun}${shareHash({ ...ticket, model: name })}`);
+      await expectPull(page, name, ticket, requests);
+      await expect(page.getByTestId('model-note')).toHaveText(
+        'Not pulled on this server. Pull it with the ardana CLI where the server runs, then Run answers here.',
+      );
+      await expect(page.getByTestId('pull-note')).toHaveText('Then Run answers here.');
+      expect(requests.filter(isSystemOne), `${name} ${autorun}`).toEqual([]);
+    }
   }
-  await screenshot(page, testInfo, 'run_command', 'quant');
+  await screenshot(page, testInfo, 'run_command', 'unlisted');
 
   // An "In browser" row: the ardana command without the install line, after `ardana pull` for a model this server has
-  // not pulled (decider-0.8b), alone for one it has (decider-2b).
-  await pickInBrowser(page, 'decider-0.8b');
+  // not pulled (decider:0.8b), alone for one it has (decider:2b).
+  await pickInBrowser(page, 'decider:0.8b');
   await expect(page.getByTestId('cli-lede')).toHaveText('The ardana CLI runs this request in a terminal.');
   await expect(page.getByTestId('install')).toHaveCount(0);
-  await expect(page.getByTestId('pull')).toHaveText('ardana pull decider-0.8b');
+  await expect(page.getByTestId('pull')).toHaveText('ardana pull decider:0.8b');
   await expect(page.getByTestId('pull-note')).toHaveText(
-    `Downloads ${decimalSize(lacked.find((m) => m.name === 'decider-0.8b')!.x_size!)}.`,
+    `Downloads ${decimalSize(lacked.find((m) => m.name === 'decider:0.8b')!.x_size!)}.`,
   );
-  expect((await ardanaCommand(page)).line).toBe(`ardana run decider-0.8b --request - <<'JSON'`);
-  await pickInBrowser(page, 'decider-2b');
+  expect((await ardanaCommand(page)).line).toBe(`ardana run decider:0.8b --request - <<'JSON'`);
+  await pickInBrowser(page, 'decider:2b');
   await expect(page.getByTestId('pull')).toHaveCount(0);
   await expect(page.getByTestId('install')).toHaveCount(0);
-  expect((await ardanaCommand(page)).line).toBe(`ardana run decider-2b --request - <<'JSON'`);
+  expect((await ardanaCommand(page)).line).toBe(`ardana run decider:2b --request - <<'JSON'`);
   await screenshot(page, testInfo, 'run_command', 'in-browser');
 
-  // The pulled model runs on the server again, with the API's snippets.
-  await pickModel(page, 'decider-2b');
+  // The pulled model runs on the server again, with the API's snippets: a link naming it in other letters opens on
+  // its row.
+  await page.goto(`/${shareHash({ ...ticket, model: 'Decider:2B' })}`);
+  await expect(modelPicker(page)).toHaveValue('decider:2b');
   await expect(runKey(page)).toHaveAttribute('aria-disabled', 'false');
   await expect(page.getByTestId('model-note')).toHaveCount(0);
   await expect(page.getByTestId('snippet')).toHaveAttribute('data-language', 'curl');
   const response = await run(page);
   expect(response.status()).toBe(200);
-  expect(response.request().postDataJSON().model).toBe('decider-2b');
+  expect(response.request().postDataJSON().model).toBe('decider:2b');
   expect(requests.filter(isSystemOne)).toHaveLength(1);
   await screenshot(page, testInfo, 'run_command');
 });
 
 // The model a local server has not pulled becomes a server row once `ardana pull` adds it, with no reload: the page
 // lists the server's models again when the tab comes back. On an empty server of its own, so the other servers' lists
-// stay as their cases expect; each project starts with qwen3.5-0.8b not pulled (`ardana rm` removes the entry the other
+// stay as their cases expect; each project starts with qwen3.5:0.8b not pulled (`ardana rm` removes the entry the other
 // project's pull added, never a file). Headless Chrome keeps every page visible and focused (a tab switch or a
 // minimised window sends nothing), so the case sends the page the events a tab switch sends: `focus` at the window,
 // `visibilitychange` at the document.
@@ -153,7 +159,7 @@ test('pull_while_open', async ({ page }, testInfo) => {
   const base = process.env.ARDANA_PULL_URL!;
   const home = process.env.ARDANA_PULL_HOME!;
   expect(base && home, 'xtask passes the server of this case and its home').toBeTruthy();
-  const model = 'qwen3.5-0.8b';
+  const model = 'qwen3.5:0.8b';
   // The ardana CLI under test, where this server runs: its home, offline over tmp/hf.
   const env = {
     ...process.env,

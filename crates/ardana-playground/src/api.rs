@@ -9,9 +9,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 
-use ardana_api::{
-    BrowserEntry, Detail, ErrorBody, LibraryDocument, LibraryEntry, ModelInfo, ModelsResponse,
-};
+use ardana_api::{BrowserEntry, Detail, ErrorBody, LibraryDocument, ModelInfo, ModelsResponse};
 use js_sys::Uint8Array;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
@@ -40,7 +38,7 @@ struct Library {
     url: &'static str,
     /// The Hugging Face the browser files come from (`--hub`): `https://huggingface.co`, or a stand-in.
     hub: &'static str,
-    /// Each browser variant of the last document, by its model's name; shared by every clone of the client.
+    /// Each browser variant of the last document, by its size's canonical name; shared by every clone of the client.
     browser: Rc<RefCell<BTreeMap<String, BrowserEntry>>>,
 }
 
@@ -139,9 +137,9 @@ impl ApiClient {
     }
 
     /// `GET /v1/models`; in the standalone build, the library document fetched now and read as this version reads it
-    /// (Q12: an entry it cannot read is left out), listed as a server that has pulled none lists the library, with no
-    /// default model and every browser variant held. A document that does not arrive or read leaves the last list in
-    /// place and says the library is unavailable.
+    /// (Q3, Q4, Q13: a family or a size it cannot read is left out), listed as a server that has pulled none lists the
+    /// library ([`listed`]). A document that does not arrive or read (another `schema` included) leaves the last list
+    /// in place and says the library is unavailable.
     pub async fn models(&self) -> Result<ModelsResponse, String> {
         let Some(library) = &self.library else {
             let (status, text) = self.fetch("GET", "/v1/models", None, false).await?;
@@ -167,7 +165,14 @@ impl ApiClient {
         *library.browser.borrow_mut() = document
             .models
             .iter()
-            .filter_map(|entry| Some((entry.name.clone(), entry.browser.clone()?)))
+            .flat_map(|family| {
+                family.sizes.iter().filter_map(|size| {
+                    Some((
+                        size.name(&family.name, size.default_quant()?),
+                        size.browser.clone()?,
+                    ))
+                })
+            })
             .collect();
         Ok(listed(&document))
     }
@@ -238,9 +243,9 @@ impl ApiClient {
             Some(library) => {
                 let variant = library.variant(name)?;
                 let repository = variant
-                    .weights
+                    .repo
                     .strip_prefix(HF_PREFIX)
-                    .unwrap_or(&variant.weights);
+                    .unwrap_or(&variant.repo);
                 let hub = library.hub.trim_end_matches('/');
                 format!("{hub}/{repository}/resolve/{version}/{file}")
             }
@@ -453,29 +458,36 @@ fn library() -> Option<Library> {
     None
 }
 
-/// `document`'s models as `GET /v1/models` lists the library on a server that has pulled none (`x_pulled: false`,
-/// the GGUF's size), with no default model (no server runs one here) and every browser variant held (the Hub holds it
-/// whole), in the document's order.
+/// `document`'s sizes as `GET /v1/models` lists the library on a server that has pulled none (Q18), one row per size
+/// under its canonical name `<family>:<size>` in the document's order: `x_pulled: false`, the reference and bytes of
+/// its default quant's GGUF, the document's `default` and `browser_default` marked, and every browser variant held
+/// (the Hub holds it whole).
 fn listed(document: &LibraryDocument) -> ModelsResponse {
-    let info = |entry: &LibraryEntry| ModelInfo {
-        name: entry.name.clone(),
-        description: format!("{}:{}", entry.weights, entry.quant),
-        release_date: entry.release_date.clone(),
-        x_pulled: Some(false),
-        x_default: false,
-        x_size: Some(entry.size),
-        x_browser: entry.browser.as_ref().map(|browser| browser.size),
-        x_browser_pulled: entry.browser.is_some(),
-        x_browser_default: document.browser_default.as_deref() == Some(&entry.name),
-    };
+    let models = document.models.iter().flat_map(|family| {
+        family.sizes.iter().filter_map(|size| {
+            let quant = size.default_quant()?;
+            let name = size.name(&family.name, quant);
+            Some(ModelInfo {
+                description: size.reference(quant),
+                release_date: size.release_date.clone(),
+                x_pulled: Some(false),
+                x_default: document.default == name,
+                x_size: Some(quant.bytes),
+                x_browser: size.browser.as_ref().map(|browser| browser.bytes),
+                x_browser_pulled: size.browser.is_some(),
+                x_browser_default: document.browser_default.as_deref() == Some(&name),
+                name,
+            })
+        })
+    });
     ModelsResponse {
-        models: document.models.iter().map(info).collect(),
+        models: models.collect(),
     }
 }
 
-/// `/v1/browser/<name>/<file>`, the name percent-encoded.
+/// `/v1/browser/<name>/<file>`, under the canonical name a browser row carries (`decider:0.8b`), which needs no
+/// escape in a path.
 fn browser_path(name: &str, file: &str) -> String {
-    let name = String::from(js_sys::encode_uri_component(name));
     format!("/v1/browser/{name}/{file}")
 }
 
@@ -519,54 +531,122 @@ pub fn js_error(value: JsValue) -> String {
 mod tests {
     use super::*;
 
-    /// R6.2: the standalone build lists the document's entries in its order, each as a server that has pulled none
-    /// would (its GGUF's size, its browser variant's bytes and held), the browser default marked and no default model.
+    /// A size `size` of the GGUF repository `hf.co/o/r-GGUF`, its default quant `q4_k_m` listed after `q8_0`, with
+    /// `extra` fields.
+    fn size(size: &str, extra: &str) -> String {
+        format!(
+            r#"{{"size": "{size}", "params": "1B", "base": "o/b", "release_date": "2026-01-01",
+                "gguf": {{"repo": "hf.co/o/r-GGUF", "commit": "{}", "default": "q4_k_m",
+                          "quants": [{{"quant": "q8_0", "file": "r-{size}-Q8_0.gguf", "bytes": 20}},
+                                     {{"quant": "q4_k_m", "file": "r-{size}-Q4_K_M.gguf", "bytes": 10}}]}}{extra}}}"#,
+            "a".repeat(40)
+        )
+    }
+
+    /// A family `name` of `sizes`, with `extra` fields.
+    fn family(name: &str, extra: &str, sizes: &[String]) -> String {
+        format!(
+            r#"{{"name": "{name}", "kind": "decider", "summary": "S.", "latest": "2b", "sizes": [{}]{extra}}}"#,
+            sizes.join(", ")
+        )
+    }
+
+    /// The document of `families`, `a:2b` its default and `a:1b` its browser default.
+    fn document(families: &[String]) -> String {
+        format!(
+            r#"{{"schema": 1, "default": "a:2b", "browser_default": "a:1b", "models": [{}]}}"#,
+            families.join(", ")
+        )
+    }
+
+    fn names(document: &LibraryDocument) -> Vec<String> {
+        listed(document)
+            .models
+            .into_iter()
+            .map(|m| m.name)
+            .collect()
+    }
+
+    /// R5.1: the standalone build lists the document as a server that pulled nothing lists the library: one row per
+    /// size in the document's order under its canonical name, `x_pulled: false`, its default quant's GGUF and bytes,
+    /// its browser variant's bytes and held, the default and the browser default marked.
     #[test]
-    fn the_document_lists_as_a_server_would() {
-        let entry = |name: &str, browser: &str| {
-            format!(
-                r#"{{"name": "{name}", "kind": "decider", "summary": "S.", "base": "o/b", "params": "1B",
-                    "weights": "hf.co/o/{name}-GGUF", "commit": "{}", "quant": "Q4_K_M", "size": 10,
-                    "release_date": "2026-01-01", "tags": []{browser}}}"#,
-                "a".repeat(40)
-            )
-        };
-        let text = format!(
-            r#"{{"schema": 1, "default": "b", "browser_default": "a", "models": [{}, {}]}}"#,
-            entry(
-                "a",
-                r#", "browser": {"weights": "hf.co/o/a-ONNX", "commit": "c", "quant": "int4", "size": 2,
-                    "profile": {}}"#
-            ),
-            entry("b", "")
+    fn lists_the_document_as_a_server_that_pulled_nothing() {
+        let browser = format!(
+            r#", "browser": {{"repo": "hf.co/o/a-ONNX", "commit": "{}", "quant": "int4", "bytes": 2,
+                  "profile": {{}}}}"#,
+            "c".repeat(40)
         );
+        let text = document(&[
+            family("a", "", &[size("1b", &browser), size("2b", "")]),
+            family("b", "", &[size("3b", "")]),
+        ]);
         let document = LibraryDocument::parse(&text, VERSION).unwrap();
+        let row = |name: &str, browser: Option<u64>, default: bool, browser_default: bool| {
+            let size = name.split_once(':').unwrap().1;
+            ModelInfo {
+                name: name.into(),
+                description: format!("hf.co/o/r-GGUF:r-{size}-Q4_K_M.gguf"),
+                release_date: "2026-01-01".into(),
+                x_pulled: Some(false),
+                x_default: default,
+                x_size: Some(10),
+                x_browser: browser,
+                x_browser_pulled: browser.is_some(),
+                x_browser_default: browser_default,
+            }
+        };
         assert_eq!(
             listed(&document).models,
             [
-                ModelInfo {
-                    name: "a".into(),
-                    description: "hf.co/o/a-GGUF:Q4_K_M".into(),
-                    release_date: "2026-01-01".into(),
-                    x_pulled: Some(false),
-                    x_default: false,
-                    x_size: Some(10),
-                    x_browser: Some(2),
-                    x_browser_pulled: true,
-                    x_browser_default: true,
-                },
-                ModelInfo {
-                    name: "b".into(),
-                    description: "hf.co/o/b-GGUF:Q4_K_M".into(),
-                    release_date: "2026-01-01".into(),
-                    x_pulled: Some(false),
-                    x_default: false,
-                    x_size: Some(10),
-                    x_browser: None,
-                    x_browser_pulled: false,
-                    x_browser_default: false,
-                },
+                row("a:1b", Some(2), false, true),
+                row("a:2b", None, true, false),
+                row("b:3b", None, false, false),
             ]
+        );
+    }
+
+    /// R5.2: the page reads the document as `ardana` of its version reads it (Q3, Q4, Q13): a family and a size for a
+    /// later version, a family and a size that do not parse, a size whose repository is not `hf.co/<org>/<repo>` or
+    /// whose commit is not 40 lowercase hex, and a family whose name an earlier family took, are left out, their
+    /// siblings listed in order; fields a later version added are read past; another schema is not read at all, which
+    /// the page says as the library being unavailable.
+    #[test]
+    fn leaves_out_what_does_not_read() {
+        let text = document(&[
+            family(
+                "a",
+                r#", "later": {"x": 1}"#,
+                &[
+                    size("1b", r#", "later": 1"#),
+                    size("2b", r#", "min_version": "99.0.0""#),
+                    r#"{"size": "3b", "gguf": {"repo": "hf.co/o/r-GGUF"}}"#.to_string(),
+                    size("4b", r#", "layout": "mixed""#),
+                    size("5b", ""),
+                    size("6b", "").replace("hf.co/o/r-GGUF", "o/r-GGUF"),
+                    size("7b", "").replace(&"a".repeat(40), "main"),
+                ],
+            ),
+            family("b", r#", "min_version": "99.0.0""#, &[size("1b", "")]),
+            r#"{"name": "c", "sizes": []}"#.to_string(),
+            family("d", "", &[size("2b", r#", "min_version": "99.0.0""#)]),
+            family("e", "", &[size("1b", "")]),
+            family("a", "", &[size("8b", "")]),
+        ]);
+        let document = LibraryDocument::parse(&text, VERSION).unwrap();
+        assert_eq!(names(&document), ["a:1b", "a:5b", "e:1b"]);
+        // A version new enough reads them.
+        let later = LibraryDocument::parse(&text, "99.0.0").unwrap();
+        assert_eq!(
+            names(&later),
+            ["a:1b", "a:2b", "a:5b", "b:1b", "d:2b", "e:1b"]
+        );
+
+        let other = text.replace(r#""schema": 1"#, r#""schema": 2"#);
+        let err = LibraryDocument::parse(&other, VERSION).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "the library document is schema 2, which this ardana does not read; update ardana"
         );
     }
 

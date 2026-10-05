@@ -1,5 +1,5 @@
 //! Shared helpers of the server tests: a fake runtime that counts loads and drops and can hold a load or a decode, registries
-//! of decider-2b's real tokenizer and profile (from `tmp/hf`) over fake weights, and requests through the router.
+//! of decider:2b's real tokenizer and profile (from `tmp/hf`) over fake weights, and requests through the router.
 #![allow(dead_code, reason = "each test file uses a different subset")]
 
 use std::path::{Path, PathBuf};
@@ -202,9 +202,9 @@ pub async fn with_held_variants(mut listed: Value) -> Result<Value> {
     let library = library()?;
     for model in listed["models"].as_array_mut().context("models")? {
         let name = model["name"].as_str().unwrap_or_default().to_string();
-        if let Some((entry, _)) = library.browser(&name)
+        if let Some(pick) = library.browser(&name)
             && model.get("x_browser").is_some()
-            && cache.holds(entry).await
+            && cache.holds(&pick).await
         {
             model["x_browser_pulled"] = Value::Bool(true);
         }
@@ -223,9 +223,9 @@ pub fn scratch(name: &str) -> Result<PathBuf> {
     Ok(dir)
 }
 
-/// A registry in `$ARDANA_TMP/<test>/home` with one entry per name, saved to its `models.toml`: decider-2b's
+/// A registry in `$ARDANA_TMP/<test>/home` with one entry per name, saved to its `models.toml`: decider:2b's
 /// tokenizer and `decider_config.json` profile (renamed after the entry, so responses tell the models apart) over an
-/// empty fake weights file `<name>.fake`. The first entry keeps decider-2b's release date; the others have none.
+/// empty fake weights file `<name>.fake`. The first entry keeps decider:2b's release date; the others have none.
 pub fn registry(test: &str, names: &[&str]) -> Result<Registry> {
     let dir = scratch(test)?;
     let mut registry = Registry::open(&dir.join("home"))?;
@@ -241,7 +241,7 @@ pub fn registry(test: &str, names: &[&str]) -> Result<Registry> {
     Ok(registry)
 }
 
-/// A registry entry named `name` over the fake weights `<dir>/<name>.fake` (created), with decider-2b's tokenizer and
+/// A registry entry named `name` over the fake weights `<dir>/<name>.fake` (created), with decider:2b's tokenizer and
 /// `decider_config.json` profile renamed after the entry and no release date.
 pub fn fake_entry(dir: &Path, name: &str) -> Result<ResolvedModel> {
     let repo = "Mapika/decider-2b-GGUF";

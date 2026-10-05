@@ -58,70 +58,37 @@ fn browser_default(models: &[ModelInfo]) -> Option<&ModelInfo> {
 }
 
 /// The picker row a share link's model opens on: the "In browser" row of the listed model it names when this server
-/// has not pulled that model and the tab can run it, since the tab is where it runs here; the listed model's own row
-/// for another spelling of its name; else the name as it is.
+/// has not pulled that model and the tab can run it, since the tab is where it runs here; else the listed model's own
+/// row; else the name as it is.
 fn linked_row(models: &[ModelInfo], name: &str) -> String {
-    match named(models, name) {
-        Named::Listed(m) | Named::Quant(m) if !m.pulled() && m.x_browser.is_some() => {
-            browser_value(&m.name)
-        }
-        Named::Listed(m) => m.name.clone(),
-        Named::Quant(_) | Named::Unlisted => name.to_string(),
+    match row(models, name) {
+        Some(m) if !m.pulled() && m.x_browser.is_some() => browser_value(&m.name),
+        Some(m) => m.name.clone(),
+        None => name.to_string(),
     }
 }
 
-/// What a model name means in `/v1/models`, read as the server reads a request's model (`Registry::named`): a library
-/// model in any case, with or without a `:<quant>`, the quant recorded in lowercase. The list names every library
-/// model by its own name, pulled or not.
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Named<'a> {
-    /// A listed model, by its exact name or another spelling of it.
-    Listed(&'a ModelInfo),
-    /// Another quant of the listed model, which the list does not name: the server pulls it.
-    Quant(&'a ModelInfo),
-    /// Nothing listed: the server refuses it (404) unless it has pulled it since it listed.
-    Unlisted,
+/// The `/v1/models` row a model name is (Q20): the one whose name it equals, ASCII case ignored. The page knows no
+/// other name: it never splits one into a model and a tag, as the server and the ardana CLI read them.
+fn row<'a>(models: &'a [ModelInfo], name: &str) -> Option<&'a ModelInfo> {
+    models.iter().find(|m| m.name.eq_ignore_ascii_case(name))
 }
 
-fn named<'a>(models: &'a [ModelInfo], name: &str) -> Named<'a> {
-    let listed = |wanted: &str| models.iter().find(|m| m.name == wanted);
-    if let Some(model) = listed(name) {
-        return Named::Listed(model);
-    }
-    let (base, spelled) = match name.split_once(':') {
-        Some((base, quant)) => {
-            let base = base.to_ascii_lowercase();
-            let spelled = format!("{base}:{}", quant.to_lowercase());
-            (base, spelled)
-        }
-        None => {
-            let base = name.to_ascii_lowercase();
-            (base.clone(), base)
-        }
-    };
-    match (listed(&spelled), listed(&base)) {
-        (Some(model), _) => Named::Listed(model),
-        (None, Some(model)) => Named::Quant(model),
-        (None, None) => Named::Unlisted,
-    }
-}
-
-/// Where Run answers a server row's pick `name`: on the server only what it has pulled, under any spelling; with the
-/// ardana CLI any other model the list names, in any spelling or quant (the CLI resolves it), and in the `standalone`
-/// build, which no server serves, every pick; on a server, a name nothing listed matches goes to the server, which
-/// refuses it without pulling.
+/// Where Run answers a server row's pick `name`: on the server only a row it has pulled; with the ardana CLI every
+/// other name, a row it has not pulled or one no row carries, as written, and in the `standalone` build, which no
+/// server serves, every pick. No pick on a server (no list to open on) names no model: the server answers that with
+/// its default model.
 fn server_runs(models: &[ModelInfo], name: &str, standalone: bool) -> Runs {
-    match named(models, name) {
-        Named::Listed(model) if model.pulled() => Runs::Server,
-        Named::Listed(_) | Named::Quant(_) => Runs::Cli,
-        Named::Unlisted if standalone => Runs::Cli,
-        Named::Unlisted => Runs::Server,
+    match row(models, name) {
+        Some(model) if model.pulled() => Runs::Server,
+        None if name.is_empty() && !standalone => Runs::Server,
+        _ => Runs::Cli,
     }
 }
 
 /// How the ardana CLI reaches the model `name` where no server runs the pick: the `standalone` build's visitor installs
-/// ardana; on a server, which ardana runs already, `ardana pull` adds a model it has not pulled, under any spelling (an
-/// "In browser" row's model too), and a model it has pulled needs only `ardana run`.
+/// ardana; on a server, which ardana runs already, `ardana pull` adds any name but a row it has pulled (an "In browser"
+/// row's model too), and a row it has pulled needs only `ardana run`.
 fn handoff(models: &[ModelInfo], name: &str, standalone: bool) -> Handoff {
     if standalone {
         Handoff::Install
@@ -135,12 +102,12 @@ fn handoff(models: &[ModelInfo], name: &str, standalone: bool) -> Handoff {
 /// Where Run answers the pick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Runs {
-    /// `POST /v1/systemone`: a model this server has pulled, or, on a local server, a name nothing listed matches.
+    /// `POST /v1/systemone`: a row this server has pulled, or no pick at all.
     Server,
     /// This tab, on the model's browser variant: an "In browser" row.
     Tab,
-    /// Nowhere here: a model this server would have to pull, or any server row of the standalone build. The page hands
-    /// it over to the ardana CLI ([`Handoff`]), and Run sends nothing (Q2).
+    /// Nowhere here: a row this server has not pulled, a name no row carries, or any server row of the standalone
+    /// build. The page hands it over to the ardana CLI ([`Handoff`]), and Run sends nothing (Q2, Q20).
     Cli,
 }
 
@@ -605,10 +572,9 @@ impl Deck {
         self.listed(&self.model.read())?.x_browser
     }
 
-    /// The `/v1/models` entry of the model `name`.
+    /// The `/v1/models` row the name `name` is ([`row`]).
     pub fn listed(&self, name: &str) -> Option<ModelInfo> {
-        self.models
-            .with(|models| models.iter().find(|m| m.name == name).cloned())
+        self.models.with(|models| row(models, name).cloned())
     }
 
     /// How the ardana CLI reaches the pick, where no server runs it ([`Handoff`]).
@@ -625,19 +591,15 @@ impl Deck {
             .with(|models| browser_default(models).map(|m| m.name.clone()))
     }
 
-    /// What the ardana CLI downloads to pull the pick, or to run it first: the size of the listed model it names, in
-    /// any spelling of its name (`x_size`); none for another quant, whose file the list does not name.
+    /// What the ardana CLI downloads to pull the pick, or to run it first: the size of the row it is (`x_size`); none
+    /// for a name no row carries.
     pub fn pull_size(&self) -> Option<u64> {
-        self.models.with(|models| {
-            self.model.with(|model| match named(models, model) {
-                Named::Listed(m) => m.x_size,
-                Named::Quant(_) | Named::Unlisted => None,
-            })
-        })
+        self.models
+            .with(|models| self.model.with(|model| row(models, model)?.x_size))
     }
 
-    /// Where Run answers the pick: this tab for an "In browser" row, else where the server reads the model's name
-    /// ([`server_runs`]): run there only when it has pulled the model, never pulled by a run.
+    /// Where Run answers the pick: this tab for an "In browser" row, else [`server_runs`]: on the server only a row it
+    /// has pulled, never pulled by a run.
     pub fn runs(&self) -> Runs {
         if self.in_browser.get() {
             return Runs::Tab;
@@ -753,12 +715,16 @@ mod tests {
     #[test]
     fn picker_values_name_the_model_and_where_it_runs() {
         assert_eq!(
-            picked_row(&browser_value("decider-0.8b")),
-            ("decider-0.8b", true)
+            picked_row(&browser_value("decider:0.8b")),
+            ("decider:0.8b", true)
         );
-        assert_eq!(picked_row("decider-0.8b"), ("decider-0.8b", false));
-        assert_eq!(picked_row("decider-2b:q8_0"), ("decider-2b:q8_0", false));
-        assert_ne!(browser_value("decider-2b"), "decider-2b");
+        assert_eq!(picked_row("decider:0.8b"), ("decider:0.8b", false));
+        assert_eq!(picked_row("decider:2b-q8_0"), ("decider:2b-q8_0", false));
+        assert_eq!(
+            picked_row(&browser_value("gemma-4:26b-a4b")),
+            ("gemma-4:26b-a4b", true)
+        );
+        assert_ne!(browser_value("decider:2b"), "decider:2b");
     }
 
     /// A `/v1/models` entry: `name`, pulled or not, the default model or not, and with a browser variant (the browser
@@ -777,96 +743,129 @@ mod tests {
         }
     }
 
+    /// Q20: a name is the row whose name it equals, ASCII case ignored, and nothing else: no family, alias, quant or
+    /// former name of a row is that row.
+    #[test]
+    fn a_name_is_a_listed_row_and_nothing_else() {
+        let models = [
+            info("decider:2b", true, true, Some(false)),
+            info("decider:2b-q8_0", true, false, None),
+            info("decider:0.8b", false, false, Some(true)),
+            info("gemma-4:26b-a4b", false, false, None),
+        ];
+        let named = |name| row(&models, name).map(|m| m.name.as_str());
+        for (name, listed) in [
+            ("decider:2b", "decider:2b"),
+            ("Decider:2B", "decider:2b"),
+            ("DECIDER:2B-Q8_0", "decider:2b-q8_0"),
+            ("decider:0.8b", "decider:0.8b"),
+            ("Gemma-4:26B-A4B", "gemma-4:26b-a4b"),
+        ] {
+            assert_eq!(named(name), Some(listed), "{name}");
+        }
+        for name in [
+            "decider",
+            "decider:latest",
+            "decider:2b-q4_k_m",
+            "decider:0.8b-q8_0",
+            "decider-2b",
+            "decider:2",
+            "gemma-4:26b",
+            "nomodel",
+            "",
+        ] {
+            assert_eq!(named(name), None, "{name}");
+        }
+    }
+
     /// Q11: the page opens on the default model when the server has pulled it, else on the browser default's row in
-    /// the tab (an empty registry, or the standalone build's library, which has no default model).
+    /// the tab (an empty registry, and the standalone build's library, which lists as one).
     #[test]
     fn the_page_opens_where_a_model_runs() {
         let local = [
-            info("decider-2b", true, true, Some(false)),
-            info("decider-0.8b", false, false, Some(true)),
-            info("decider-4b", false, false, None),
+            info("decider:2b", true, true, Some(false)),
+            info("decider:0.8b", false, false, Some(true)),
+            info("decider:4b", false, false, None),
         ];
-        assert_eq!(opening_row(&local).as_deref(), Some("decider-2b"));
+        assert_eq!(opening_row(&local).as_deref(), Some("decider:2b"));
         let empty = [
-            info("decider-2b", false, true, Some(false)),
-            info("decider-0.8b", false, false, Some(true)),
-            info("decider-4b", false, false, None),
+            info("decider:2b", false, true, Some(false)),
+            info("decider:0.8b", false, false, Some(true)),
+            info("decider:4b", false, false, None),
         ];
-        assert_eq!(opening_row(&empty), Some(browser_value("decider-0.8b")));
-        let standalone = empty.clone().map(|m| ModelInfo {
-            x_default: false,
-            ..m
-        });
-        assert_eq!(
-            opening_row(&standalone),
-            Some(browser_value("decider-0.8b"))
-        );
+        assert_eq!(opening_row(&empty), Some(browser_value("decider:0.8b")));
         // Without a browser default: the default model, else the first pulled one.
         let plain = [
-            info("decider-4b", false, true, None),
-            info("smollm3-3b", true, false, None),
+            info("decider:4b", false, true, None),
+            info("smollm3:3b", true, false, None),
         ];
-        assert_eq!(opening_row(&plain).as_deref(), Some("decider-4b"));
-        assert_eq!(opening_row(&plain[1..]).as_deref(), Some("smollm3-3b"));
+        assert_eq!(opening_row(&plain).as_deref(), Some("decider:4b"));
+        assert_eq!(opening_row(&plain[1..]).as_deref(), Some("smollm3:3b"));
         assert_eq!(opening_row(&[]), None);
 
-        // A share link's model opens in the tab only where this server lacks it and the tab can run it, whatever the
-        // spelling; another spelling of a listed model opens on that model's row.
-        for name in ["decider-0.8b", "DECIDER-0.8B", "decider-0.8b:Q8_0"] {
+        // A share link's model opens in the tab only where this server lacks it and the tab can run it, in any case;
+        // a row named in other letters opens on that row; any other name opens as it is written.
+        for name in ["decider:0.8b", "DECIDER:0.8B"] {
             assert_eq!(
                 linked_row(&empty, name),
-                browser_value("decider-0.8b"),
-                "{name}"
-            );
-            assert_eq!(
-                linked_row(&standalone, name),
-                browser_value("decider-0.8b"),
+                browser_value("decider:0.8b"),
                 "{name}"
             );
         }
-        assert_eq!(linked_row(&local, "decider-2b"), "decider-2b");
-        assert_eq!(linked_row(&local, "Decider-2B"), "decider-2b");
-        assert_eq!(linked_row(&empty, "decider-4b"), "decider-4b");
-        assert_eq!(linked_row(&empty, "Decider-4B"), "decider-4b");
-        assert_eq!(linked_row(&empty, "decider-4b:q8_0"), "decider-4b:q8_0");
-        assert_eq!(linked_row(&empty, "speed_latest"), "speed_latest");
+        assert_eq!(linked_row(&local, "decider:2b"), "decider:2b");
+        assert_eq!(linked_row(&local, "Decider:2B"), "decider:2b");
+        assert_eq!(linked_row(&empty, "decider:4b"), "decider:4b");
+        assert_eq!(linked_row(&empty, "Decider:4B"), "decider:4b");
+        for name in [
+            "decider",
+            "Decider:0.8b-Q8_0",
+            "decider:4b-q8_0",
+            "decider-2b",
+            "speed_latest",
+        ] {
+            assert_eq!(linked_row(&empty, name), name);
+        }
     }
 
-    /// Run answers on the server only what it has pulled, read as the server reads names (`Registry::named`): any
-    /// other spelling of a library model, which the server would pull, goes to the ardana CLI; a name nothing listed
-    /// matches goes to the server, which refuses it without pulling; the standalone build runs nothing on a server.
+    /// Run answers on the server only a row it has pulled (Q20): every other name, a row it has not pulled or one no
+    /// row carries (a family, a tag of another quant, a former name, anything), goes to the ardana CLI as written,
+    /// autorun included, so a run never makes the server pull; the standalone build runs nothing on a server.
     #[test]
     fn run_never_makes_the_server_pull() {
-        // decider-2b pulled (the default), and its Q8_0 too; the rest of the library not.
+        // decider:2b pulled (the default), and its Q8_0 too; the rest of the library not.
         let local = [
-            info("decider-2b", true, true, Some(false)),
-            info("decider-2b:q8_0", true, false, None),
-            info("decider-0.8b", false, false, Some(true)),
-            info("decider-4b", false, false, None),
+            info("decider:2b", true, true, Some(false)),
+            info("decider:2b-q8_0", true, false, None),
+            info("decider:0.8b", false, false, Some(true)),
+            info("decider:4b", false, false, None),
         ];
         let spellings = [
-            ("decider-2b", Runs::Server),
-            ("Decider-2B", Runs::Server),
-            ("decider-2b:q8_0", Runs::Server),
-            ("DECIDER-2B:Q8_0", Runs::Server),
-            ("decider-2b:q4_0", Runs::Cli),
-            ("decider-4b", Runs::Cli),
-            ("Decider-4B", Runs::Cli),
-            ("decider-4b:q8_0", Runs::Cli),
-            ("decider-4b:Q8_0", Runs::Cli),
-            ("decider-0.8b", Runs::Cli),
-            ("DECIDER-0.8B", Runs::Cli),
-            ("decider-0.8b:Q8_0", Runs::Cli),
-            ("speed_latest", Runs::Server),
-            ("hf.co/Mapika/decider-2b-GGUF:Q4_K_M", Runs::Server),
+            ("decider:2b", Runs::Server),
+            ("Decider:2B", Runs::Server),
+            ("decider:2b-q8_0", Runs::Server),
+            ("DECIDER:2B-Q8_0", Runs::Server),
+            ("decider", Runs::Cli),
+            ("decider:latest", Runs::Cli),
+            ("decider:2b-q4_k_m", Runs::Cli),
+            ("decider:2b-q4_0", Runs::Cli),
+            ("decider:4b", Runs::Cli),
+            ("Decider:4B", Runs::Cli),
+            ("decider:4b-q8_0", Runs::Cli),
+            ("decider:0.8b", Runs::Cli),
+            ("DECIDER:0.8B", Runs::Cli),
+            ("decider-2b", Runs::Cli),
+            ("nomodel", Runs::Cli),
+            ("hf.co/Mapika/decider-2b-GGUF:Q4_K_M", Runs::Cli),
         ];
         for (name, runs) in spellings {
             assert_eq!(server_runs(&local, name, false), runs, "local {name}");
         }
+        // No pick names no model: the server's default answers it.
+        assert_eq!(server_runs(&local, "", false), Runs::Server);
         let library = [
-            info("decider-2b", false, false, Some(false)),
-            info("decider-0.8b", false, false, Some(true)),
-            info("decider-4b", false, false, None),
+            info("decider:2b", false, true, Some(false)),
+            info("decider:0.8b", false, false, Some(true)),
+            info("decider:4b", false, false, None),
         ];
         for (name, _) in spellings {
             assert_eq!(
@@ -875,39 +874,42 @@ mod tests {
                 "standalone {name}"
             );
         }
+        assert_eq!(server_runs(&library, "", true), Runs::Cli);
     }
 
     /// A pick this server does not run goes to the ardana CLI: on a local server, which ardana runs already, after
-    /// `ardana pull` for a model it has not pulled under any spelling (an "In browser" row's model too), and without it
-    /// for an "In browser" row of a model it has pulled; in the standalone build, after ardana.ai's install line.
+    /// `ardana pull` for any name but a row it has pulled (an "In browser" row's model too), and without it for an "In
+    /// browser" row of a model it has pulled; in the standalone build, after ardana.ai's install line.
     #[test]
     fn the_cli_gets_a_model_onto_a_local_server() {
         let local = [
-            info("decider-2b", true, true, Some(false)),
-            info("decider-0.8b", false, false, Some(true)),
-            info("decider-4b", false, false, None),
+            info("decider:2b", true, true, Some(false)),
+            info("decider:0.8b", false, false, Some(true)),
+            info("decider:4b", false, false, None),
         ];
         for name in [
-            "decider-4b",
-            "Decider-4B",
-            "decider-4b:q8_0",
-            "decider-2b:q4_0",
-            "decider-0.8b",
+            "decider:4b",
+            "Decider:4B",
+            "decider:4b-q8_0",
+            "decider:2b-q8_0",
+            "decider:0.8b",
+            "decider",
+            "nomodel",
         ] {
             assert_eq!(handoff(&local, name, false), Handoff::Pull, "{name}");
         }
-        assert_eq!(handoff(&local, "decider-2b", false), Handoff::Run);
+        assert_eq!(handoff(&local, "decider:2b", false), Handoff::Run);
+        assert_eq!(handoff(&local, "Decider:2B", false), Handoff::Run);
         let library = local.clone().map(|m| ModelInfo {
             x_pulled: Some(false),
-            x_default: false,
             ..m
         });
-        for name in ["decider-4b", "decider-2b", "decider-0.8b", "speed_latest"] {
+        for name in ["decider:4b", "decider:2b", "decider:0.8b", "speed_latest"] {
             assert_eq!(handoff(&library, name, true), Handoff::Install, "{name}");
         }
         assert_eq!(
             browser_default(&library).map(|m| m.name.as_str()),
-            Some("decider-0.8b")
+            Some("decider:0.8b")
         );
         assert_eq!(browser_default(&local[..1]), None);
     }
@@ -915,12 +917,12 @@ mod tests {
     #[test]
     fn the_banner_says_why_run_is_held() {
         assert_eq!(
-            Held::Pull("decider-4b".into()).text(),
-            "This server has not pulled decider-4b: pull it with the ardana CLI"
+            Held::Pull("decider:4b".into()).text(),
+            "This server has not pulled decider:4b: pull it with the ardana CLI"
         );
         assert_eq!(
-            Held::Cli("decider-4b".into()).text(),
-            "decider-4b runs with the ardana CLI on your machine"
+            Held::Cli("decider:4b".into()).text(),
+            "decider:4b runs with the ardana CLI on your machine"
         );
         assert_eq!(Held::Empty.text(), "Add a question to run");
     }

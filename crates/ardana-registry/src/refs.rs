@@ -1,6 +1,6 @@
 //! Model references (Q3): `hf.co/<org>/<repo>[:<quant>]`, `hf.co/<org>/<repo>:<file>.gguf`,
-//! `ollama:[<namespace>/]<name>[:<tag>]` and local paths. Library names (`decider-2b`) are resolved before these, by
-//! [`crate::library`]; the error of a bare name points to the library's page and names no model (Q11).
+//! `ollama:[<namespace>/]<name>[:<tag>]` and local paths. Library names (`decider:2b`) are resolved before these, by
+//! [`crate::library`]; the error of a bare name points to the library's page and names no model (Q12).
 
 use std::path::{Path, PathBuf};
 
@@ -15,8 +15,9 @@ pub const OLLAMA_NAMESPACE: &str = "library";
 /// The Ollama tag of a reference without one.
 pub const OLLAMA_TAG: &str = "latest";
 
-const GRAMMAR: &str = "use a library model <name>[:<quant>] (https://ardana.ai/models/), hf.co/<org>/<repo>[:<quant>], \
-                       hf.co/<org>/<repo>:<file>.gguf, ollama:[<namespace>/]<name>[:<tag>] or a path to a local file";
+const GRAMMAR: &str = "use a library model <family>[:<size>[-<quant>]] (https://ardana.ai/models/), \
+                       hf.co/<org>/<repo>[:<quant>], hf.co/<org>/<repo>:<file>.gguf, ollama:[<namespace>/]<name>[:<tag>] \
+                       or a path to a local file";
 
 /// A parsed model reference.
 #[derive(Debug, Clone, PartialEq, Eq)]

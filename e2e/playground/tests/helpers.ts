@@ -61,7 +61,7 @@ export function shareHash(request: Request): string {
 
 /**
  * The Run key, by each name its face takes (Run, and Running, Loading or Pulling while a run is in flight): never a
- * banner action whose words start with "Run", such as the standalone build's "Run decider-0.8b in this tab instead".
+ * banner action whose words start with "Run", such as the standalone build's "Run decider:0.8b in this tab instead".
  */
 export const runKey = (page: Page) => page.getByRole('button', { name: /^(Run|Running|Loading|Pulling)$/ });
 
@@ -311,13 +311,13 @@ export async function throttle(cdp: CDPSession, mbps: number | null, latency = 0
 }
 
 /**
- * A run in flight: a server run's answers on the page (decider-2b, the ticket), then decider-0.8b's "In browser" row
+ * A run in flight: a server run's answers on the page (decider:2b, the ticket), then decider:0.8b's "In browser" row
  * downloading into the tab at `mbps` MB/s. Returns the CDP session that narrows the network; `stopInFlight` ends it.
  */
 export async function inFlight(page: Page, mbps = 2): Promise<CDPSession> {
-  await page.goto(`/?autorun=1${shareHash({ ...fixture('ticket.json'), model: 'decider-2b' })}`);
+  await page.goto(`/?autorun=1${shareHash({ ...fixture('ticket.json'), model: 'decider:2b' })}`);
   await expect(page.getByTestId('answered-by')).toContainText('Answered by', { timeout: 120_000 });
-  await pickInBrowser(page, 'decider-0.8b');
+  await pickInBrowser(page, 'decider:0.8b');
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
   await throttle(cdp, mbps);

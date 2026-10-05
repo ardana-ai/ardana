@@ -1,4 +1,4 @@
-// The playground suites (`cargo xtask e2e playground`). xtask starts the release `ardana serve` on decider-2b and
+// The playground suites (`cargo xtask e2e playground`). xtask starts the release `ardana serve` on decider:2b and
 // passes its URL in `ARDANA_BASE_URL`; every output lands under the repo's `tmp/`.
 import path from 'node:path';
 import { defineConfig } from '@playwright/test';

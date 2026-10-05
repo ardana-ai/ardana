@@ -85,30 +85,39 @@ pub fn snapshot() -> Result<Value> {
     Ok(serde_json::from_slice(&snapshot_bytes()?)?)
 }
 
-/// The snapshot's model names, in its order.
+/// The snapshot's sizes under their canonical names `<family>:<size>`, in its order.
 pub fn snapshot_names() -> Result<Vec<String>> {
-    Ok(snapshot()?["models"]
-        .as_array()
-        .context("models")?
-        .iter()
-        .filter_map(|m| m["name"].as_str().map(str::to_string))
-        .collect())
+    let mut names = Vec::new();
+    for family in snapshot()?["models"].as_array().context("models")? {
+        for size in family["sizes"].as_array().context("sizes")? {
+            names.push(format!(
+                "{}:{}",
+                family["name"].as_str().context("a family name")?,
+                size["size"].as_str().context("a size")?
+            ));
+        }
+    }
+    Ok(names)
 }
 
-/// The snapshot with one more model, `name`: decider-2b's entry under that name over the repository
-/// `hf.co/test/<name>-GGUF`, without a browser variant.
-pub fn snapshot_with(name: &str) -> Result<Vec<u8>> {
+/// The snapshot with one more size of the decider family, `size`: the size `2b` under that tag over the repository
+/// `hf.co/test/decider-<size>-GGUF`, without a browser variant, listed as `decider:<size>` after the family's others.
+pub fn snapshot_with(size: &str) -> Result<Vec<u8>> {
     let mut document = snapshot()?;
-    let models = document["models"].as_array_mut().context("models")?;
-    let mut added = models
+    let sizes = document["models"]
+        .as_array_mut()
+        .and_then(|models| models.iter_mut().find(|m| m["name"] == "decider"))
+        .and_then(|decider| decider["sizes"].as_array_mut())
+        .context("the decider family's sizes")?;
+    let mut added = sizes
         .iter()
-        .find(|m| m["name"] == "decider-2b")
-        .context("decider-2b")?
+        .find(|s| s["size"] == "2b")
+        .context("decider:2b")?
         .clone();
-    added["name"] = json!(name);
-    added["weights"] = json!(format!("hf.co/test/{name}-GGUF"));
-    added.as_object_mut().context("an entry")?.remove("browser");
-    models.push(added);
+    added["size"] = json!(size);
+    added["gguf"]["repo"] = json!(format!("hf.co/test/decider-{size}-GGUF"));
+    added.as_object_mut().context("a size")?.remove("browser");
+    sizes.push(added);
     Ok(serde_json::to_vec_pretty(&document)?)
 }
 
@@ -333,7 +342,7 @@ pub struct Seen {
 }
 
 /// A loopback server publishing a library document as the landing does (C2): the index at `/models.json` with an
-/// `ETag` (a 304 when `If-None-Match` carries it), each model's manifest at `/models/<name>.json`, 404 elsewhere. The
+/// `ETag` (a 304 when `If-None-Match` carries it), each family's manifest at `/models/<family>.json`, 404 elsewhere. The
 /// document can be replaced while it runs ([`LibraryServer::publish`], a new `ETag`), and every request is recorded.
 pub struct LibraryServer {
     /// `http://127.0.0.1:<port>/models.json`, what `ARDANA_LIBRARY` names.
@@ -434,14 +443,14 @@ fn answer(
         let manifest = path
             .strip_prefix("/models/")
             .and_then(|file| file.strip_suffix(".json"))
-            .and_then(|name| {
+            .and_then(|family| {
                 let index: Value = serde_json::from_slice(&document).ok()?;
-                let entry = index["models"]
+                let model = index["models"]
                     .as_array()?
                     .iter()
-                    .find(|m| m["name"] == name)?
+                    .find(|m| m["name"] == family)?
                     .clone();
-                serde_json::to_vec(&json!({"schema": 1, "model": entry})).ok()
+                serde_json::to_vec(&json!({"schema": 1, "model": model})).ok()
             });
         match manifest {
             Some(body) => ("200 OK", String::new(), body),

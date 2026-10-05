@@ -112,7 +112,7 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Mark every test that needs a real model, network, the Ollama store or more than a few seconds with
   `#[ignore = "e2e: <what it needs>"]`. Plain `cargo test` stays fast and offline; `cargo xtask e2e rust` runs
   `cargo test --workspace -- --include-ignored` under the home guard.
-- End-to-end tests use the official models from `xtask/fetch.toml` (decider-2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B, Gemma 4 E2B,
+- End-to-end tests use the official models from `xtask/fetch.toml` (decider:2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B, Gemma 4 E2B,
   Ollama `llama3.2`), resolved from `tmp/hf`; never replace a real model with an invented fixture.
 - Put test temp files under `$ARDANA_TMP` (or `std::env::temp_dir()`, which `[env]` points at `tmp/sys`); never under
   the real home. Tests that run `ardana pull` give each child its own `ARDANA_HOME` under `$ARDANA_TMP/<test>` (tests

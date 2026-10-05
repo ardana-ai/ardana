@@ -214,7 +214,7 @@ mod tests {
             .with_context(|| format!("{} is missing; run `cargo xtask fetch`", path.display()))
     }
 
-    /// The profile JSON the server sends for decider-2b, and the bytes of its tokenizer.
+    /// The profile JSON the server sends for decider:2b, and the bytes of its tokenizer.
     fn decider_2b_files() -> Result<(String, Vec<u8>)> {
         let config: Value = serde_json::from_slice(&decider_2b("decider_config.json")?)?;
         let profile = serde_json::to_string(&from_decider_config(&config, Layout::Plain)?)?;
@@ -259,7 +259,7 @@ mod tests {
     fn runs_answer_as_the_server() -> Result<()> {
         let (profile_json, tokenizer) = decider_2b_files()?;
         let profile = profile(&profile_json).map_err(anyhow::Error::msg)?;
-        let reader = reader("decider-2b", &tokenizer, &profile).map_err(anyhow::Error::msg)?;
+        let reader = reader("decider:2b", &tokenizer, &profile).map_err(anyhow::Error::msg)?;
         let decider = reader.0.clone();
         let body = ticket()?;
         let request: SystemOneRequest = serde_json::from_str(&body)?;
@@ -321,8 +321,8 @@ mod tests {
                 .is_err_and(|err| err.starts_with("the server sent an unreadable profile: ")),
         );
         assert!(
-            reader("decider-2b", b"{", &read)
-                .is_err_and(|err| err.starts_with("the tokenizer of decider-2b does not load: ")),
+            reader("decider:2b", b"{", &read)
+                .is_err_and(|err| err.starts_with("the tokenizer of decider:2b does not load: ")),
         );
         Ok(())
     }

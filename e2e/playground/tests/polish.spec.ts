@@ -1,4 +1,4 @@
-// The last pass over the page, against the release `ardana` serving decider-2b (see playwright.config.ts): every
+// The last pass over the page, against the release `ardana` serving decider:2b (see playwright.config.ts): every
 // control a finger can reach (`touch_targets`), the current "On this page" row in every scheme (`current_row`), and
 // what a first load carries for the shortcut glyphs and the logo (`page_weight`).
 import fs from 'node:fs';
@@ -82,7 +82,7 @@ function drawnSizes() {
 
 /** The page holding what every kind of control looks like: answers, a builder with its options, the Share popover. */
 async function everyControl(page: Page) {
-  await page.goto(`/?autorun=1${shareHash({ ...fixture('ticket.json'), model: 'decider-2b' })}`);
+  await page.goto(`/?autorun=1${shareHash({ ...fixture('ticket.json'), model: 'decider:2b' })}`);
   await expect(page.getByTestId('answered-by')).toContainText('Answered by', { timeout: 120_000 });
   await page.getByRole('button', { name: 'Edit question department' }).click();
   await expect(page.getByRole('button', { name: 'Add option' })).toBeVisible();
@@ -117,10 +117,10 @@ async function fingerReach(browser: Browser, testInfo: TestInfo): Promise<string
     await page.keyboard.press('Escape');
     await screenshot(page, testInfo, 'touch_targets', 'finger');
     // "Show the command", for a model the server has not pulled.
-    await page.goto(`/${shareHash({ ...fixture('ticket.json'), model: 'decider-4b' })}`);
+    await page.goto(`/${shareHash({ ...fixture('ticket.json'), model: 'decider:4b' })}`);
     await expect(page.getByRole('button', { name: 'Show the command' })).toBeVisible();
     short.push(...(await page.evaluate(shortReach, '#run-note')));
-    // Stop, while decider-0.8b downloads into the tab.
+    // Stop, while decider:0.8b downloads into the tab.
     const cdp = await inFlight(page);
     short.push(...(await page.evaluate(shortReach, '#run-note')));
     await screenshot(page, testInfo, 'touch_targets', 'stop');
@@ -155,7 +155,7 @@ test('touch_targets', async ({ page, browser }, testInfo) => {
 test('current_row', async ({ page }, testInfo) => {
   await page.goto(`/${shareHash(fixture('ticket.json'))}`);
   const opener = page.getByRole('button', { name: 'Open sidebar' });
-  await expect(page.locator('#model')).toHaveValue('decider-2b');
+  await expect(page.locator('#model')).toHaveValue('decider:2b');
   const drawer = await opener.isVisible();
   for (const [scheme, forced] of [
     ['light', 'none'],

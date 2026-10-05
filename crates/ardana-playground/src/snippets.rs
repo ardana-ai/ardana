@@ -152,7 +152,7 @@ mod tests {
 
     fn ticket() -> SystemOneRequest {
         serde_json::from_value(json!({
-            "model": "decider-2b",
+            "model": "decider:2b",
             "state": {"note": "it's \"null\" and true", "n": null, "ok": false},
             "questions": {"refund": {"type": "noul", "instructions": "Refund?"}}
         }))
@@ -163,7 +163,7 @@ mod tests {
     fn the_cli_reads_the_exact_body() {
         let text = cli(&ticket());
         let (command, rest) = text.split_once('\n').unwrap();
-        assert_eq!(command, "ardana run decider-2b --request - <<'JSON'");
+        assert_eq!(command, "ardana run decider:2b --request - <<'JSON'");
         assert_eq!(
             rest.strip_suffix("\nJSON\n").unwrap(),
             request::body(&ticket())
@@ -172,7 +172,9 @@ mod tests {
 
     #[test]
     fn the_pull_names_the_pick_as_written() {
-        assert_eq!(pull("decider-4b:q8_0"), "ardana pull decider-4b:q8_0");
+        assert_eq!(pull("qwen3.5:0.8b"), "ardana pull qwen3.5:0.8b");
+        assert_eq!(pull("decider:4b-q8_0"), "ardana pull decider:4b-q8_0");
+        assert_eq!(pull("Decider"), "ardana pull Decider");
     }
 
     #[test]
@@ -197,7 +199,7 @@ mod tests {
         let text = snippet(Language::Python, "http://127.0.0.1:8000", &ticket());
         assert!(text.contains("TYPESAFE_BASE_URL=http://127.0.0.1:8000 "));
         assert!(
-            text.contains("    response = client.system_one(\n        model=\"decider-2b\",\n")
+            text.contains("    response = client.system_one(\n        model=\"decider:2b\",\n")
         );
         assert!(text.contains("        questions={\n          \"refund\": {\n"));
     }
@@ -211,7 +213,7 @@ mod tests {
         assert!(text.contains(
             "  state: {\n    \"note\": \"it's \\\"null\\\" and true\",\n    \"n\": null,"
         ));
-        assert!(text.contains("client.systemOne({\n  model: \"decider-2b\",\n  state: "));
+        assert!(text.contains("client.systemOne({\n  model: \"decider:2b\",\n  state: "));
     }
 
     #[test]

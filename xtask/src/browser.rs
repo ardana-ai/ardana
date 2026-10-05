@@ -1,5 +1,5 @@
 //! The browser suites (Q24). `playground`: the release `ardana` from `cargo xtask build`, copied alone into
-//! `tmp/e2e/playground-binary` and serving decider-2b while the playground's `dist/` is moved away (plus one server
+//! `tmp/e2e/playground-binary` and serving decider:2b while the playground's `dist/` is moved away (plus one server
 //! on an empty registry, for `first_run`, `browser_stop` and `browser_recover`, one more for `browser_run`,
 //! `insecure_origin` and `browser_resume`, one over an empty Hub cache for `browser_pull`, and one more empty one whose
 //! registry `pull_while_open` pulls into with `ardana pull`), driven by the Playwright cases in
@@ -122,9 +122,9 @@ pub fn playground(sandbox: &Sandbox) -> Result<()> {
         // `first_run`, `browser_stop` and `browser_recover` start on an empty registry; their runs in the tab leave it
         // empty for the next viewport.
         let empty = Server::start_empty(sandbox, &copy, "playground-empty")?;
-        // `browser_run` and `browser_resume` compare the tab with decider-0.8b on the server, which pulls and loads it:
+        // `browser_run` and `browser_resume` compare the tab with decider:0.8b on the server, which pulls and loads it:
         // on a server of their own (which `insecure_origin` reaches under another host name, and `browser_resume`
-        // through a proxy that drops its connections), the other cases keep a server holding decider-2b alone.
+        // through a proxy that drops its connections), the other cases keep a server holding decider:2b alone.
         let browser = Server::start_empty(sandbox, &copy, "playground-browser")?;
         // `browser_pull` needs a server that holds no browser variant: its own empty Hub cache, every pull failing.
         let uncached = Server::start_uncached(sandbox, &copy, "playground-uncached")?;
@@ -667,7 +667,7 @@ fn detect(sandbox: &Sandbox) -> Result<Vec<String>> {
     invalid["questions"]["department"]["criteria"] = json!(["billing"]);
     // A library model the design server has not pulled and no tab can run: the page shows the ardana CLI's command.
     let mut lacked = ticket.clone();
-    lacked["model"] = json!("decider-4b");
+    lacked["model"] = json!("decider:4b");
     let server = Server::start(sandbox, &ardana, "design", None)?;
     warm(sandbox, &server.url, &ticket)?;
     let states = [
@@ -703,7 +703,7 @@ fn detect(sandbox: &Sandbox) -> Result<Vec<String>> {
             )?;
         }
     }
-    // The in-tab states: the `@design` test runs decider-0.8b's browser variant on this server at each viewport and
+    // The in-tab states: the `@design` test runs decider:0.8b's browser variant on this server at each viewport and
     // writes the frozen pages into `out`.
     let status = playwright(sandbox)
         .args([
@@ -802,7 +802,7 @@ fn scan(
     Ok(())
 }
 
-/// Loads decider-2b with one request, so the results states do not wait on the first load.
+/// Loads decider:2b with one request, so the results states do not wait on the first load.
 fn warm(sandbox: &Sandbox, url: &str, request: &Value) -> Result<()> {
     let output = sandbox
         .command("curl")

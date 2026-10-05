@@ -1,18 +1,20 @@
-//! The model library: short names such as `decider-2b` for Hugging Face GGUF repositories, which [`crate::pull`]
-//! resolves like the `hf.co/` reference they stand for; `<name>:<quant>` picks another GGUF of the same repository,
-//! matched case-insensitively like an `hf.co/` quant, and a model may have a browser variant, ONNX weights
-//! onnxruntime-web runs in a visitor's tab ([`BrowserEntry`]).
+//! The model library: families of Hugging Face GGUF repositories with their sizes inside (Q1), which [`crate::pull`]
+//! resolves by the file a size's quant names (Q14). A library name is `<family>[:<tag>]`; a family's tags are
+//! `latest`, `<size>` and `<size>-<quant>` for every size and quant it holds, enumerated and never parsed (Q9), and a
+//! size may have a browser variant, ONNX weights onnxruntime-web runs in a visitor's tab ([`BrowserEntry`]).
+//! [`LibraryPick::name`] is the canonical name every reader shows (Q7): `<family>:<size>` for a size's default quant,
+//! `<family>:<size>-<quant>` for another.
 //!
 //! The library is one published document ([`LibraryDocument`], `https://ardana.ai/models.json`, with one manifest per
-//! model beside it at `models/<name>.json`), read at run time: no model list is compiled in, and [`DEFAULT_MODEL`] is
-//! the one name the binary keeps (Q1). [`LibrarySource`] is what `ARDANA_LIBRARY` names (C4); [`LibraryClient`] reads
-//! the library from it through the cache in the Ardana home (`$ARDANA_HOME/library`, the bytes as fetched, Q7): `pull`
-//! and `run` of a model not pulled GET its manifest every time and fall back to the cached copy, while `list`, `show`,
-//! `rm`, `ps` and help read the cache alone (Q8); `serve` starts from the cached index and GETs the index once, then
-//! once every refresh, with `If-None-Match` on the index's `ETag`, keeping the cached copy when a GET fails (Q9), and
-//! asks for the manifest of a name its index lacks (Q10). Every GET carries `User-Agent: ardana/<version>` and nothing
-//! else that identifies the machine (Q17). [`Library`] is a document as read: the entries this version reads, an
-//! invalid one left out (Q12).
+//! family beside it at `models/<family>.json`, Q16), read at run time: no model list is compiled in, and
+//! [`DEFAULT_MODEL`] is the one name the binary keeps (Q15). [`LibrarySource`] is what `ARDANA_LIBRARY` names;
+//! [`LibraryClient`] reads the library from it through the cache in the Ardana home (`$ARDANA_HOME/library`, the bytes
+//! as fetched): `pull` and `run` of a model not pulled GET its family's manifest every time and fall back to the cached
+//! copy, while `list`, `show`, `rm`, `ps` and help read the cache alone; `serve` starts from the cached index and GETs
+//! the index once, then once every refresh, with `If-None-Match` on the index's `ETag`, keeping the cached copy when a
+//! GET fails, and asks for the manifest of a name its index lacks. Every GET carries `User-Agent: ardana/<version>` and
+//! nothing else that identifies the machine. [`Library`] is a document as read: the families and sizes this version
+//! reads, an invalid one left out by [`LibraryDocument::parse`] (Q13).
 
 use std::ffi::OsStr;
 use std::fmt;
@@ -20,48 +22,50 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub use ardana_core::{
-    BrowserEntry, LibraryDocument, LibraryEntry, LibraryError, LibraryManifest, LibraryTag,
+    BrowserEntry, GgufEntry, GgufQuant, LibraryDocument, LibraryError, LibraryFamily,
+    LibraryManifest, LibrarySize, RepoPin,
 };
 
-use crate::refs::{HF_PREFIX, HfFile, OLLAMA_PREFIX, Ref, valid_name};
+use crate::refs::{OLLAMA_PREFIX, valid_name};
 use crate::{Registry, RegistryError, write_atomically};
 
-/// The variable naming the library's source (C4): unset, the published library; an `http(s)://…/models.json` URL,
+/// The variable naming the library's source: unset, the published library; an `http(s)://…/models.json` URL,
 /// that index with its manifests beside it; a file path, that one document and no network; `off`, no library.
 pub const LIBRARY_VAR: &str = "ARDANA_LIBRARY";
 /// The published library, the source when [`LIBRARY_VAR`] is unset.
 pub const LIBRARY_URL: &str = "https://ardana.ai/models.json";
 /// The [`LIBRARY_VAR`] value that turns the library off.
 pub const LIBRARY_OFF: &str = "off";
-/// Where people read about the library's models; help and error texts point here and name no model (Q11).
+/// Where people read about the library's models; help and error texts point here and name no model but the default
+/// one (Q12).
 pub const MODELS_PAGE: &str = "https://ardana.ai/models/";
-/// The model requests without a model use while nothing is pulled and no document is at hand: the one model name
-/// the binary keeps (Q1).
-pub const DEFAULT_MODEL: &str = "decider-2b";
-/// The `User-Agent` of every library GET, and all a GET says about this machine (Q17).
+/// The model requests without a model use while nothing is pulled and no document is at hand: the family `decider`,
+/// the one library name the binary keeps (Q15).
+pub const DEFAULT_MODEL: &str = "decider";
+/// The tag a family's name alone stands for (Q9).
+pub const LATEST: &str = "latest";
+/// The `User-Agent` of every library GET, and all a GET says about this machine.
 pub const USER_AGENT: &str = concat!("ardana/", env!("CARGO_PKG_VERSION"));
-/// The directory of the library's cache inside the Ardana home (Q7), holding the index as `models.json` and each
-/// manifest as `models/<name>.json`, the bytes as fetched.
+/// The directory of the library's cache inside the Ardana home, holding the index as `models.json` and each family's
+/// manifest as `models/<family>.json`, the bytes as fetched.
 pub const CACHE_DIR: &str = "library";
 /// The cached index's file name, and the published index's.
 pub const INDEX_FILE: &str = "models.json";
-/// The file beside the cached index holding its `ETag`, which the next index GET sends as `If-None-Match` (Q7).
+/// The file beside the cached index holding its `ETag`, which the next index GET sends as `If-None-Match`.
 pub const ETAG_FILE: &str = "models.json.etag";
 /// The directory of the manifests, in the cache and beside the published index alike.
 pub const MANIFEST_DIR: &str = "models";
 
-/// The version of this `ardana`, which a document's `min_version` is compared with (Q12).
+/// The version of this `ardana`, which a document's `min_version` is compared with (Q13).
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-/// The quantizations `cargo xtask onnx convert` builds browser variants in.
-const BROWSER_QUANTS: [&str; 2] = ["int4", "int8"];
 /// How long a library GET may take to connect, and in all.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-/// Where the library comes from (C4): what [`LIBRARY_VAR`] names.
+/// Where the library comes from: what [`LIBRARY_VAR`] names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LibrarySource {
-    /// The index at this URL, with the manifests at `models/<name>.json` beside it.
+    /// The index at this URL, with the manifests at `models/<family>.json` beside it.
     Url(String),
     /// This one document, with no network.
     File(PathBuf),
@@ -91,15 +95,15 @@ impl LibrarySource {
         }
     }
 
-    /// The URL of the manifest of the model `name`, beside the index (C2); `None` but for a URL source.
-    pub fn manifest_url(&self, name: &str) -> Option<String> {
+    /// The URL of the manifest of the family `family`, beside the index (C2, Q16); `None` but for a URL source.
+    pub fn manifest_url(&self, family: &str) -> Option<String> {
         let LibrarySource::Url(index) = self else {
             return None;
         };
         let base = index.rsplit_once('/').map_or("", |(base, _)| base);
         Some(format!(
             "{base}/{MANIFEST_DIR}/{}.json",
-            name.to_ascii_lowercase()
+            family.to_ascii_lowercase()
         ))
     }
 }
@@ -114,7 +118,7 @@ impl fmt::Display for LibrarySource {
     }
 }
 
-/// The library as one process reads it: from its source (C4), through the cache in the Ardana home (Q7).
+/// The library as one process reads it: from its source, through the cache in the Ardana home.
 #[derive(Debug, Clone)]
 pub struct LibraryClient {
     source: LibrarySource,
@@ -143,29 +147,29 @@ impl LibraryClient {
         &self.source
     }
 
-    /// The cached manifest of the model `name`.
-    fn manifest_path(&self, name: &str) -> PathBuf {
+    /// The cached manifest of the family `family`.
+    fn manifest_path(&self, family: &str) -> PathBuf {
         self.cache
             .join(MANIFEST_DIR)
-            .join(format!("{}.json", name.to_ascii_lowercase()))
+            .join(format!("{}.json", family.to_ascii_lowercase()))
     }
 
-    /// The library as `pull` and `run` read it for `input`, a `<name>[:<quant>]` (Q8): the whole document of a file
-    /// source, nothing under `off`, and under a URL source the model's manifest, fetched every time (its body kept in
+    /// The library as `pull` and `run` read it for `input`, a `<family>[:<tag>]`: the whole document of a file source,
+    /// nothing under `off`, and under a URL source the family's manifest (Q16), fetched every time (its body kept in
     /// the cache) with the cached copy standing in when the GET fails; a 404 is no library model, and an input that is
-    /// no library name sends nothing. The library's entry for `input`, when it has one.
+    /// no library name sends nothing. The library's family for `input`, when it has one.
     pub async fn lookup(&self, input: &str) -> Result<Library, RegistryError> {
         let LibrarySource::Url(_) = &self.source else {
             return self.cached(input);
         };
-        let Some(name) = library_name(input) else {
+        let Some(family) = library_name(input) else {
             return Ok(Library::empty());
         };
         let url = self
             .source
-            .manifest_url(name)
+            .manifest_url(family)
             .expect("a URL source has manifest URLs");
-        let path = self.manifest_path(name);
+        let path = self.manifest_path(family);
         let library_err = |msg: String| RegistryError::Library {
             url: url.clone(),
             msg,
@@ -185,27 +189,27 @@ impl LibraryClient {
             },
         };
         let text = std::str::from_utf8(&body).map_err(|err| library_err(err.to_string()))?;
-        let entry =
+        let family =
             LibraryManifest::parse(text, VERSION).map_err(|err| library_err(err.to_string()))?;
         // The bytes as fetched are kept once they read, so a body that does not never replaces a good copy.
         if fetched {
             write_atomically(&path, &body)?;
         }
-        Ok(entry.map_or_else(Library::empty, Library::single))
+        Ok(family.map_or_else(Library::empty, Library::single))
     }
 
-    /// The library as the commands that send nothing read it for `input` (Q8: `list`, `show`, `rm`, `ps` and help):
-    /// the whole document of a file source, nothing under `off`, and under a URL source the model's cached manifest,
-    /// when a pull or run fetched one.
+    /// The library as the commands that send nothing read it for `input` (`list`, `show`, `rm`, `ps` and help): the
+    /// whole document of a file source, nothing under `off`, and under a URL source the family's cached manifest, when
+    /// a pull or run fetched one.
     pub fn cached(&self, input: &str) -> Result<Library, RegistryError> {
         match &self.source {
             LibrarySource::Off => Ok(Library::empty()),
             LibrarySource::File(path) => Library::from_file(path),
             LibrarySource::Url(_) => {
-                let Some(name) = library_name(input) else {
+                let Some(family) = library_name(input) else {
                     return Ok(Library::empty());
                 };
-                let path = self.manifest_path(name);
+                let path = self.manifest_path(family);
                 let text = match std::fs::read_to_string(&path) {
                     Ok(text) => text,
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -213,13 +217,13 @@ impl LibraryClient {
                     }
                     Err(err) => return Err(RegistryError::Io { path, err }),
                 };
-                let entry = LibraryManifest::parse(&text, VERSION).map_err(|err| {
+                let family = LibraryManifest::parse(&text, VERSION).map_err(|err| {
                     RegistryError::Invalid {
                         what: path.display().to_string(),
                         msg: err.to_string(),
                     }
                 })?;
-                Ok(entry.map_or_else(Library::empty, Library::single))
+                Ok(family.map_or_else(Library::empty, Library::single))
             }
         }
     }
@@ -241,7 +245,7 @@ impl LibraryClient {
         }
     }
 
-    /// The whole library read again, as `ardana serve` reads it on start and every refresh (Q9): a file source's
+    /// The whole library read again, as `ardana serve` reads it on start and every refresh: a file source's
     /// document; under a URL source one index GET, sent with `If-None-Match` on the cached index's `ETag`, whose 200
     /// is kept in the cache (the bytes as fetched, its `ETag` beside them) and read, and whose 304 (or a document this
     /// version does not read) keeps the cached copy. `None` when nothing new was read; an error naming the URL when
@@ -358,8 +362,9 @@ fn causes(err: &dyn std::error::Error) -> String {
     text
 }
 
-/// The library name `input` names (`<name>[:<quant>]`, both in the name grammar), or `None` for anything else: a
-/// reference (`hf.co/`, `ollama:`), a path (a `.gguf` file name included), or an input no library could hold.
+/// The family `input` names when it is a library name, `<family>[:<tag>]` split once at its first `:`, the family in
+/// the name grammar; `None` for a reference (Q8): an input holding a `/`, one starting with `ollama:` and one ending in
+/// `.gguf` ask the library nothing.
 pub fn library_name(input: &str) -> Option<&str> {
     if input.contains('/')
         || input.starts_with(OLLAMA_PREFIX)
@@ -367,50 +372,40 @@ pub fn library_name(input: &str) -> Option<&str> {
     {
         return None;
     }
-    let (name, quant) = match input.split_once(':') {
-        Some((name, quant)) => (name, Some(quant)),
-        None => (input, None),
-    };
-    (valid_name(name) && quant.is_none_or(valid_name)).then_some(name)
+    let family = input.split_once(':').map_or(input, |(family, _)| family);
+    valid_name(family).then_some(family)
 }
 
-/// A library document as read: the models this `ardana` reads, the model requests use while nothing is pulled and
+/// A library document as read: the families this `ardana` reads, the model requests use while nothing is pulled and
 /// the first browser model.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Library {
     /// The model a request without a model uses when the registry is empty.
     pub default: String,
-    /// The library model with a browser variant that a playground offers first.
+    /// The size with a browser variant that a playground offers first, a canonical name.
     pub browser_default: Option<String>,
-    pub models: Vec<LibraryEntry>,
+    pub models: Vec<LibraryFamily>,
 }
 
-/// A library model and the quant a name picks from it.
+/// One quant of a library size: what a library name stands for (C4).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LibraryPick {
-    pub model: LibraryEntry,
-    /// A quant other than the model's own, lowercased.
-    quant: Option<String>,
+    /// The family's name.
+    pub family: String,
+    /// The size, with the family's `kind`, `summary`, `license` and `layout` where it carries none (Q4).
+    pub size: LibrarySize,
+    pub quant: GgufQuant,
 }
 
 impl LibraryPick {
-    /// The registry name the pick is pulled as: the model's name, or `<name>:<quant>` for another quant.
+    /// The canonical name (Q7): `<family>:<size>` for the size's default quant, `<family>:<size>-<quant>` for another.
     pub fn name(&self) -> String {
-        match &self.quant {
-            None => self.model.name.clone(),
-            Some(quant) => format!("{}:{quant}", self.model.name),
-        }
+        self.size.name(&self.family, &self.quant)
     }
 
-    /// The `hf.co/<org>/<repo>:<quant>` reference the pick stands for.
+    /// The reference a pull reads (Q14): the quant's file in the size's GGUF repository, `hf.co/<org>/<repo>:<file>`.
     pub fn reference(&self) -> String {
-        let quant = self.quant.as_deref().unwrap_or(&self.model.quant);
-        format!("{}:{quant}", self.model.weights)
-    }
-
-    /// The download size in bytes, known for the model's own quant only.
-    pub fn size(&self) -> Option<u64> {
-        self.quant.is_none().then_some(self.model.size)
+        self.size.reference(&self.quant)
     }
 }
 
@@ -425,13 +420,10 @@ impl Library {
         }
     }
 
-    /// The one model a manifest holds, checked as [`Library::from_document`] checks an index's entries (Q12): an
-    /// entry no pull reads is no library model.
-    fn single(entry: LibraryEntry) -> Library {
+    /// The one family a manifest holds.
+    fn single(family: LibraryFamily) -> Library {
         let mut library = Library::empty();
-        if check_entry(&entry).is_ok() {
-            library.models = vec![entry];
-        }
+        library.models = vec![family];
         library
     }
 
@@ -449,36 +441,49 @@ impl Library {
         Ok(Library::from_document(document))
     }
 
-    /// `document`'s models this registry can pull (Q12): an entry whose name, repositories, commits, quants or
-    /// source are not what a pull reads, or whose name an earlier entry took, is left out.
+    /// `document`'s families, as [`LibraryDocument::parse`] read them (Q13).
     pub fn from_document(document: LibraryDocument) -> Library {
-        let mut models: Vec<LibraryEntry> = Vec::with_capacity(document.models.len());
-        for entry in document.models {
-            if check_entry(&entry).is_ok() && !models.iter().any(|m| m.name == entry.name) {
-                models.push(entry);
-            }
-        }
         Library {
             default: document.default,
             browser_default: document.browser_default,
-            models,
+            models: document.models,
         }
     }
 
-    /// The model names, in library order.
-    pub fn names(&self) -> Vec<&str> {
-        self.models.iter().map(|m| m.name.as_str()).collect()
+    /// Every size's default quant, in document order: one per size, under its canonical name `<family>:<size>`.
+    pub fn sizes(&self) -> Vec<LibraryPick> {
+        self.models
+            .iter()
+            .flat_map(|family| {
+                family.sizes.iter().filter_map(|size| {
+                    Some(LibraryPick {
+                        family: family.name.clone(),
+                        size: size.clone(),
+                        quant: size.default_quant()?.clone(),
+                    })
+                })
+            })
+            .collect()
     }
 
-    /// The library model named exactly `name` and its browser variant, when it has one.
-    pub fn browser(&self, name: &str) -> Option<(&LibraryEntry, &BrowserEntry)> {
-        let model = self.models.iter().find(|m| m.name == name)?;
-        Some((model, model.browser.as_ref()?))
+    /// The canonical names of the sizes, in document order.
+    pub fn names(&self) -> Vec<String> {
+        self.sizes().iter().map(LibraryPick::name).collect()
     }
 
-    /// The bytes a tab downloads to run the browser variant of the model `name`, when it has one.
+    /// The size named exactly `name`, its canonical name, when it has a browser variant (Q19).
+    pub fn browser(&self, name: &str) -> Option<LibraryPick> {
+        self.sizes()
+            .into_iter()
+            .find(|pick| pick.size.browser.is_some() && pick.name() == name)
+    }
+
+    /// The bytes a tab downloads to run the browser variant of the size `name`, when it has one.
     pub fn browser_size(&self, name: &str) -> Option<u64> {
-        self.browser(name).map(|(_, browser)| browser.size)
+        self.browser(name)?
+            .size
+            .browser
+            .map(|browser| browser.bytes)
     }
 
     /// Whether `name` is the browser default, the browser model a playground offers first.
@@ -486,122 +491,63 @@ impl Library {
         self.browser_default.as_deref() == Some(name)
     }
 
-    /// The library model `input` names, `<name>` or `<name>:<quant>`, both matched case-insensitively; the model's
-    /// own quant is the bare name. `None` for anything else.
-    pub fn find(&self, input: &str) -> Option<LibraryPick> {
-        let name = library_name(input)?;
-        let model = self
+    /// The quant the library name `input` names (Q8 to Q12): `Ok(None)` for a reference and for a family the library
+    /// lacks; else the first of the family's tags (`latest`, `<size>` and `<size>-<quant>`, document order) equal to
+    /// the input's tag, `latest` when it has none, family and tag compared ASCII case-insensitively and whole; a tag
+    /// the family does not list is [`RegistryError::UnknownTag`], listing its canonical tags.
+    pub fn find(&self, input: &str) -> Result<Option<LibraryPick>, RegistryError> {
+        let Some(name) = library_name(input) else {
+            return Ok(None);
+        };
+        let Some(family) = self
             .models
             .iter()
-            .find(|m| m.name.eq_ignore_ascii_case(name))?;
-        let quant = match input.split_once(':') {
-            None => None,
-            Some((_, quant)) if quant.eq_ignore_ascii_case(&model.quant) => None,
-            Some((_, quant)) => Some(quant.to_lowercase()),
+            .find(|family| family.name.eq_ignore_ascii_case(name))
+        else {
+            return Ok(None);
         };
-        Some(LibraryPick {
-            model: model.clone(),
-            quant,
-        })
+        let wanted = input.split_once(':').map_or(LATEST, |(_, tag)| tag);
+        let latest = wanted
+            .eq_ignore_ascii_case(LATEST)
+            .then(|| {
+                let size = family
+                    .sizes
+                    .iter()
+                    .find(|size| size.size == family.latest)?;
+                Some((size, size.default_quant()?))
+            })
+            .flatten();
+        let found = latest.or_else(|| {
+            family.sizes.iter().find_map(|size| {
+                let quant = size.gguf.quants.iter().find(|quant| {
+                    size.tag(quant).eq_ignore_ascii_case(wanted)
+                        || format!("{}-{}", size.size, quant.quant).eq_ignore_ascii_case(wanted)
+                })?;
+                Some((size, quant))
+            })
+        });
+        let Some((size, quant)) = found else {
+            return Err(RegistryError::UnknownTag {
+                family: family.name.clone(),
+                tag: wanted.to_string(),
+                tags: family
+                    .sizes
+                    .iter()
+                    .flat_map(|size| size.gguf.quants.iter().map(|quant| size.tag(quant)))
+                    .collect(),
+            });
+        };
+        Ok(Some(LibraryPick {
+            family: family.name.clone(),
+            size: size.clone(),
+            quant: quant.clone(),
+        }))
     }
-}
-
-/// Why `entry` is not one a pull reads, if it is not: the checks a document passes before any download.
-fn check_entry(entry: &LibraryEntry) -> Result<(), String> {
-    if !valid_name(&entry.name) || entry.name != entry.name.to_lowercase() {
-        return Err("a name is lowercase letters, digits, '.', '_' or '-'".into());
-    }
-    let browser = entry.browser.as_ref();
-    for repo in std::iter::once(&entry.weights)
-        .chain(&entry.tokenizer)
-        .chain(browser.map(|b| &b.weights))
-    {
-        if !hf_repo(repo) {
-            return Err(format!("{repo:?} is not {HF_PREFIX}<org>/<repo>"));
-        }
-    }
-    for commit in std::iter::once(&entry.commit)
-        .chain(&entry.tokenizer_commit)
-        .chain(browser.map(|b| &b.commit))
-    {
-        if !is_commit(commit) {
-            return Err(format!("{commit:?} is not a 40-hex commit"));
-        }
-    }
-    if entry.tokenizer.is_some() != entry.tokenizer_commit.is_some() {
-        return Err("a tokenizer repository and its commit come together".into());
-    }
-    if let Some(source) = &entry.source
-        && !source
-            .split_once('@')
-            .is_some_and(|(repo, commit)| hf_repo(repo) && is_commit(commit))
-    {
-        return Err(format!(
-            "the source {source:?} is not {HF_PREFIX}<org>/<repo>@<commit>"
-        ));
-    }
-    if let Some(browser) = browser
-        && !BROWSER_QUANTS.contains(&browser.quant.as_str())
-    {
-        return Err(format!(
-            "the browser quant {:?} is not one of {}",
-            browser.quant,
-            BROWSER_QUANTS.join(", ")
-        ));
-    }
-    let quant = Ref::parse(&format!("{}:{}", entry.weights, entry.quant));
-    if !matches!(
-        quant,
-        Ok(Ref::Hf {
-            file: Some(HfFile::Quant(_)),
-            ..
-        })
-    ) {
-        return Err("the quant is not a quant name".into());
-    }
-    Ok(())
-}
-
-/// Whether `repo` is `hf.co/<org>/<repo>`, without a quant or file.
-fn hf_repo(repo: &str) -> bool {
-    repo.starts_with(HF_PREFIX) && matches!(Ref::parse(repo), Ok(Ref::Hf { file: None, .. }))
-}
-
-/// Whether `commit` is a 40-hex (lowercase) commit id.
-fn is_commit(commit: &str) -> bool {
-    commit.len() == 40
-        && commit
-            .bytes()
-            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const COMMIT: &str = "a0a01d6f8135298f400a8c856b355793012ae971";
-
-    /// A document of one model `a` with `fields` added to its entry, `browser` as its browser table (when given) and
-    /// `head` replacing the top-level fields.
-    fn document(head: &str, fields: &str, browser: Option<&str>) -> String {
-        let browser = browser.map_or(String::new(), |b| {
-            format!(
-                r#", "browser": {{"weights": "hf.co/o/r-ONNX", "commit": "{COMMIT}", "quant": "int4", "size": 1,
-                      "profile": {{}}{b}}}"#
-            )
-        });
-        format!(
-            r#"{{"schema": 1, {head}, "models": [{{"name": "a", "kind": "decider", "summary": "S.", "base": "o/b",
-                "params": "1B", "weights": "hf.co/o/r", "commit": "{COMMIT}", "quant": "Q4_0", "size": 1,
-                "release_date": "2026-01-01", "tags": []{fields}{browser}}}]}}"#
-        )
-    }
-
-    fn read(text: &str) -> Library {
-        let document =
-            LibraryDocument::parse(text, VERSION).unwrap_or_else(|err| panic!("{err}:\n{text}"));
-        Library::from_document(document)
-    }
 
     #[test]
     fn sources_follow_the_variable() {
@@ -619,82 +565,32 @@ mod tests {
             LibrarySource::File("tests/data/models.json".into())
         );
         assert_eq!(
-            parse(Some("https://ardana.ai/models.json")).manifest_url("Decider-2B"),
-            Some("https://ardana.ai/models/decider-2b.json".into())
+            parse(Some("https://ardana.ai/models.json")).manifest_url("Decider"),
+            Some("https://ardana.ai/models/decider.json".into())
         );
-        assert_eq!(LibrarySource::Off.manifest_url("decider-2b"), None);
+        assert_eq!(LibrarySource::Off.manifest_url("decider"), None);
         assert_eq!(LibrarySource::Off.to_string(), "off");
     }
 
+    /// Q8: a library name is `<family>[:<tag>]`, split once at its first `:`; references ask the library nothing.
     #[test]
     fn library_names_follow_the_grammar() {
-        assert_eq!(library_name("decider-2b"), Some("decider-2b"));
-        assert_eq!(library_name("Decider-2B:Q8_0"), Some("Decider-2B"));
+        assert_eq!(library_name("decider"), Some("decider"));
+        assert_eq!(library_name("Decider:2B-Q8_0"), Some("Decider"));
+        assert_eq!(library_name("decider:a:b"), Some("decider"));
+        assert_eq!(library_name("decider:"), Some("decider"));
         for other in [
             "",
-            "decider-2b:",
-            ":q8",
-            "decider-2b:Q4 K",
-            "decider-2b:a:b",
+            ":2b",
+            " decider",
             "hf.co/Mapika/decider-2b-GGUF",
-            "ollama:decider-2b",
-            "./decider-2b",
-            " decider-2b",
+            "ollama:decider",
+            "./decider",
+            "decider.gguf",
+            "Decider.GGUF",
         ] {
             assert_eq!(library_name(other), None, "{other:?}");
         }
-    }
-
-    /// Q12 on the registry's side: an entry a pull could not read is left out, and the rest of the document stands.
-    #[test]
-    fn invalid_entries_are_left_out() {
-        let ok = document(
-            "\"default\": \"a\", \"browser_default\": \"a\"",
-            "",
-            Some(""),
-        );
-        let library = read(&ok);
-        assert_eq!(library.names(), ["a"]);
-        assert_eq!(library.default, "a");
-        assert!(library.browser("a").is_some());
-        assert_eq!(library.browser_size("a"), Some(1));
-        assert!(library.is_browser_default("a"));
-        let pick = library.find("A:q8_0").unwrap();
-        assert_eq!(pick.name(), "a:q8_0");
-        assert_eq!(pick.reference(), "hf.co/o/r:q8_0");
-        assert_eq!(pick.size(), None);
-        assert_eq!(library.find("a").unwrap().size(), Some(1));
-
-        let head = "\"default\": \"a\"";
-        for bad in [
-            document(
-                head,
-                r#", "tokenizer": "ollama:x", "tokenizer_commit": "{COMMIT}""#,
-                None,
-            )
-            .replace("{COMMIT}", COMMIT),
-            document(head, r#", "tokenizer": "hf.co/o/t""#, None),
-            document(head, r#", "source": "hf.co/o/s:1234""#, None),
-            document(head, "", None).replace("hf.co/o/r", "o/r"),
-            document(head, "", None).replace("hf.co/o/r", "hf.co/o/r:Q4_0"),
-            document(head, "", None).replace("\"Q4_0\"", "\"Q4 0\""),
-            document(head, "", None).replace("\"name\": \"a\"", "\"name\": \"A\""),
-            document(head, "", None).replace(COMMIT, &COMMIT[..7]),
-            document(head, "", Some("")).replace(COMMIT, &COMMIT.to_uppercase()),
-            document(head, "", Some("")).replace("\"int4\"", "\"Q4_0\""),
-            document(head, "", Some("")).replace("hf.co/o/r-ONNX", "hf.co/o/r-ONNX:int4"),
-        ] {
-            let library = read(&bad);
-            assert_eq!(library.names(), [] as [&str; 0], "{bad}");
-            // The document's other fields are read all the same.
-            assert_eq!(library.default, "a");
-        }
-        let source = document(
-            head,
-            &format!(r#", "source": "hf.co/o/s@{COMMIT}""#),
-            Some(""),
-        );
-        assert_eq!(read(&source).names(), ["a"]);
     }
 
     #[test]

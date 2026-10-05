@@ -1,16 +1,18 @@
-//! `cargo xtask onnx convert|publish <name>`: a library model's browser variant, ONNX weights for onnxruntime-web, and
+//! `cargo xtask onnx convert|publish <name>`: a library size's browser variant, ONNX weights for onnxruntime-web, and
 //! the GGUF ardana-ai hosts for it, both built from the checkpoint the library document (C1,
-//! `../ardana-landing/src/lib/data/models.json`) names as the model's `source` (Q6, `docs/guidelines/onnx.md`); never
-//! in CI.
+//! `../ardana-landing/src/lib/data/models.json`) names as the size's `source` (`docs/guidelines/onnx.md`); never in
+//! CI. `<name>` is read as `ardana` reads a library name and must mean a size's default quant (Q10, Q24): both act on
+//! that size.
 //!
 //! `convert` downloads the checkpoint into `tmp/hf`, exports the ONNX with `xtask/scripts/onnx_export.py` in the
-//! `tmp/py/onnx` venv it creates, converts the GGUF with llama.cpp's `convert_hf_to_gguf.py` when the model's `weights`
-//! is an ardana-ai repository, writes each repository into the sandbox Hub cache as the snapshot `publish` uploads,
-//! records the commits, sizes and profile it built in the document and its snapshot (C5,
-//! `crates/ardana-registry/tests/data/models.json`), which hold the same bytes (Q14), and reads both repositories back
-//! offline with the release `ardana pull`, reading the document (`ARDANA_LIBRARY`). `publish` prints its `hf`
-//! commands, the model cards, the `[[hf]]` entries and the document entry, then (without `--dry-run`) uploads the
-//! snapshots to huggingface.co/ardana-ai with the user's token and pins them in `xtask/fetch.toml` and the document.
+//! `tmp/py/onnx` venv it creates, converts the GGUF with llama.cpp's `convert_hf_to_gguf.py` into the file the
+//! document's quant names when the size's `gguf.repo` is an ardana-ai repository, writes each repository into
+//! the sandbox Hub cache as the snapshot `publish` uploads, records the commits, bytes and profile it built in the
+//! size's entry of the document and its snapshot (C5, `crates/ardana-registry/tests/data/models.json`), which hold the
+//! same bytes, and reads both repositories back offline with the release `ardana pull`, reading the document
+//! (`ARDANA_LIBRARY`). `publish` prints its `hf` commands, the model cards, the `[[hf]]` entries and the size's
+//! document entry, then (without `--dry-run`) uploads the snapshots to huggingface.co/ardana-ai with the user's token
+//! and pins them in `xtask/fetch.toml` and the document.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -18,7 +20,7 @@ use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
 use ardana_registry::BrowserCache;
-use ardana_registry::library::{Library, LibraryEntry};
+use ardana_registry::library::{Library, LibraryPick};
 use serde_json::Value;
 
 use crate::env::quote;
@@ -117,85 +119,93 @@ impl Documents {
     }
 }
 
-/// What the library document says to build for one model.
+/// What the library document says to build for one size.
 #[derive(Debug)]
 struct Target {
-    /// The model's document entry.
-    entry: LibraryEntry,
+    /// The size and its default quant, as `ardana` reads them.
+    pick: LibraryPick,
+    /// The size's canonical name, `<family>:<size>`.
     name: String,
     /// The checkpoint, `org/repo` at a commit.
     source: Hf,
     /// The ONNX repository, `ardana-ai/<repo>`, and its export recipe (`int4` or `int8`).
     onnx: String,
     onnx_quant: String,
-    /// The GGUF repository ardana-ai hosts and the GGUF's quant, when the model's `weights` is one.
+    /// The GGUF repository ardana-ai hosts and the quant, when the size's `gguf.repo` is one.
     gguf: Option<(String, String)>,
 }
 
 impl Target {
-    /// The model `name` as the library document at `path` describes it, read as `ardana` reads it.
+    /// The size `name` names as the library document at `path` describes it, read as `ardana` reads it: a name that
+    /// means the size's default quant (Q10, Q24); one that names another quant is refused.
     fn load(path: &Path, name: &str) -> Result<Target> {
         let library = Library::from_file(path)
             .with_context(|| format!("reading the library document {}", path.display()))?;
-        let Some(model) = library.find(name).map(|pick| pick.model) else {
+        let Some(pick) = library.find(name)? else {
+            let families: Vec<&str> = library.models.iter().map(|f| f.name.as_str()).collect();
             bail!(
-                "no library model {name}; the library has {}",
-                library.names().join(", ")
+                "no library model {name}; the library's families are {}",
+                families.join(", ")
             );
         };
-        let Some(browser) = &model.browser else {
+        if pick.quant.quant != pick.size.gguf.default {
             bail!(
-                "library model {} has no browser variant: {DOCUMENT} gives it no browser table (weights, commit, \
-                 quant, size, profile)",
-                model.name
+                "{} is not the default quant of {}:{}: `cargo xtask onnx` builds a size, named by its default quant",
+                pick.name(),
+                pick.family,
+                pick.size.size
+            );
+        }
+        let name = pick.name();
+        let size = &pick.size;
+        let Some(browser) = &size.browser else {
+            bail!(
+                "library model {name} has no browser variant: {DOCUMENT} gives it no browser table (repo, commit, \
+                 quant, bytes, profile)"
             );
         };
-        let source = model.source.as_deref().with_context(|| {
-            format!(
-                "library model {} names no `source` checkpoint in {DOCUMENT}",
-                model.name
-            )
+        let source = size.source.as_ref().with_context(|| {
+            format!("library model {name} names no `source` checkpoint in {DOCUMENT}")
         })?;
-        let source = source
-            .split_once('@')
-            .and_then(|(repo, revision)| {
-                Some(Hf {
-                    repo: hf_repo(repo)?.to_string(),
-                    revision: revision.to_string(),
-                    files: Vec::new(),
-                })
-            })
-            .with_context(|| {
-                format!(
-                    "the source {source:?} of {} is not hf.co/<org>/<repo>@<commit>",
-                    model.name
-                )
-            })?;
-        let onnx = hf_repo(&browser.weights)
+        let source = Hf {
+            repo: hf_repo(&source.repo)
+                .with_context(|| {
+                    format!(
+                        "the source {:?} of {name} is not hf.co/<org>/<repo>",
+                        source.repo
+                    )
+                })?
+                .to_string(),
+            revision: source.commit.clone(),
+            files: Vec::new(),
+        };
+        let onnx = hf_repo(&browser.repo)
             .filter(|repo| hosted(repo))
             .with_context(|| {
                 format!(
-                    "the browser weights {:?} of {} are no hf.co/{ORG}/<repo> repository",
-                    browser.weights, model.name
+                    "the browser repository {:?} of {name} is no hf.co/{ORG}/<repo> repository",
+                    browser.repo
                 )
-            })?;
-        let gguf = match hf_repo(&model.weights).filter(|repo| hosted(repo)) {
-            Some(repo) if GGUF_TYPES.contains(&model.quant.to_lowercase().as_str()) => {
-                Some((repo.to_string(), model.quant.clone()))
+            })?
+            .to_string();
+        let quant = &pick.quant.quant;
+        let gguf = match hf_repo(&size.gguf.repo).filter(|repo| hosted(repo)) {
+            Some(repo) if GGUF_TYPES.contains(&quant.as_str()) => {
+                Some((repo.to_string(), quant.clone()))
             }
             Some(repo) => bail!(
-                "{repo} hosts a {} GGUF, but convert_hf_to_gguf.py writes {} only",
-                model.quant,
+                "{repo} hosts a {quant} GGUF, but convert_hf_to_gguf.py writes {} only",
                 GGUF_TYPES.join(", ")
             ),
             None => None,
         };
+        let onnx_quant = browser.quant.clone();
         Ok(Target {
-            entry: model.clone(),
-            name: model.name.clone(),
+            pick,
+            name,
             source,
-            onnx: onnx.to_string(),
-            onnx_quant: browser.quant.clone(),
+            onnx,
+            onnx_quant,
             gguf,
         })
     }
@@ -270,13 +280,13 @@ pub fn convert(sandbox: &Sandbox, name: &str) -> Result<()> {
     let mut gguf = None;
     if let Some((repo, quant, llama_cpp)) = gguf_job {
         let staged = stage(&work, repo, &checkpoint)?;
-        let file = format!("{}-{quant}.gguf", target.name);
+        let file = target.pick.quant.file.clone();
         let mut cmd = sandbox.command(&python);
         offline(&mut cmd);
         run(cmd
             .arg(llama_cpp.dir.join("convert_hf_to_gguf.py"))
             .arg(&checkpoint)
-            .args(["--outtype", &quant.to_lowercase(), "--no-nextn"])
+            .args(["--outtype", quant, "--no-nextn"])
             .args(["--model-name", &target.name, "--outfile"])
             .arg(staged.join(&file)))?;
         let card = gguf_card(
@@ -299,7 +309,7 @@ pub fn convert(sandbox: &Sandbox, name: &str) -> Result<()> {
     let profile = browser_profile(sandbox, &target, &onnx)?;
     let recorded = record_build(
         &documents.read()?,
-        &target.name,
+        &target.pick,
         (&onnx, browser_size, profile),
         gguf.as_ref().map(|(hf, size)| (hf, *size)),
     )?;
@@ -482,6 +492,11 @@ fn card_head(target: &Target, license: &str, tag: &str, title: &str) -> String {
     )
 }
 
+/// The `ardana` commands that pull and run the library model `name`, as a card shows them.
+fn commands(name: &str) -> String {
+    format!("```sh\nardana pull {name}\nardana run {name}\n```\n\n")
+}
+
 /// The ONNX repository's model card.
 fn onnx_card(target: &Target, license: &str, files: &[String]) -> String {
     let title = format!(
@@ -489,13 +504,14 @@ fn onnx_card(target: &Target, license: &str, files: &[String]) -> String {
         target.name, target.onnx_quant
     );
     format!(
-        "{}The browser variant of Ardana's library model `{}`, for onnxruntime-web.\n\n\
+        "{}The browser variant of Ardana's library model `{}`, for onnxruntime-web. The model itself:\n\n{}\
          - `model.onnx`, `model.onnx.data`: the graph and its {} weights, exported by the onnxruntime-genai {} model \
          builder for the WebGPU execution provider: fp16 inputs and outputs, the logits of the last position only, \
          no multi-token-prediction head, the embedding shared with the LM head.\n\
          - {}: the source's, unchanged.\n",
         card_head(target, license, "onnx", &title),
         target.name,
+        commands(&target.name),
         target.onnx_quant,
         pinned("onnxruntime-genai"),
         copied(files),
@@ -512,12 +528,12 @@ fn gguf_card(
 ) -> String {
     let title = format!("{} GGUF ({quant})", target.name);
     format!(
-        "{}Ardana's library model `{name}`: `ardana run {name}` runs it.\n\n\
+        "{}Ardana's library model `{name}`:\n\n{}\
          - `{gguf}`: the weights in {quant}, converted by llama.cpp {llama_cpp}'s \
-         `convert_hf_to_gguf.py --outtype {} --no-nextn` (no multi-token-prediction head).\n\
+         `convert_hf_to_gguf.py --outtype {quant} --no-nextn` (no multi-token-prediction head).\n\
          - {}: the source's, unchanged.\n",
         card_head(target, license, "gguf", &title),
-        quant.to_lowercase(),
+        commands(&target.name),
         copied(files),
         name = target.name,
     )
@@ -526,15 +542,15 @@ fn gguf_card(
 /// The profile a server sends for the browser variant of `target` that `convert` wrote as `onnx`
 /// (`GET /v1/browser/<name>/profile`), read from the sandbox Hub cache as a server reads it.
 fn browser_profile(sandbox: &Sandbox, target: &Target, onnx: &Hf) -> Result<Value> {
-    let mut entry = target.entry.clone();
-    if let Some(browser) = &mut entry.browser {
+    let mut pick = target.pick.clone();
+    if let Some(browser) = &mut pick.size.browser {
         browser.commit = onnx.revision.clone();
     }
     let runtime = tokio::runtime::Builder::new_current_thread()
         .build()
         .context("starting a runtime for the hub cache")?;
     let cache = BrowserCache::at(&sandbox.tmp().join("hf/hub"))?;
-    let variant = runtime.block_on(cache.variant(&entry)).with_context(|| {
+    let variant = runtime.block_on(cache.variant(&pick)).with_context(|| {
         format!(
             "reading the browser variant of {} from hf.co/{}@{}",
             target.name, onnx.repo, onnx.revision
@@ -543,60 +559,72 @@ fn browser_profile(sandbox: &Sandbox, target: &Target, onnx: &Hf) -> Result<Valu
     Ok(serde_json::to_value(&variant.profile)?)
 }
 
-/// `text`, a library document, with what `convert` built for the model `name`: its browser variant's commit, size and
-/// profile, and, when it built the GGUF, the model's commit and size and the size of the tag of its quant.
+/// `text`, a library document, with what `convert` built for the size of `pick`: its browser variant's commit, bytes
+/// and profile, and, when it built the GGUF, the size's `gguf.commit` and the bytes of its quant.
 fn record_build(
     text: &str,
-    name: &str,
+    pick: &LibraryPick,
     (onnx, browser_size, profile): (&Hf, u64, Value),
     gguf: Option<(&Hf, u64)>,
 ) -> Result<String> {
-    edit_entry(text, name, |entry| {
+    edit_size(text, pick, |entry| {
         *field(entry, &["browser", "commit"])? = onnx.revision.as_str().into();
-        *field(entry, &["browser", "size"])? = browser_size.into();
+        *field(entry, &["browser", "bytes"])? = browser_size.into();
         *field(entry, &["browser", "profile"])? = profile;
-        if let Some((hf, size)) = gguf {
-            *field(entry, &["commit"])? = hf.revision.as_str().into();
-            *field(entry, &["size"])? = size.into();
-            let tag = field(entry, &["quant"])?
-                .as_str()
-                .unwrap_or_default()
-                .to_lowercase();
-            let item = field(entry, &["tags"])?
+        if let Some((hf, bytes)) = gguf {
+            *field(entry, &["gguf", "commit"])? = hf.revision.as_str().into();
+            let quant = &pick.quant.quant;
+            let item = field(entry, &["gguf", "quants"])?
                 .as_array_mut()
-                .and_then(|tags| tags.iter_mut().find(|item| item["tag"] == tag.as_str()))
-                .with_context(|| format!("the {name} model has no tag {tag}"))?;
-            *field(item, &["size"])? = size.into();
+                .and_then(|quants| {
+                    quants
+                        .iter_mut()
+                        .find(|item| item["quant"] == quant.as_str())
+                })
+                .with_context(|| format!("{} has no quant {quant}", pick.name()))?;
+            *field(item, &["bytes"])? = bytes.into();
         }
         Ok(())
     })
 }
 
-/// `text`, a library document, with the entry of the model `name` changed by `change`. The document must be in the
+/// `text`, a library document, with the entry of the size of `pick` changed by `change`. The document must be in the
 /// formatting [`format_document`] writes, so every other byte stays as it was.
-fn edit_entry(
+fn edit_size(
     text: &str,
-    name: &str,
+    pick: &LibraryPick,
     change: impl FnOnce(&mut Value) -> Result<()>,
 ) -> Result<String> {
     let mut document: Value = serde_json::from_str(text).context("parsing the library document")?;
     if format_document(&document) != text {
         bail!(
             "the library document is not formatted as `onnx` writes it (the landing's Prettier, every object one \
-             key a line), so writing it would change more than the {name} entry"
+             key a line), so writing it would change more than the {} entry",
+            pick.name()
         );
     }
-    change(entry_of(&mut document, name)?)?;
+    change(size_of(&mut document, pick)?)?;
     Ok(format_document(&document))
 }
 
-/// The entry of the model `name` in `document`.
-fn entry_of<'a>(document: &'a mut Value, name: &str) -> Result<&'a mut Value> {
+/// The entry of the size of `pick` in `document`.
+fn size_of<'a>(document: &'a mut Value, pick: &LibraryPick) -> Result<&'a mut Value> {
     document
         .get_mut("models")
         .and_then(Value::as_array_mut)
-        .and_then(|models| models.iter_mut().find(|entry| entry["name"] == name))
-        .with_context(|| format!("the library document has no model {name}"))
+        .and_then(|models| {
+            models
+                .iter_mut()
+                .find(|family| family["name"] == pick.family.as_str())
+        })
+        .and_then(|family| family.get_mut("sizes"))
+        .and_then(Value::as_array_mut)
+        .and_then(|sizes| {
+            sizes
+                .iter_mut()
+                .find(|size| size["size"] == pick.size.size.as_str())
+        })
+        .with_context(|| format!("the library document has no model {}", pick.name()))
 }
 
 /// The field at `path` of `entry`, which must have it.
@@ -867,20 +895,20 @@ fn plan(sandbox: &Sandbox, target: &Target, document: &str) -> Result<(Vec<Uploa
     let mut pinned: Value = serde_json::from_str(&pinned)?;
     report.push_str(&format!(
         "The entry it pins in {DOCUMENT} and {SNAPSHOT}:\n\n{}",
-        format_document(entry_of(&mut pinned, &target.name)?)
+        format_document(size_of(&mut pinned, &target.pick)?)
     ));
     Ok((uploads, report))
 }
 
-/// The library `document` with `hf`, which `publish` uploaded for `target`, as a commit of its entry: the browser
-/// variant's for the ONNX repository, the model's own for the GGUF one.
+/// The library `document` with `hf`, which `publish` uploaded for `target`, as a commit of its size's entry: the
+/// browser variant's for the ONNX repository, the GGUF's for the GGUF one.
 fn pin_document(document: &str, target: &Target, hf: &Hf) -> Result<String> {
     let path: &[&str] = if hf.repo == target.onnx {
         &["browser", "commit"]
     } else {
-        &["commit"]
+        &["gguf", "commit"]
     };
-    edit_entry(document, &target.name, |entry| {
+    edit_size(document, &target.pick, |entry| {
         *field(entry, path)? = hf.revision.as_str().into();
         Ok(())
     })
@@ -1027,9 +1055,18 @@ mod tests {
         std::fs::read_to_string(repo_root().join(SNAPSHOT)).unwrap()
     }
 
-    /// A model of the snapshot as `onnx` reads it.
+    /// A size of the snapshot as `onnx` reads it.
     fn snapshot_target(name: &str) -> Target {
         Target::load(&repo_root().join(SNAPSHOT), name).unwrap()
+    }
+
+    /// A quant of the snapshot as `ardana` reads it.
+    fn snapshot_pick(name: &str) -> LibraryPick {
+        Library::from_file(&repo_root().join(SNAPSHOT))
+            .unwrap()
+            .find(name)
+            .unwrap()
+            .unwrap()
     }
 
     /// A fresh directory under the test's temp dir (`tmp/sys` under cargo).
@@ -1048,16 +1085,18 @@ mod tests {
         }
     }
 
-    /// R5.1: recording a build changes only the entry's browser commit, size and profile and, with a GGUF, its commit,
-    /// size and the size of its quant's tag; every other byte, and the landing's Prettier formatting, stay.
+    /// R6.3: recording a build changes only the size's browser commit, bytes and profile and, with a GGUF, its
+    /// `gguf.commit` and the bytes of its default quant; every other byte, the family's other sizes and the landing's
+    /// Prettier formatting included, stays.
     #[test]
-    fn records_the_build_in_the_document() {
+    fn a_build_is_recorded_in_its_size_alone() {
         let text = snapshot_text();
         let document: Value = serde_json::from_str(&text).unwrap();
         assert_eq!(format_document(&document), text, "the snapshot round-trips");
 
-        let target = snapshot_target("decider-0.8b");
-        let browser = target.entry.browser.as_ref().unwrap();
+        let target = snapshot_target("decider:0.8b");
+        let size = &target.pick.size;
+        let browser = size.browser.as_ref().unwrap();
         let (onnx, gguf) = (
             hf(&target.onnx, &"c".repeat(40)),
             hf("ardana-ai/x", &"d".repeat(40)),
@@ -1065,7 +1104,7 @@ mod tests {
         // A chat profile whose head fills more than one line, as Prettier fills an array of numbers.
         let head: Vec<u32> = (0..30).map(|i| 248_000 + i * 7).collect();
         let profile = serde_json::json!({
-            "name": "decider-0.8b-v2",
+            "name": "decider:0.8b",
             "layout": {"kind": "chat", "head": head, "tail": [248046, 198]},
             "temperature": 1.0,
             "temperature_by_type": {"choice": 1.5},
@@ -1073,46 +1112,44 @@ mod tests {
             "release_date": "2026-10-01"
         });
         let recorded =
-            record_build(&text, "decider-0.8b", (&onnx, 5, profile), Some((&gguf, 7))).unwrap();
-        let at = text.find("\"name\": \"decider-0.8b\"").unwrap();
+            record_build(&text, &target.pick, (&onnx, 5, profile), Some((&gguf, 7))).unwrap();
+        let at = text.find("\"size\": \"0.8b\"").unwrap();
         let start = at + text[at..].find("\"profile\": {").unwrap();
-        let end = start + text[start..].find("\n\t\t\t\t}").unwrap() + 6;
-        let size = target.entry.size.to_string();
-        assert_eq!(
-            text.matches(&size).count(),
-            2,
-            "the model's size and its tag's"
-        );
+        let end = start + text[start..].find("\n\t\t\t\t\t\t}").unwrap() + 8;
+        let bytes = format!("\"bytes\": {}", target.pick.quant.bytes);
+        assert_eq!(text.matches(&bytes).count(), 1, "the quant's bytes");
         let expected = format!("{}{PROFILE}{}", &text[..start], &text[end..])
-            .replace(&target.entry.commit, &gguf.revision)
+            .replace(&size.gguf.commit, &gguf.revision)
             .replace(&browser.commit, &onnx.revision)
-            .replace(&size, "7")
-            .replace(&format!("\"size\": {},", browser.size), "\"size\": 5,");
+            .replace(&bytes, "\"bytes\": 7")
+            .replace(&format!("\"bytes\": {},", browser.bytes), "\"bytes\": 5,");
         assert_eq!(recorded, expected);
 
         // Without a GGUF only the browser variant's fields change.
-        let target = snapshot_target("qwen3.5-0.8b");
-        let browser = target.entry.browser.as_ref().unwrap();
+        let target = snapshot_target("qwen3.5:0.8b");
+        let browser = target.pick.size.browser.as_ref().unwrap();
         let profile = browser.profile.clone();
-        let recorded = record_build(&text, "qwen3.5-0.8b", (&onnx, 5, profile), None).unwrap();
+        let recorded = record_build(&text, &target.pick, (&onnx, 5, profile), None).unwrap();
         let expected = text
             .replace(&browser.commit, &onnx.revision)
-            .replace(&format!("\"size\": {},", browser.size), "\"size\": 5,");
+            .replace(&format!("\"bytes\": {},", browser.bytes), "\"bytes\": 5,");
         assert_eq!(recorded, expected);
 
-        let err = record_build(&text, "decider-4b", (&onnx, 5, Value::Null), None).unwrap_err();
+        let mut pick = snapshot_pick("decider:4b");
+        let err = record_build(&text, &pick, (&onnx, 5, Value::Null), None).unwrap_err();
         assert_eq!(err.to_string(), "the entry has no browser.commit");
-        let err = record_build(&text, "nope", (&onnx, 5, Value::Null), None).unwrap_err();
-        assert_eq!(err.to_string(), "the library document has no model nope");
+        pick.family = "nope".into();
+        let err = record_build(&text, &pick, (&onnx, 5, Value::Null), None).unwrap_err();
+        assert_eq!(err.to_string(), "the library document has no model nope:4b");
         // A document in another formatting is refused rather than rewritten.
         let collapsed = text.replacen(
-            "{\n\t\t\t\t\t\t\"kind\": \"plain\"\n\t\t\t\t\t}",
+            "{\n\t\t\t\t\t\t\t\t\"kind\": \"plain\"\n\t\t\t\t\t\t\t}",
             "{ \"kind\": \"plain\" }",
             1,
         );
         assert_ne!(collapsed, text);
         let err =
-            record_build(&collapsed, "qwen3.5-0.8b", (&onnx, 5, Value::Null), None).unwrap_err();
+            record_build(&collapsed, &target.pick, (&onnx, 5, Value::Null), None).unwrap_err();
         assert!(
             err.to_string()
                 .contains("not formatted as `onnx` writes it"),
@@ -1120,17 +1157,17 @@ mod tests {
         );
     }
 
-    /// The profile `records_the_build_in_the_document` records, as the landing's Prettier 3.9.9 formats it at its depth
-    /// (`npx prettier --check` of the recorded document passes): the head filling lines of at most 100 columns.
-    const PROFILE: &str = "\"profile\": {\n\t\t\t\t\t\"name\": \"decider-0.8b-v2\",\n\t\t\t\t\t\"layout\": {\n\
-                           \t\t\t\t\t\t\"kind\": \"chat\",\n\t\t\t\t\t\t\"head\": [\n\
-                           \t\t\t\t\t\t\t248000, 248007, 248014, 248021, 248028, 248035, 248042, 248049, 248056, 248063,\n\
-                           \t\t\t\t\t\t\t248070, 248077, 248084, 248091, 248098, 248105, 248112, 248119, 248126, 248133,\n\
-                           \t\t\t\t\t\t\t248140, 248147, 248154, 248161, 248168, 248175, 248182, 248189, 248196, 248203\n\
-                           \t\t\t\t\t\t],\n\t\t\t\t\t\t\"tail\": [248046, 198]\n\t\t\t\t\t},\n\
-                           \t\t\t\t\t\"temperature\": 1.0,\n\t\t\t\t\t\"temperature_by_type\": {\n\
-                           \t\t\t\t\t\t\"choice\": 1.5\n\t\t\t\t\t},\n\t\t\t\t\t\"isolated_levels\": false,\n\
-                           \t\t\t\t\t\"release_date\": \"2026-10-01\"\n\t\t\t\t}";
+    /// The profile `a_build_is_recorded_in_its_size_alone` records, as the landing's Prettier 3.9.9 formats it at its
+    /// depth (`npx prettier --check` of the recorded document passes): the head filling lines of at most 100 columns.
+    const PROFILE: &str = "\"profile\": {\n\t\t\t\t\t\t\t\"name\": \"decider:0.8b\",\n\t\t\t\t\t\t\t\"layout\": {\n\
+                           \t\t\t\t\t\t\t\t\"kind\": \"chat\",\n\t\t\t\t\t\t\t\t\"head\": [\n\
+                           \t\t\t\t\t\t\t\t\t248000, 248007, 248014, 248021, 248028, 248035, 248042, 248049, 248056, 248063,\n\
+                           \t\t\t\t\t\t\t\t\t248070, 248077, 248084, 248091, 248098, 248105, 248112, 248119, 248126, 248133,\n\
+                           \t\t\t\t\t\t\t\t\t248140, 248147, 248154, 248161, 248168, 248175, 248182, 248189, 248196, 248203\n\
+                           \t\t\t\t\t\t\t\t],\n\t\t\t\t\t\t\t\t\"tail\": [248046, 198]\n\t\t\t\t\t\t\t},\n\
+                           \t\t\t\t\t\t\t\"temperature\": 1.0,\n\t\t\t\t\t\t\t\"temperature_by_type\": {\n\
+                           \t\t\t\t\t\t\t\t\"choice\": 1.5\n\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\"isolated_levels\": false,\n\
+                           \t\t\t\t\t\t\t\"release_date\": \"2026-10-01\"\n\t\t\t\t\t\t}";
 
     /// R5.2: without the landing checkout beside the repository, `convert` and `publish` stop before anything else,
     /// naming the document.
@@ -1140,8 +1177,8 @@ mod tests {
         let root = base.join("ardana");
         let sandbox = Sandbox::new(&root, &base).unwrap();
         for result in [
-            convert(&sandbox, "decider-0.8b"),
-            publish(&sandbox, "decider-0.8b", true),
+            convert(&sandbox, "decider:0.8b"),
+            publish(&sandbox, "decider:0.8b", true),
         ] {
             let err = format!("{:#}", result.unwrap_err());
             assert!(
@@ -1173,7 +1210,7 @@ mod tests {
             std::fs::copy(from, to).unwrap();
         }
         let sandbox = Sandbox::new(&root, &base).unwrap();
-        let target = snapshot_target("decider-0.8b");
+        let target = snapshot_target("decider:0.8b");
         // The local snapshots `convert` would have written.
         for repo in target.repos() {
             let snapshot = snapshot_dir(&sandbox, &hf(repo, "local"));
@@ -1190,7 +1227,9 @@ mod tests {
             .map(|(_, to)| std::fs::read(to).unwrap())
             .collect();
 
-        publish(&sandbox, "decider-0.8b", true).unwrap();
+        for name in ["decider:0.8b", "Decider:0.8B", "decider:0.8b-q8_0"] {
+            publish(&sandbox, name, true).unwrap();
+        }
         let after: Vec<Vec<u8>> = copies
             .iter()
             .map(|(_, to)| std::fs::read(to).unwrap())
@@ -1215,29 +1254,28 @@ mod tests {
             .map(|(_, entry)| entry)
             .unwrap_or_else(|| panic!("{report}"));
         let mut document: Value = serde_json::from_str(&snapshot_text()).unwrap();
-        let expected = entry_of(&mut document, "decider-0.8b").unwrap();
-        expected["commit"] = placeholder.into();
+        let expected = size_of(&mut document, &target.pick).unwrap();
+        expected["gguf"]["commit"] = placeholder.into();
         expected["browser"]["commit"] = placeholder.into();
         assert_eq!(serde_json::from_str::<Value>(entry).unwrap(), *expected);
-        assert!(
-            entry.contains(&format!("\n\t\"commit\": \"{placeholder}\",\n")),
-            "{entry}"
-        );
-        assert!(
-            entry.contains(&format!("\n\t\t\"commit\": \"{placeholder}\",\n")),
+        assert_eq!(
+            entry
+                .matches(&format!("\n\t\t\"commit\": \"{placeholder}\",\n"))
+                .count(),
+            2,
             "{entry}"
         );
         std::fs::remove_dir_all(&base).unwrap();
     }
 
     /// R5.5: what `publish` pins after its uploads, in `xtask/fetch.toml` and the document, agrees: the browser
-    /// variant's commit is its ONNX repository's revision, and the model's own its GGUF repository's when ardana-ai
-    /// hosts it; nothing else in the document changes.
+    /// variant's commit is its ONNX repository's revision, and the size's `gguf.commit` its GGUF repository's when
+    /// ardana-ai hosts it; nothing else in the document changes.
     #[test]
     fn publish_pins_the_document() {
         let text = snapshot_text();
         let fetch = std::fs::read_to_string(repo_root().join("xtask/fetch.toml")).unwrap();
-        for name in ["decider-0.8b", "qwen3.5-0.8b"] {
+        for name in ["decider:0.8b", "qwen3.5:0.8b"] {
             let target = snapshot_target(name);
             let (mut pinned_fetch, mut pinned) = (fetch.clone(), text.clone());
             let mut expected = text.clone();
@@ -1249,8 +1287,8 @@ mod tests {
                 pinned_fetch = pin_entry(&pinned_fetch, &pin);
                 pinned = pin_document(&pinned, &target, &pin).unwrap();
                 let old = match &target.gguf {
-                    Some((gguf, _)) if gguf == repo => &target.entry.commit,
-                    _ => &target.entry.browser.as_ref().unwrap().commit,
+                    Some((gguf, _)) if gguf == repo => &target.pick.size.gguf.commit,
+                    _ => &target.pick.size.browser.as_ref().unwrap().commit,
                 };
                 expected = expected.replace(old, &pin.revision);
             }
@@ -1265,13 +1303,136 @@ mod tests {
                     .unwrap()
             };
             let mut document: Value = serde_json::from_str(&pinned).unwrap();
-            let entry = entry_of(&mut document, name).unwrap();
+            let entry = size_of(&mut document, &target.pick).unwrap();
             assert_eq!(entry["browser"]["commit"], revision(&target.onnx));
             match &target.gguf {
-                Some((gguf, _)) => assert_eq!(entry["commit"], revision(gguf)),
-                None => assert_eq!(entry["commit"], target.entry.commit.as_str()),
+                Some((gguf, _)) => assert_eq!(entry["gguf"]["commit"], revision(gguf)),
+                None => assert_eq!(
+                    entry["gguf"]["commit"],
+                    target.pick.size.gguf.commit.as_str()
+                ),
             }
         }
+    }
+
+    /// R6.1: every name that means a size's default quant (Q10) is that size, under its canonical name, and plans
+    /// the same publish.
+    #[test]
+    fn a_target_is_a_size() {
+        let target = snapshot_target("decider:0.8b");
+        assert_eq!(target.name, "decider:0.8b");
+        assert_eq!(target.onnx, "ardana-ai/decider-0.8b-ONNX");
+        assert_eq!(
+            target.gguf,
+            Some(("ardana-ai/decider-0.8b-GGUF".into(), "q8_0".into()))
+        );
+        assert_eq!(
+            target.repos(),
+            ["ardana-ai/decider-0.8b-ONNX", "ardana-ai/decider-0.8b-GGUF"]
+        );
+        for name in ["Decider:0.8B", "decider:0.8b-q8_0", "DECIDER:0.8B-Q8_0"] {
+            assert_eq!(
+                format!("{:?}", snapshot_target(name)),
+                format!("{target:?}"),
+                "{name}"
+            );
+        }
+        // The family alone and `latest` mean its latest size.
+        for name in ["decider", "decider:latest", "Decider:2B-Q4_K_M"] {
+            assert_eq!(snapshot_target(name).name, "decider:2b", "{name}");
+        }
+        let target = snapshot_target("qwen3.5:0.8b");
+        assert_eq!(target.name, "qwen3.5:0.8b");
+        assert_eq!(target.gguf, None, "ardana-ai hosts no GGUF of qwen3.5:0.8b");
+    }
+
+    /// R6.2: a name that is no size's default quant is refused, saying why: a tag the family lacks (Q12), a family the
+    /// library lacks, another quant of a size.
+    #[test]
+    fn a_target_names_a_default_quant() {
+        let refused = |name: &str| {
+            Target::load(&repo_root().join(SNAPSHOT), name)
+                .unwrap_err()
+                .to_string()
+        };
+        assert_eq!(
+            refused("decider:2b-q8_0"),
+            "decider:2b-q8_0 is not the default quant of decider:2b: `cargo xtask onnx` builds a size, named by its \
+             default quant"
+        );
+        assert_eq!(
+            refused("Decider:2B-BF16"),
+            "decider:2b-bf16 is not the default quant of decider:2b: `cargo xtask onnx` builds a size, named by its \
+             default quant"
+        );
+        assert_eq!(
+            refused("gemma-4:9b"),
+            "gemma-4 has no tag \"9b\"; its tags are e2b, e2b-q8_0, e2b-bf16, e4b, e4b-q8_0, e4b-bf16, 12b, \
+             12b-q8_0, 12b-bf16, 26b-a4b, 26b-a4b-q8_0, 26b-a4b-bf16, 31b, 31b-q8_0, 31b-bf16"
+        );
+        assert_eq!(
+            refused("nomodel:1b"),
+            "no library model nomodel:1b; the library's families are decider, gemma-4, qwen3.5, qwen3.6, qwen3.8, \
+             smollm3"
+        );
+    }
+
+    /// R6.4: the model cards name the size canonically, whatever spelling named it, with its `ardana pull` and `ardana
+    /// run` lines; the GGUF is the file the document names; the stock profile of a chat model's browser variant is
+    /// named after the canonical name (Q17), as the document records it.
+    #[test]
+    fn cards_name_the_size() {
+        let target = snapshot_target("Decider:0.8B-Q8_0");
+        let files: Vec<String> = [TOKENIZER, "decider_config.json"]
+            .map(String::from)
+            .to_vec();
+        let file = &target.pick.quant.file;
+        assert_eq!(file, "decider-0.8b-Q8_0.gguf");
+        let commands = "```sh\nardana pull decider:0.8b\nardana run decider:0.8b\n```\n";
+        let built = "by `cargo xtask onnx convert decider:0.8b` in the";
+        let onnx = onnx_card(&target, "apache-2.0", &files);
+        assert!(
+            onnx.contains("\n# decider:0.8b for the browser (int4 ONNX)\n"),
+            "{onnx}"
+        );
+        assert!(
+            onnx.contains("Ardana's library model `decider:0.8b`, for onnxruntime-web"),
+            "{onnx}"
+        );
+        let gguf = gguf_card(&target, "apache-2.0", "b11074", (file, "q8_0"), &files);
+        assert!(gguf.contains("\n# decider:0.8b GGUF (q8_0)\n"), "{gguf}");
+        assert!(
+            gguf.contains("\n- `decider-0.8b-Q8_0.gguf`: the weights in q8_0"),
+            "{gguf}"
+        );
+        for card in [&onnx, &gguf] {
+            assert!(card.contains(commands), "{card}");
+            assert!(card.contains(built), "{card}");
+            assert!(!card.to_ascii_lowercase().contains("0.8b-q8_0`"), "{card}");
+        }
+
+        // The browser variant of qwen3.5:0.8b as `convert` writes it: the published repository's tokenizer files, and
+        // stand-ins for the weights, which the profile does not read.
+        let base = scratch("cards");
+        let sandbox = Sandbox::new(&base.join("ardana"), &base).unwrap();
+        let target = snapshot_target("Qwen3.5:0.8B-Q4_0");
+        let browser = target.pick.size.browser.as_ref().unwrap();
+        let published = repo_root()
+            .join("tmp/hf/hub/models--ardana-ai--qwen3.5-0.8b-ONNX/snapshots")
+            .join(&browser.commit);
+        let staged = base.join("staged");
+        std::fs::create_dir_all(&staged).unwrap();
+        for file in [TOKENIZER, "tokenizer_config.json", "chat_template.jinja"] {
+            std::fs::copy(published.join(file), staged.join(file)).unwrap();
+        }
+        for file in ONNX_FILES {
+            std::fs::write(staged.join(file), file).unwrap();
+        }
+        let onnx = write_repo(&sandbox, &target.onnx, &staged).unwrap();
+        let profile = browser_profile(&sandbox, &target, &onnx).unwrap();
+        assert_eq!(profile["name"], "qwen3.5:0.8b");
+        assert_eq!(profile, browser.profile);
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

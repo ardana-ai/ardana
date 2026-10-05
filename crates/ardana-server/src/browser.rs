@@ -1,6 +1,7 @@
-//! The browser variants of library models, for the playground's in-tab engine: `GET /v1/browser/<name>/<file>` serves
-//! `model.onnx`, `model.onnx.data` and `tokenizer.json` from the server's hub cache, and `profile`, the
-//! [`ardana_core::ModelProfile`] the registry derives for them, as JSON. Every other name and file is a 404.
+//! The browser variants of library sizes, for the playground's in-tab engine: `GET /v1/browser/<name>/<file>`, the
+//! size's canonical name looked up whole (Q19), serves `model.onnx`, `model.onnx.data` and `tokenizer.json` from the
+//! server's hub cache, and `profile`, the [`ardana_core::ModelProfile`] the registry derives for them, as JSON. Every
+//! other name and file is a 404.
 //!
 //! The first request for a model pulls its variant ([`ardana_registry::pull_browser`]: the hub cache first, then the
 //! Hub); requests for the same model share that pull, and a pulled variant is kept while the server runs. Files go
@@ -13,7 +14,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
 
-use ardana_registry::library::LibraryEntry;
+use ardana_registry::library::LibraryPick;
 use ardana_registry::{BROWSER_FILES, BrowserModel, TOKENIZER_FILE};
 use axum::Json;
 use axum::body::{Body, Bytes};
@@ -178,15 +179,15 @@ fn part(headers: &HeaderMap, etag: &str, len: u64) -> Part {
     Part::Range(first, last.map_or(len - 1, |last| last.min(len - 1)))
 }
 
-/// Pulls the browser variant of the library model `model`, logging what it pulled or why it could not; the server's
+/// Pulls the browser variant of the library size `model`, logging what it pulled or why it could not; the server's
 /// [`crate::models::Pulls`] shares it among the requests for the model and keeps what it pulled.
-pub(crate) async fn pull(model: LibraryEntry) -> Result<Arc<BrowserModel>, String> {
-    let name = model.name.clone();
-    if let Some(browser) = &model.browser {
+pub(crate) async fn pull(model: LibraryPick) -> Result<Arc<BrowserModel>, String> {
+    let name = model.name();
+    if let Some(browser) = &model.size.browser {
         eprintln!(
             "ardana serve: pulling the browser variant of {name} ({}, {})",
-            browser.weights,
-            ardana_api::human_size(browser.size)
+            browser.repo,
+            ardana_api::human_size(browser.bytes)
         );
     }
     let handle = tokio::runtime::Handle::current();

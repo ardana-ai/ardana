@@ -1,5 +1,5 @@
 // Focus, history and announcements after what the page does on its own, against the release `ardana` serving
-// decider-2b (see playwright.config.ts): the skip link (`skip_link`), the Share popover (`share_popover`), the live
+// decider:2b (see playwright.config.ts): the skip link (`skip_link`), the Share popover (`share_popover`), the live
 // regions (`announcements`), a run's answers on a phone (`run_focus`), the ids ARIA names (`aria_relationships`), the
 // fact rows and the names Chrome gives controls with tooltips (`term_stops`), and the focus after Add and Stop
 // (`page_focus`).
@@ -66,11 +66,11 @@ test('skip_link', async ({ page }, testInfo) => {
   const ticket = fixture('ticket.json');
   const state = page.getByRole('textbox', { name: 'State' });
   await page.goto('/');
-  await expect(picker(page)).toHaveValue('decider-2b');
+  await expect(picker(page)).toHaveValue('decider:2b');
   // A share link opened on the page, a history entry of its own, then edited.
   await page.evaluate((hash) => {
     location.hash = hash;
-  }, shareHash({ ...ticket, model: 'decider-2b' }));
+  }, shareHash({ ...ticket, model: 'decider:2b' }));
   await expect(state).toHaveValue(ticket.state as string);
   const edited = `${ticket.state} Also, the app crashes.`;
   await state.fill(edited);
@@ -86,24 +86,24 @@ test('skip_link', async ({ page }, testInfo) => {
   await expect(state).toHaveValue(edited);
 
   // Another share link over the edits, with another row picked: Restore previous brings both back.
-  await pickInBrowser(page, 'decider-0.8b');
+  await pickInBrowser(page, 'decider:0.8b');
   const resume = readRequest('crates/ardana-playground/presets/resume-screening.json');
   await page.evaluate((hash) => {
     location.hash = hash;
-  }, shareHash({ ...resume, model: 'decider-2b' }));
+  }, shareHash({ ...resume, model: 'decider:2b' }));
   await expect(state).toHaveValue(editorTexts(resume).documentText);
-  await expect(picker(page)).toHaveValue('decider-2b');
+  await expect(picker(page)).toHaveValue('decider:2b');
   await screenshot(page, testInfo, 'skip_link', 'replaced');
   await restorePrevious(page);
   await expect(state).toHaveValue(edited);
   await expect(page.getByRole('textbox', { name: 'Questions JSON' })).toHaveValue(editorTexts(ticket).promptsText);
-  await expect(picker(page)).toHaveValue(browserRow('decider-0.8b'));
+  await expect(picker(page)).toHaveValue(browserRow('decider:0.8b'));
   // A link over the edits, then the same link again: the editors hold it already, and the edits stay on offer.
   const again = async () =>
     page.evaluate((hash) => {
       location.hash = '';
       location.hash = hash;
-    }, shareHash({ ...ticket, model: 'decider-2b' }));
+    }, shareHash({ ...ticket, model: 'decider:2b' }));
   await again();
   await expect(state).toHaveValue(ticket.state as string);
   await again();
@@ -273,7 +273,7 @@ test('aria_relationships', async ({ page }, testInfo) => {
   const ticket = fixture('ticket.json');
   const none = async (state: string) => expect(await page.evaluate(dangling), state).toEqual([]);
   await page.goto('/');
-  await expect(picker(page)).toHaveValue('decider-2b');
+  await expect(picker(page)).toHaveValue('decider:2b');
   await none('empty');
   await page.goto(`/${shareHash(ticket)}`);
   await expect(runKey(page)).toHaveAttribute('aria-disabled', 'false');
@@ -289,8 +289,8 @@ test('aria_relationships', async ({ page }, testInfo) => {
   await channel(page, 'department').getByRole('button', { name: 'Edit question department' }).click();
   await expect(channel(page, 'department').getByRole('textbox', { name: 'Question id' })).toBeVisible();
   await none('a builder open');
-  await pickModel(page, 'decider-4b');
-  await expect(page.getByTestId('run-note')).toContainText('This server has not pulled decider-4b');
+  await pickModel(page, 'decider:4b');
+  await expect(page.getByTestId('run-note')).toContainText('This server has not pulled decider:4b');
   await none('a model the server has not pulled');
   const cdp = await inFlight(page);
   await none('a run in the tab in flight');
@@ -307,7 +307,7 @@ test('term_stops', async ({ page }, testInfo) => {
   const ticket = fixture('ticket.json');
   const request: Request = {
     ...ticket,
-    model: 'decider-2b',
+    model: 'decider:2b',
     questions: {
       department: ticket.questions.department,
       urgency: { type: 'score', instructions: 'How urgent is the ticket?', criteria: ['not urgent', 'soon', 'urgent'] },
@@ -377,7 +377,7 @@ test('term_stops', async ({ page }, testInfo) => {
     expect((await tip(page.locator('#run-key'))).display).toBe('block');
     return focusedName(cdp);
   };
-  await pickInBrowser(page, 'decider-0.8b');
+  await pickInBrowser(page, 'decider:0.8b');
   await runKey(page).click();
   await expect(page.getByTestId('answered-by')).toContainText(' in this tab on ', { timeout: 600_000 });
   await expect(page.getByTestId('run-label')).toHaveText('Run');

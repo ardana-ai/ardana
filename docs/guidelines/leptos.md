@@ -109,9 +109,12 @@ gates every UI change (Q23, Q27).
   `ardana_api::LibraryDocument`) from the URL the build named (`api::library`, the one `cfg(feature = "standalone")`
   of the crate: `ARDANA_PLAYGROUND_MODELS_URL` and `ARDANA_PLAYGROUND_HUB_URL`, read by `env!`) with
   `cache: no-cache` (a cached copy only once the host says it stands), parses it as this version reads it
-  (`LibraryDocument::parse`, Q12: an entry it cannot read is left out), lists it as a server that has pulled none
-  would (`api::listed`: `x_pulled: false`, no default, every browser variant held) and keeps each entry's
-  `BrowserEntry` for `browser_profile` (its `profile` and `commit`) and `browser_file`, which fetches
+  (`LibraryDocument::parse`, Q13 as `ardana` reads it: a family or a size it cannot read, a size not pinned to
+  `hf.co/<org>/<repo>` at a 40-hex commit and a family whose name an earlier one took are left out, another `schema`
+  refused), lists it as a server that has pulled none would (`api::listed`, Q18: one row per size under its canonical
+  name `<family>:<size>` (`LibrarySize::name`) in the document's order, `x_pulled: false`, its default quant's
+  bytes, the document's `default` and `browser_default` marked, every browser variant held) and keeps each size's
+  `BrowserEntry`, by that name, for `browser_profile` (its `profile` and `commit`) and `browser_file`, which fetches
   `<hub>/<org>/<repo>/resolve/<commit>/<file>` with `Range` alone (a commit's file never changes; `If-Range` would
   make the request a CORS preflight) and no referrer (`ReferrerPolicy::NoReferrer`: huggingface.co's CDN answers a
   request from any page on `*.workers.dev` with a 404 that carries no CORS header). A document that does not arrive
@@ -184,7 +187,7 @@ gates every UI change (Q23, Q27).
   step: run again once the connection is back, try again later, or reload the page when a retry cannot work, a build
   that loaded and could not start the model), under the title "Not answered in this tab."; the reason as the browser
   gave it is the raw exchange's. A download that stopped says where, and what the next run does with it: "The download
-  of decider-0.8b stopped at 145.6 MB of 467.7 MB. Run again once the connection is back to resume it." (where the
+  of decider:0.8b stopped at 145.6 MB of 467.7 MB. Run again once the connection is back to resume it." (where the
   page keeps no files: "… to start it over: a page without HTTPS keeps no files.").
 - Layout of `crates/ardana-playground/src`: `api.rs` (`ApiClient`, the only network code), `engine.rs` and `engine.js`
   (the in-tab engine; its reader is `crates/ardana-engine/src/lib.rs`), `share.rs` (decode and `link`), `request.rs`
@@ -207,7 +210,7 @@ gates every UI change (Q23, Q27).
 - The page speaks only real model names; no text on it mentions Jev. The model picker lists `/v1/models`: the pulled
   models (`x_pulled` not `false`) in an optgroup "Pulled", then every model with an `x_browser` in "In browser · runs
   in this tab", labelled with that size, then the library models this server has not pulled in "Library · runs with
-  the ardana CLI", labelled with their `x_size` (`decider-4b · 2.7 GB`, `ardana_api::human_size`); a share link naming
+  the ardana CLI", labelled with their `x_size` (`decider:4b · 2.7 GB`, `ardana_api::human_size`); a share link naming
   a model the list lacks adds it as is. A model both pulled and browser-capable has a row in each group, and each row
   runs where it says (Q14). A server row's value is the model's name; an "In browser" row's is `<name> in-browser`
   (`deck::browser_value`: a word after a space, which no model name holds), and `Deck::pick` reads either into
@@ -215,15 +218,16 @@ gates every UI change (Q23, Q27).
   options are drawn, not through `prop:value`: options are redrawn whenever the list changes, their elements reused by
   place, and a select keeps the selection its elements had (one removed with its group, one drawn over another's
   place), so a model pulled or removed meanwhile, listed again, left the select on its first row.
-- `Deck::runs` says where Run answers the pick: `Tab` for an "In browser" row, else where the server reads the name
-  (`deck::named`, as `Registry::named` reads it: the exact listed name, else a library model's other spellings, its name
-  in any case with or without a `:<quant>`, the quant lowercased): `Server` for a model this server has pulled under any
-  spelling, `Cli` for any other spelling of a listed model (one the server would pull; the CLI resolves it itself) and
-  every server row of the standalone build (`Deck::standalone`, which no server serves; a name nothing listed matches
-  too), and on a server `Server` for a name nothing listed matches, which the server refuses (404) without pulling. Run
-  never pulls (Q2): a `Cli` pick holds Run, and the snippets show the ardana CLI's commands instead. `Deck::handoff`
+- `Deck::runs` says where Run answers the pick: `Tab` for an "In browser" row, else what the name is on the page
+  (`deck::row`, Q20, the page's one rule for a name: the listed row whose name it equals, ASCII case ignored, and
+  nothing else; the page never splits a name into a model and a tag, as the server and the CLI read it): `Server` for
+  a row this server has pulled, and `Cli` for every other name, a row it has not pulled (one the server would pull) or
+  one no row carries (a family, another quant, a former name: the CLI reads it, or refuses it, itself), and every
+  server row of the standalone build (`Deck::standalone`, which no server serves). No pick on a server (no list to
+  open on) is `Server`: the request names no model and the server answers with its default. Run never pulls (Q2): a
+  `Cli` pick holds Run, autorun included, and the snippets show the ardana CLI's commands instead. `Deck::handoff`
   says which (`deck::Handoff`, Q4 as the user amended it): `Install` in the standalone build (ardana.ai's install line,
-  then `ardana run`), `Pull` for a model the server has not pulled under any spelling, an "In browser" row's model too
+  then `ardana run`), `Pull` for any name but a row the server has pulled, an "In browser" row's model too
   (`ardana pull <pick as written>`, then `ardana run`; the server runs ardana already, so it never shows the install
   line), and `Run` for the "In browser" row of a model it has pulled (`ardana run` alone). Under the picker, a pick that
   does not run on the server says where it runs (`#model-note`, the select's description): "Runs in this tab. The first run downloads <size>, which this browser
@@ -232,14 +236,14 @@ gates every UI change (Q23, Q27).
   memory sentence is `ui::topbar::IN_MEMORY`, measured for every browser model on WebGPU and WASM, `onnx.md`), for a
   model the server has not pulled "Not pulled on this server. Pull it with the ardana CLI where the server runs
   (<x_size>), then Run answers here.", in the standalone build "Runs with the ardana CLI on your
-  machine; its first run downloads <x_size>." (the size, `Deck::pull_size`, for any spelling of a listed name, not for
-  another quant).
+  machine; its first run downloads <x_size>." (the size, `Deck::pull_size`, of the row the name is, none for a name no
+  row carries).
 - The picked model starts empty, and `Deck::place` places the page's first pick, and a share link's, once `/v1/models`
   is in (`Deck::unplaced`; a pick by hand ends the wait): no model (nothing linked, or Jev's `jev-*` alias) opens on
   `deck::opening_row` (the `x_default` model when it is pulled, else the `x_browser_default` model's "In browser" row,
-  Q11, else the default model or the first pulled one), a linked model on `deck::linked_row` (through `deck::named`:
-  the "In browser" row of the listed model it names when this server has not pulled that model and it has one, the
-  only place it runs here; the listed model's own row for another spelling of its name; else the name as it is). While
+  Q11, else the default model or the first pulled one), a linked model on `deck::linked_row` (through `deck::row`:
+  the "In browser" row of the row it is when this server has not pulled that model and it has one, the only place it
+  runs here; else that row, in the list's letters; else the name as it is). While
   nothing is picked a request names no model. The list is fetched again after every run and whenever the tab comes
   back (`focus` at the window, `visibilitychange` with the document shown: `ardana pull` or `ardana rm` may have
   changed the server's models since), so a model pulled meanwhile is a server row Run sends, without a reload. `?autorun=1` runs once after `/v1/models` answers (`Deck::autorun`): a
@@ -421,14 +425,14 @@ gates every UI change (Q23, Q27).
 ## Testing
 - Unit-test the pure modules with `cargo test -p ardana-playground` where they do not touch the DOM.
 - Behavioural checks are Playwright suites in `e2e/playground` (`cargo xtask e2e playground`) against the embedded
-  binary serving decider-2b from `tmp/hf`; never replace the model with canned responses in e2e. `browser_run` runs
-  decider-0.8b's browser variant in the tab, on WebGPU and on WASM, `insecure_origin` on a page that is no secure
+  binary serving decider:2b from `tmp/hf`; never replace the model with canned responses in e2e. `browser_run` runs
+  decider:0.8b's browser variant in the tab, on WebGPU and on WASM, `insecure_origin` on a page that is no secure
   context, `browser_stop` stops its download (and waits for a tap under `?autorun=1`), `browser_recover` runs again
-  after a dropped connection, `first_run` opens an empty registry in the tab, `run_command` holds Run for every model
-  the server has not pulled, under any spelling, and `pull_while_open` runs the shown `ardana pull` while the page is
+  after a dropped connection, `first_run` opens an empty registry in the tab, `run_command` holds Run for every row
+  the server has not pulled and every name no row carries, and `pull_while_open` runs the shown `ardana pull` while the page is
   open (`playwright.md`). The zoom and text-size reflow, the focus, announcement and ARIA cases, the touch reach and the
   first load's weight have cases of their own (`reflow.spec.ts`, `focus.spec.ts`, `polish.spec.ts`). The pure picker
-  rules (`deck::opening_row`, `deck::linked_row`, `deck::server_runs` for every spelling, on a server and in the
+  rules (`deck::row`, `deck::opening_row`, `deck::linked_row`, `deck::server_runs` for every kind of name, on a server and in the
   standalone build), the banner's and the status's words and what of the bars stays on screen (`ui::topbar`), the logo's
   symbol (`ui::logo`), the CLI's handoff and its note (`deck::handoff`, `ui::sidebar::cli_note`) and the ardana commands
   (`snippets::pull`, `snippets::cli`) have unit tests.

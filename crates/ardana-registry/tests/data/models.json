@@ -1,408 +1,495 @@
 {
 	"schema": 1,
-	"default": "decider-2b",
-	"browser_default": "decider-0.8b",
+	"default": "decider:2b",
+	"browser_default": "decider:0.8b",
 	"models": [
 		{
-			"name": "decider-2b",
+			"name": "decider",
 			"kind": "decider",
-			"summary": "Typed decisions with calibrated probabilities in one forward pass. The default model.",
-			"base": "Qwen/Qwen3.5-2B-Base",
-			"params": "1.9B",
-			"version": "v11",
+			"summary": "Typed decisions with calibrated probabilities in one forward pass.",
 			"license": "Apache-2.0",
-			"weights": "hf.co/Mapika/decider-2b-GGUF",
-			"commit": "ff2e5e687327eda9ac34e9a3ca84d3f400672c87",
-			"quant": "Q4_K_M",
-			"size": 1274396800,
-			"release_date": "2026-09-24",
-			"source": "hf.co/Mapika/decider-2b@533964dae8be954c5b5e19fa4948e48408094c1e",
-			"tags": [
+			"latest": "2b",
+			"sizes": [
 				{
-					"tag": "q4_k_m",
-					"size": 1274396800
-				},
-				{
-					"tag": "q8_0",
-					"size": 2012012672
-				},
-				{
-					"tag": "bf16",
-					"size": 3775709312
-				}
-			],
-			"browser": {
-				"weights": "hf.co/ardana-ai/decider-2b-ONNX",
-				"commit": "adfd8460421b51ec80469cd85e9202bbb1084f8d",
-				"quant": "int4",
-				"size": 1121602009,
-				"profile": {
-					"name": "decider-2b-v11",
-					"layout": {
-						"kind": "plain"
+					"size": "0.8b",
+					"params": "0.8B",
+					"base": "Qwen/Qwen3.5-0.8B-Base",
+					"release_date": "2026-09-19",
+					"version": "v1",
+					"source": {
+						"repo": "hf.co/Mapika/decider-0.8b",
+						"commit": "a0a01d6f8135298f400a8c856b355793012ae971"
 					},
-					"temperature": 1.145,
-					"temperature_by_type": {
-						"choice": 1.164,
-						"noul": 1.624,
-						"score": 1.124
+					"gguf": {
+						"repo": "hf.co/ardana-ai/decider-0.8b-GGUF",
+						"commit": "fc65c88ee9cb7c0b6508759a8e3aba814f300868",
+						"default": "q8_0",
+						"quants": [
+							{
+								"quant": "q8_0",
+								"file": "decider-0.8b-Q8_0.gguf",
+								"bytes": 811843552
+							}
+						]
 					},
-					"isolated_levels": true,
-					"release_date": "2026-09-24"
-				}
-			}
-		},
-		{
-			"name": "decider-0.8b",
-			"kind": "decider",
-			"summary": "The smallest decider: typed decisions with calibrated probabilities from a 0.8B model.",
-			"base": "Qwen/Qwen3.5-0.8B-Base",
-			"params": "0.8B",
-			"version": "v1",
-			"license": "Apache-2.0",
-			"weights": "hf.co/ardana-ai/decider-0.8b-GGUF",
-			"commit": "fc65c88ee9cb7c0b6508759a8e3aba814f300868",
-			"quant": "Q8_0",
-			"size": 811843552,
-			"release_date": "2026-09-19",
-			"source": "hf.co/Mapika/decider-0.8b@a0a01d6f8135298f400a8c856b355793012ae971",
-			"tags": [
+					"browser": {
+						"repo": "hf.co/ardana-ai/decider-0.8b-ONNX",
+						"commit": "a2ef1fd2e7d5b3fb30ed99274428f738342949c9",
+						"quant": "int4",
+						"bytes": 467748928,
+						"profile": {
+							"name": "decider-0.8b-v1",
+							"layout": {
+								"kind": "plain"
+							},
+							"temperature": 1.03,
+							"temperature_by_type": {},
+							"isolated_levels": true,
+							"release_date": "2026-09-19"
+						}
+					}
+				},
 				{
-					"tag": "q8_0",
-					"size": 811843552
-				}
-			],
-			"browser": {
-				"weights": "hf.co/ardana-ai/decider-0.8b-ONNX",
-				"commit": "a2ef1fd2e7d5b3fb30ed99274428f738342949c9",
-				"quant": "int4",
-				"size": 467748928,
-				"profile": {
-					"name": "decider-0.8b-v1",
-					"layout": {
-						"kind": "plain"
+					"size": "2b",
+					"params": "1.9B",
+					"base": "Qwen/Qwen3.5-2B-Base",
+					"release_date": "2026-09-24",
+					"version": "v11",
+					"source": {
+						"repo": "hf.co/Mapika/decider-2b",
+						"commit": "533964dae8be954c5b5e19fa4948e48408094c1e"
 					},
-					"temperature": 1.03,
-					"temperature_by_type": {},
-					"isolated_levels": true,
-					"release_date": "2026-09-19"
-				}
-			}
-		},
-		{
-			"name": "decider-4b",
-			"kind": "decider",
-			"summary": "The larger decider: stronger on hard decisions, 4B dense.",
-			"base": "Qwen/Qwen3.5-4B-Base",
-			"params": "4.2B",
-			"version": "v2.1",
-			"license": "Apache-2.0",
-			"weights": "hf.co/Mapika/decider-4b-GGUF",
-			"commit": "b79f09d9ba7837f1b744295ea267b55d08e958ec",
-			"quant": "Q4_K_M",
-			"size": 2708804640,
-			"release_date": "2026-09-24",
-			"tags": [
-				{
-					"tag": "q4_k_m",
-					"size": 2708804640
-				},
-				{
-					"tag": "q8_0",
-					"size": 4482403360
-				},
-				{
-					"tag": "bf16",
-					"size": 8424393760
-				}
-			]
-		},
-		{
-			"name": "qwen3.5-0.8b",
-			"kind": "instruct",
-			"summary": "A stock instruct model read zero-shot in the chat layout. Smallest download.",
-			"base": "Qwen/Qwen3.5-0.8B",
-			"params": "0.8B",
-			"license": "Apache-2.0",
-			"weights": "hf.co/ggml-org/Qwen3.5-0.8B-GGUF",
-			"commit": "8fea620810c4afa23dd6443f999a48574c1611a3",
-			"quant": "Q4_0",
-			"size": 563036064,
-			"release_date": "2026-02-28",
-			"tokenizer": "hf.co/Qwen/Qwen3.5-0.8B",
-			"tokenizer_commit": "2fc06364715b967f1860aea9cf38778875588b17",
-			"layout": "chat",
-			"source": "hf.co/Qwen/Qwen3.5-0.8B@2fc06364715b967f1860aea9cf38778875588b17",
-			"tags": [
-				{
-					"tag": "q4_0",
-					"size": 563036064
-				},
-				{
-					"tag": "q8_0",
-					"size": 833592096
-				},
-				{
-					"tag": "bf16",
-					"size": 1557662496
-				}
-			],
-			"browser": {
-				"weights": "hf.co/ardana-ai/qwen3.5-0.8b-ONNX",
-				"commit": "86114e08890df9e145dc2e0ce9cf84b10e14dc39",
-				"quant": "int8",
-				"size": 904574185,
-				"profile": {
-					"name": "qwen3.5-0.8b",
-					"layout": {
-						"kind": "chat",
-						"head": [248045, 846, 198],
-						"tail": [248046, 198, 248045, 74455, 198, 248068, 271, 248069, 271]
+					"gguf": {
+						"repo": "hf.co/Mapika/decider-2b-GGUF",
+						"commit": "ff2e5e687327eda9ac34e9a3ca84d3f400672c87",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "decider-2b-v11-Q4_K_M.gguf",
+								"bytes": 1274396800
+							},
+							{
+								"quant": "q8_0",
+								"file": "decider-2b-v11-Q8_0.gguf",
+								"bytes": 2012012672
+							},
+							{
+								"quant": "bf16",
+								"file": "decider-2b-v11-BF16.gguf",
+								"bytes": 3775709312
+							}
+						]
 					},
-					"temperature": 1.0,
-					"temperature_by_type": {},
-					"isolated_levels": false,
-					"release_date": "2026-02-28"
-				}
-			}
-		},
-		{
-			"name": "smollm3-3b",
-			"kind": "instruct",
-			"summary": "A stock instruct model read zero-shot in the chat layout.",
-			"base": "HuggingFaceTB/SmolLM3-3B",
-			"params": "3B",
-			"license": "Apache-2.0",
-			"weights": "hf.co/ggml-org/SmolLM3-3B-GGUF",
-			"commit": "4965cb60b150737b68a0408c36aeefb65078f894",
-			"quant": "Q4_K_M",
-			"size": 1915305312,
-			"release_date": "2025-07-08",
-			"tokenizer": "hf.co/HuggingFaceTB/SmolLM3-3B",
-			"tokenizer_commit": "a07cc9a04f16550a088caea529712d1d335b0ac1",
-			"layout": "chat",
-			"tags": [
-				{
-					"tag": "q4_k_m",
-					"size": 1915305312
+					"browser": {
+						"repo": "hf.co/ardana-ai/decider-2b-ONNX",
+						"commit": "adfd8460421b51ec80469cd85e9202bbb1084f8d",
+						"quant": "int4",
+						"bytes": 1121602009,
+						"profile": {
+							"name": "decider-2b-v11",
+							"layout": {
+								"kind": "plain"
+							},
+							"temperature": 1.145,
+							"temperature_by_type": {
+								"choice": 1.164,
+								"noul": 1.624,
+								"score": 1.124
+							},
+							"isolated_levels": true,
+							"release_date": "2026-09-24"
+						}
+					}
 				},
 				{
-					"tag": "q8_0",
-					"size": 3275574624
-				},
-				{
-					"tag": "f16",
-					"size": 6158339424
-				}
-			]
-		},
-		{
-			"name": "gemma-4-e2b",
-			"kind": "instruct",
-			"summary": "A stock instruct model read zero-shot in the chat layout. Gemma 4's smallest.",
-			"base": "google/gemma-4-E2B-it",
-			"params": "5.1B",
-			"license": "Apache-2.0",
-			"weights": "hf.co/ggml-org/gemma-4-E2B-it-GGUF",
-			"commit": "b4243c156154b6dca9324415f8c7ccc098b4aed1",
-			"quant": "Q4_0",
-			"size": 2841481184,
-			"release_date": "2026-03-02",
-			"tokenizer": "hf.co/google/gemma-4-E2B-it",
-			"tokenizer_commit": "3e22461f65e89153144f8adb70e3b8c2cc9845a7",
-			"layout": "chat",
-			"tags": [
-				{
-					"tag": "q4_0",
-					"size": 2841481184
-				},
-				{
-					"tag": "q8_0",
-					"size": 4967497152
-				},
-				{
-					"tag": "bf16",
-					"size": 9311305152
+					"size": "4b",
+					"params": "4.2B",
+					"base": "Qwen/Qwen3.5-4B-Base",
+					"release_date": "2026-09-24",
+					"version": "v2.1",
+					"gguf": {
+						"repo": "hf.co/Mapika/decider-4b-GGUF",
+						"commit": "b79f09d9ba7837f1b744295ea267b55d08e958ec",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "decider-4b-v2.1-Q4_K_M.gguf",
+								"bytes": 2708804640
+							},
+							{
+								"quant": "q8_0",
+								"file": "decider-4b-v2.1-Q8_0.gguf",
+								"bytes": 4482403360
+							},
+							{
+								"quant": "bf16",
+								"file": "decider-4b-v2.1-BF16.gguf",
+								"bytes": 8424393760
+							}
+						]
+					}
 				}
 			]
 		},
 		{
-			"name": "gemma-4-e4b",
+			"name": "gemma-4",
 			"kind": "instruct",
-			"summary": "A stock instruct model read zero-shot in the chat layout. Gemma 4 for laptops.",
-			"base": "google/gemma-4-E4B-it",
-			"params": "8B",
+			"summary": "Gemma 4, a stock instruct model read zero-shot in the chat layout.",
 			"license": "Apache-2.0",
-			"weights": "hf.co/ggml-org/gemma-4-E4B-it-GGUF",
-			"commit": "b8093469224f83f5c38f691eb906c380e9e63114",
-			"quant": "Q4_0",
-			"size": 4590807392,
-			"release_date": "2026-03-02",
-			"tokenizer": "hf.co/google/gemma-4-E4B-it",
-			"tokenizer_commit": "ee0ef6023621cff504d758262d4e04895a5af4a2",
 			"layout": "chat",
-			"tags": [
+			"latest": "e4b",
+			"sizes": [
 				{
-					"tag": "q4_0",
-					"size": 4590807392
+					"size": "e2b",
+					"params": "5.1B",
+					"base": "google/gemma-4-E2B-it",
+					"release_date": "2026-03-02",
+					"tokenizer": {
+						"repo": "hf.co/google/gemma-4-E2B-it",
+						"commit": "3e22461f65e89153144f8adb70e3b8c2cc9845a7"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/gemma-4-E2B-it-GGUF",
+						"commit": "b4243c156154b6dca9324415f8c7ccc098b4aed1",
+						"default": "q4_0",
+						"quants": [
+							{
+								"quant": "q4_0",
+								"file": "gemma-4-E2B-it-Q4_0.gguf",
+								"bytes": 2841481184
+							},
+							{
+								"quant": "q8_0",
+								"file": "gemma-4-E2B-it-Q8_0.gguf",
+								"bytes": 4967497152
+							},
+							{
+								"quant": "bf16",
+								"file": "gemma-4-E2B-it-BF16.gguf",
+								"bytes": 9311305152
+							}
+						]
+					}
 				},
 				{
-					"tag": "q8_0",
-					"size": 8031242688
+					"size": "e4b",
+					"params": "8B",
+					"base": "google/gemma-4-E4B-it",
+					"release_date": "2026-03-02",
+					"tokenizer": {
+						"repo": "hf.co/google/gemma-4-E4B-it",
+						"commit": "ee0ef6023621cff504d758262d4e04895a5af4a2"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/gemma-4-E4B-it-GGUF",
+						"commit": "b8093469224f83f5c38f691eb906c380e9e63114",
+						"default": "q4_0",
+						"quants": [
+							{
+								"quant": "q4_0",
+								"file": "gemma-4-E4B-it-Q4_0.gguf",
+								"bytes": 4590807392
+							},
+							{
+								"quant": "q8_0",
+								"file": "gemma-4-E4B-it-Q8_0.gguf",
+								"bytes": 8031242688
+							},
+							{
+								"quant": "bf16",
+								"file": "gemma-4-E4B-it-BF16.gguf",
+								"bytes": 15053097408
+							}
+						]
+					}
 				},
 				{
-					"tag": "bf16",
-					"size": 15053097408
+					"size": "12b",
+					"params": "12B",
+					"base": "google/gemma-4-12B-it",
+					"release_date": "2026-05-23",
+					"tokenizer": {
+						"repo": "hf.co/google/gemma-4-12B-it",
+						"commit": "707f0a3b8a3c7ad586ed01e27eafbad8a27dd0f7"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/gemma-4-12B-it-GGUF",
+						"commit": "e3e681731089efaa3f0917336944ac64752db8ba",
+						"default": "q4_0",
+						"quants": [
+							{
+								"quant": "q4_0",
+								"file": "gemma-4-12B-it-Q4_0.gguf",
+								"bytes": 7219673216
+							},
+							{
+								"quant": "q8_0",
+								"file": "gemma-4-12B-it-Q8_0.gguf",
+								"bytes": 12669646976
+							},
+							{
+								"quant": "bf16",
+								"file": "gemma-4-12B-it-BF16.gguf",
+								"bytes": 23832066176
+							}
+						]
+					}
+				},
+				{
+					"size": "26b-a4b",
+					"params": "25.2B",
+					"base": "google/gemma-4-26B-A4B-it",
+					"release_date": "2026-03-11",
+					"tokenizer": {
+						"repo": "hf.co/google/gemma-4-26B-A4B-it",
+						"commit": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/gemma-4-26B-A4B-it-GGUF",
+						"commit": "bb4531cda34d1ea09d9814959ed4d5833cf2a4c8",
+						"default": "q4_0",
+						"quants": [
+							{
+								"quant": "q4_0",
+								"file": "gemma-4-26B-A4B-it-Q4_0.gguf",
+								"bytes": 14618145824
+							},
+							{
+								"quant": "q8_0",
+								"file": "gemma-4-26B-A4B-it-Q8_0.gguf",
+								"bytes": 26859860992
+							},
+							{
+								"quant": "bf16",
+								"file": "gemma-4-26B-A4B-it-BF16.gguf",
+								"bytes": 50505137152
+							}
+						]
+					}
+				},
+				{
+					"size": "31b",
+					"params": "30.7B",
+					"base": "google/gemma-4-31B-it",
+					"release_date": "2026-03-11",
+					"tokenizer": {
+						"repo": "hf.co/google/gemma-4-31B-it",
+						"commit": "842da3794eaa0b77d5f08bae87a17459d91ff475"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/gemma-4-31B-it-GGUF",
+						"commit": "4fa4fdf38bee237b5c9e8a5b4e72cf39404c9dcc",
+						"default": "q4_0",
+						"quants": [
+							{
+								"quant": "q4_0",
+								"file": "gemma-4-31B-it-Q4_0.gguf",
+								"bytes": 17992313088
+							},
+							{
+								"quant": "q8_0",
+								"file": "gemma-4-31B-it-Q8_0.gguf",
+								"bytes": 32635676896
+							},
+							{
+								"quant": "bf16",
+								"file": "gemma-4-31B-it-BF16.gguf",
+								"bytes": 61413189856
+							}
+						]
+					}
 				}
 			]
 		},
 		{
-			"name": "gemma-4-12b",
+			"name": "qwen3.5",
 			"kind": "instruct",
-			"summary": "A stock instruct model read zero-shot in the chat layout. Gemma 4, 12B dense.",
-			"base": "google/gemma-4-12B-it",
-			"params": "12B",
+			"summary": "Qwen3.5, a stock instruct model read zero-shot in the chat layout.",
 			"license": "Apache-2.0",
-			"weights": "hf.co/ggml-org/gemma-4-12B-it-GGUF",
-			"commit": "e3e681731089efaa3f0917336944ac64752db8ba",
-			"quant": "Q4_0",
-			"size": 7219673216,
-			"release_date": "2026-05-23",
-			"tokenizer": "hf.co/google/gemma-4-12B-it",
-			"tokenizer_commit": "707f0a3b8a3c7ad586ed01e27eafbad8a27dd0f7",
 			"layout": "chat",
-			"tags": [
+			"latest": "0.8b",
+			"sizes": [
 				{
-					"tag": "q4_0",
-					"size": 7219673216
-				},
-				{
-					"tag": "q8_0",
-					"size": 12669646976
-				},
-				{
-					"tag": "bf16",
-					"size": 23832066176
+					"size": "0.8b",
+					"params": "0.8B",
+					"base": "Qwen/Qwen3.5-0.8B",
+					"release_date": "2026-02-28",
+					"source": {
+						"repo": "hf.co/Qwen/Qwen3.5-0.8B",
+						"commit": "2fc06364715b967f1860aea9cf38778875588b17"
+					},
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3.5-0.8B",
+						"commit": "2fc06364715b967f1860aea9cf38778875588b17"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/Qwen3.5-0.8B-GGUF",
+						"commit": "8fea620810c4afa23dd6443f999a48574c1611a3",
+						"default": "q4_0",
+						"quants": [
+							{
+								"quant": "q4_0",
+								"file": "Qwen3.5-0.8B-Q4_0.gguf",
+								"bytes": 563036064
+							},
+							{
+								"quant": "q8_0",
+								"file": "Qwen3.5-0.8B-Q8_0.gguf",
+								"bytes": 833592096
+							},
+							{
+								"quant": "bf16",
+								"file": "Qwen3.5-0.8B-BF16.gguf",
+								"bytes": 1557662496
+							}
+						]
+					},
+					"browser": {
+						"repo": "hf.co/ardana-ai/qwen3.5-0.8b-ONNX",
+						"commit": "86114e08890df9e145dc2e0ce9cf84b10e14dc39",
+						"quant": "int8",
+						"bytes": 904574185,
+						"profile": {
+							"name": "qwen3.5:0.8b",
+							"layout": {
+								"kind": "chat",
+								"head": [248045, 846, 198],
+								"tail": [248046, 198, 248045, 74455, 198, 248068, 271, 248069, 271]
+							},
+							"temperature": 1.0,
+							"temperature_by_type": {},
+							"isolated_levels": false,
+							"release_date": "2026-02-28"
+						}
+					}
 				}
 			]
 		},
 		{
-			"name": "gemma-4-26b-a4b",
+			"name": "qwen3.6",
 			"kind": "instruct",
-			"summary": "A stock instruct model read zero-shot in the chat layout. Gemma 4 mixture of experts, 4B active.",
-			"base": "google/gemma-4-26B-A4B-it",
-			"params": "25.2B",
+			"summary": "Qwen3.6, a stock instruct model read zero-shot in the chat layout.",
 			"license": "Apache-2.0",
-			"weights": "hf.co/ggml-org/gemma-4-26B-A4B-it-GGUF",
-			"commit": "bb4531cda34d1ea09d9814959ed4d5833cf2a4c8",
-			"quant": "Q4_0",
-			"size": 14618145824,
-			"release_date": "2026-03-11",
-			"tokenizer": "hf.co/google/gemma-4-26B-A4B-it",
-			"tokenizer_commit": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
 			"layout": "chat",
-			"tags": [
+			"latest": "35b-a3b",
+			"sizes": [
 				{
-					"tag": "q4_0",
-					"size": 14618145824
-				},
-				{
-					"tag": "q8_0",
-					"size": 26859860992
-				},
-				{
-					"tag": "bf16",
-					"size": 50505137152
+					"size": "35b-a3b",
+					"params": "35B",
+					"base": "Qwen/Qwen3.6-35B-A3B",
+					"release_date": "2026-04-15",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3.6-35B-A3B",
+						"commit": "995ad96eacd98c81ed38be0c5b274b04031597b0"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/Qwen3.6-35B-A3B-GGUF",
+						"commit": "baec3ebee244827cda0f4557eafa8b28f7545fa6",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Qwen3.6-35B-A3B-Q4_K_M.gguf",
+								"bytes": 20419565568
+							},
+							{
+								"quant": "q8_0",
+								"file": "Qwen3.6-35B-A3B-Q8_0.gguf",
+								"bytes": 36903139328
+							},
+							{
+								"quant": "bf16",
+								"file": "Qwen3.6-35B-A3B-BF16.gguf",
+								"bytes": 69376637248
+							}
+						]
+					}
 				}
 			]
 		},
 		{
-			"name": "gemma-4-31b",
+			"name": "qwen3.8",
 			"kind": "instruct",
-			"summary": "A stock instruct model read zero-shot in the chat layout. Gemma 4's largest, 31B dense.",
-			"base": "google/gemma-4-31B-it",
-			"params": "30.7B",
+			"summary": "Qwen3.8, a stock instruct model read zero-shot in the chat layout.",
 			"license": "Apache-2.0",
-			"weights": "hf.co/ggml-org/gemma-4-31B-it-GGUF",
-			"commit": "4fa4fdf38bee237b5c9e8a5b4e72cf39404c9dcc",
-			"quant": "Q4_0",
-			"size": 17992313088,
-			"release_date": "2026-03-11",
-			"tokenizer": "hf.co/google/gemma-4-31B-it",
-			"tokenizer_commit": "842da3794eaa0b77d5f08bae87a17459d91ff475",
 			"layout": "chat",
-			"tags": [
+			"latest": "27b",
+			"sizes": [
 				{
-					"tag": "q4_0",
-					"size": 17992313088
-				},
-				{
-					"tag": "q8_0",
-					"size": 32635676896
-				},
-				{
-					"tag": "bf16",
-					"size": 61413189856
+					"size": "27b",
+					"params": "27B",
+					"base": "Qwen/Qwen3.8-27B",
+					"release_date": "2026-08-05",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3.8-27B",
+						"commit": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/Qwen3.8-27B-GGUF",
+						"commit": "71bc7b627595dc8a91039addd9c791ae548d6747",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Qwen3.8-27B-Q4_K_M.gguf",
+								"bytes": 18973870528
+							},
+							{
+								"quant": "q8_0",
+								"file": "Qwen3.8-27B-Q8_0.gguf",
+								"bytes": 28595763648
+							},
+							{
+								"quant": "bf16",
+								"file": "Qwen3.8-27B-BF16.gguf",
+								"bytes": 53808282048
+							}
+						]
+					}
 				}
 			]
 		},
 		{
-			"name": "qwen3.6-35b-a3b",
+			"name": "smollm3",
 			"kind": "instruct",
-			"summary": "A stock instruct model read zero-shot in the chat layout. Mixture of experts, 3B active.",
-			"base": "Qwen/Qwen3.6-35B-A3B",
-			"params": "35B",
+			"summary": "SmolLM3, a stock instruct model read zero-shot in the chat layout.",
 			"license": "Apache-2.0",
-			"weights": "hf.co/ggml-org/Qwen3.6-35B-A3B-GGUF",
-			"commit": "baec3ebee244827cda0f4557eafa8b28f7545fa6",
-			"quant": "Q4_K_M",
-			"size": 20419565568,
-			"release_date": "2026-04-15",
-			"tokenizer": "hf.co/Qwen/Qwen3.6-35B-A3B",
-			"tokenizer_commit": "995ad96eacd98c81ed38be0c5b274b04031597b0",
 			"layout": "chat",
-			"tags": [
+			"latest": "3b",
+			"sizes": [
 				{
-					"tag": "q4_k_m",
-					"size": 20419565568
-				},
-				{
-					"tag": "q8_0",
-					"size": 36903139328
-				},
-				{
-					"tag": "bf16",
-					"size": 69376637248
-				}
-			]
-		},
-		{
-			"name": "qwen3.8-27b",
-			"kind": "instruct",
-			"summary": "A stock instruct model read zero-shot in the chat layout. 27B dense.",
-			"base": "Qwen/Qwen3.8-27B",
-			"params": "27B",
-			"license": "Apache-2.0",
-			"weights": "hf.co/ggml-org/Qwen3.8-27B-GGUF",
-			"commit": "71bc7b627595dc8a91039addd9c791ae548d6747",
-			"quant": "Q4_K_M",
-			"size": 18973870528,
-			"release_date": "2026-08-05",
-			"tokenizer": "hf.co/Qwen/Qwen3.8-27B",
-			"tokenizer_commit": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
-			"layout": "chat",
-			"tags": [
-				{
-					"tag": "q4_k_m",
-					"size": 18973870528
-				},
-				{
-					"tag": "q8_0",
-					"size": 28595763648
-				},
-				{
-					"tag": "bf16",
-					"size": 53808282048
+					"size": "3b",
+					"params": "3B",
+					"base": "HuggingFaceTB/SmolLM3-3B",
+					"release_date": "2025-07-08",
+					"tokenizer": {
+						"repo": "hf.co/HuggingFaceTB/SmolLM3-3B",
+						"commit": "a07cc9a04f16550a088caea529712d1d335b0ac1"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/SmolLM3-3B-GGUF",
+						"commit": "4965cb60b150737b68a0408c36aeefb65078f894",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "SmolLM3-Q4_K_M.gguf",
+								"bytes": 1915305312
+							},
+							{
+								"quant": "q8_0",
+								"file": "SmolLM3-Q8_0.gguf",
+								"bytes": 3275574624
+							},
+							{
+								"quant": "f16",
+								"file": "SmolLM3-f16.gguf",
+								"bytes": 6158339424
+							}
+						]
+					}
 				}
 			]
 		}

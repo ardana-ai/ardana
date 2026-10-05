@@ -80,7 +80,7 @@ fn serve_binds_localhost_and_reads_the_key_from_the_environment() -> Result<()> 
     let banner = server.log_text();
     assert!(
         banner.contains(&format!("listening on http://127.0.0.1:{} ", server.port))
-            && banner.contains("no models pulled yet; the first request pulls decider-2b")
+            && banner.contains("no models pulled yet; the first request pulls decider:2b ")
             && banner.contains("API key required"),
         "{banner}"
     );
@@ -103,22 +103,22 @@ fn serve_binds_localhost_and_reads_the_key_from_the_environment() -> Result<()> 
     assert_eq!(
         names,
         [
-            "decider-2b",
-            "decider-0.8b",
-            "decider-4b",
-            "qwen3.5-0.8b",
-            "smollm3-3b",
-            "gemma-4-e2b",
-            "gemma-4-e4b",
-            "gemma-4-12b",
-            "gemma-4-26b-a4b",
-            "gemma-4-31b",
-            "qwen3.6-35b-a3b",
-            "qwen3.8-27b"
+            "decider:0.8b",
+            "decider:2b",
+            "decider:4b",
+            "gemma-4:e2b",
+            "gemma-4:e4b",
+            "gemma-4:12b",
+            "gemma-4:26b-a4b",
+            "gemma-4:31b",
+            "qwen3.5:0.8b",
+            "qwen3.6:35b-a3b",
+            "qwen3.8:27b",
+            "smollm3:3b"
         ]
     );
     assert!(models.iter().all(|m| m["x_pulled"] == false), "{body}");
-    assert_eq!(models[0]["x_default"], true, "{body}");
+    assert_eq!(models[1]["x_default"], true, "{body}");
     Ok(())
 }
 
@@ -138,7 +138,7 @@ fn serve_has_no_public_mode() -> Result<()> {
     let server = Served::start(&ardana, &[], &[("ARDANA_PUBLIC", "1")])?;
     let banner = server.log_text();
     assert!(
-        banner.contains("no models pulled yet; the first request pulls decider-2b"),
+        banner.contains("no models pulled yet; the first request pulls decider:2b "),
         "{banner}"
     );
     let (status, body) = server.decide(&json!({"model": "nope", "state": "s", "questions": {}}))?;
@@ -147,7 +147,7 @@ fn serve_has_no_public_mode() -> Result<()> {
         body["detail"]["message"],
         "no model named \"nope\"; none pulled yet; the library at https://ardana.ai/models/ is pulled on first use"
     );
-    assert_eq!(server.models()?["models"][0]["x_default"], true);
+    assert_eq!(server.models()?["models"][1]["x_default"], true);
     Ok(())
 }
 
@@ -162,7 +162,7 @@ fn serve_fetches_the_library_on_start() -> Result<()> {
     assert!(
         server
             .log_text()
-            .contains("no models pulled yet; the first request pulls decider-2b"),
+            .contains("no models pulled yet; the first request pulls decider "),
         "{}",
         server.log_text()
     );
@@ -174,14 +174,14 @@ fn serve_fetches_the_library_on_start() -> Result<()> {
         assert_eq!(model["x_pulled"], false, "{model}");
         assert!(model["x_size"].as_u64().is_some_and(|n| n > 0), "{model}");
     }
-    assert_eq!(models[0]["name"], "decider-2b");
-    assert_eq!(models[0]["x_default"], true);
-    assert!(models[0]["x_browser"].as_u64().is_some_and(|n| n > 0));
+    assert_eq!(models[1]["name"], "decider:2b");
+    assert_eq!(models[1]["x_default"], true);
+    assert!(models[1]["x_browser"].as_u64().is_some_and(|n| n > 0));
     let browser_default = models
         .iter()
         .find(|m| m["x_browser_default"] == true)
         .context("a browser default")?;
-    assert_eq!(browser_default["name"], "decider-0.8b");
+    assert_eq!(browser_default["name"], "decider:0.8b");
     assert!(browser_default["x_browser"].as_u64().is_some());
 
     assert_eq!(
@@ -206,7 +206,7 @@ fn serve_fetches_the_library_on_start() -> Result<()> {
     let fresh = Ardana::new("serve-library-start-default")?;
     let server = Served::start(
         &fresh,
-        &["--default-model", "decider-0.8b"],
+        &["--default-model", "decider:0.8b"],
         &[("ARDANA_LIBRARY", &library.url)],
     )?;
     let listed = server.models()?;
@@ -216,13 +216,15 @@ fn serve_fetches_the_library_on_start() -> Result<()> {
         .iter()
         .find(|m| m["x_default"] == true)
         .context("a default model")?;
-    assert_eq!(default["name"], "decider-0.8b", "{listed}");
+    assert_eq!(default["name"], "decider:0.8b", "{listed}");
     Ok(())
 }
 
-/// R4.2: with `--library-refresh 1s`, an entry added to the source is listed without a restart, for a URL source
-/// (each later GET carrying `If-None-Match` with the stored `ETag`, a 304 keeping the cached document) and for a file
-/// source.
+/// R4.2, R3.6: with `--library-refresh 1s`, a size added to the source is listed under its canonical name and served
+/// without a restart, for a URL source (each later GET carrying `If-None-Match` with the stored `ETag`, a 304 keeping
+/// the cached document) and for a file source. Served: a request naming it in any spelling is resolved by the
+/// refreshed index, no manifest asked, and pulls it; offline, that pull reads the hub cache, which holds no
+/// `hf.co/test/` repository.
 #[test]
 fn serve_refreshes_the_library() -> Result<()> {
     let ardana = Ardana::new("serve-library-refresh-url")?;
@@ -251,11 +253,17 @@ fn serve_refreshes_the_library() -> Result<()> {
         first_etag
     );
 
-    // A model added to the published document is listed, and the cache moves to the new document and `ETag`.
-    let added = common::snapshot_with("added-1b")?;
+    // A size added to the published document is listed under its canonical name after its family's others, and the
+    // cache moves to the new document and `ETag`.
+    let added = common::snapshot_with("9b")?;
     library.publish(&added);
     let mut after = before.clone();
-    after.push("added-1b".into());
+    let at = after
+        .iter()
+        .position(|n| n == "decider:4b")
+        .context("decider:4b")?
+        + 1;
+    after.insert(at, "decider:9b".into());
     eventually("the added model is listed", REFRESHED, || {
         Ok(names(&server.models()?) == after)
     })?;
@@ -264,10 +272,33 @@ fn serve_refreshes_the_library() -> Result<()> {
         .as_array()
         .context("models")?
         .iter()
-        .find(|m| m["name"] == "added-1b")
-        .context("added-1b")?;
-    assert_eq!(model["description"], "hf.co/test/added-1b-GGUF:Q4_K_M");
+        .find(|m| m["name"] == "decider:9b")
+        .context("decider:9b")?;
+    assert_eq!(
+        model["description"],
+        "hf.co/test/decider-9b-GGUF:decider-2b-v11-Q4_K_M.gguf"
+    );
     assert_eq!(model["x_pulled"], false);
+    let (status, body) =
+        server.decide(&json!({"model": "Decider:9B", "state": "s", "questions": {}}))?;
+    assert_eq!(status, 500, "{body}");
+    let message = body["detail"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.starts_with("pulling decider:9b: ") && message.contains("decider-9b-GGUF"),
+        "{body}"
+    );
+    assert!(
+        server.log_text().contains(
+            "ardana serve: pulling decider:9b (hf.co/test/decider-9b-GGUF:decider-2b-v11-Q4_K_M.gguf, 1.3 GB)"
+        ),
+        "{}",
+        server.log_text()
+    );
+    assert!(
+        library.requests().iter().all(|r| r.path == "/models.json"),
+        "no manifest asked: {:?}",
+        library.requests()
+    );
     assert_eq!(
         std::fs::read(ardana.home.join("library/models.json"))?,
         added
@@ -313,11 +344,21 @@ fn serve_refreshes_the_library() -> Result<()> {
     )?;
     assert_eq!(names(&server.models()?), before);
     let tmp = document.with_extension("json.tmp");
-    std::fs::write(&tmp, common::snapshot_with("added-1b")?)?;
+    std::fs::write(&tmp, common::snapshot_with("9b")?)?;
     std::fs::rename(&tmp, &document)?;
     eventually("the added model is listed from the file", REFRESHED, || {
         Ok(names(&server.models()?) == after)
     })?;
+    let (status, body) =
+        server.decide(&json!({"model": "decider:9b-q4_k_m", "state": "s", "questions": {}}))?;
+    assert_eq!(status, 500, "{body}");
+    assert!(
+        server
+            .log_text()
+            .contains("ardana serve: pulling decider:9b (hf.co/test/decider-9b-GGUF:"),
+        "{}",
+        server.log_text()
+    );
     assert!(
         !ardana.home.join("library").exists(),
         "a file source writes no cache"
@@ -393,10 +434,10 @@ fn serve_without_a_library() -> Result<()> {
     assert_eq!(status, 404, "{body}");
     assert_eq!(
         body["detail"]["message"],
-        "no model named \"decider-2b\"; none pulled yet; the library at https://ardana.ai/models/ is pulled on first use"
+        "no model named \"decider\"; none pulled yet; the library at https://ardana.ai/models/ is pulled on first use"
     );
     let (status, body) =
-        server.decide(&json!({"model": "decider-0.8b", "state": "s", "questions": {}}))?;
+        server.decide(&json!({"model": "decider:0.8b", "state": "s", "questions": {}}))?;
     assert_eq!(status, 404, "{body}");
     drop(server);
 

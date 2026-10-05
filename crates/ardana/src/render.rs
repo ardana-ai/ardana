@@ -294,20 +294,20 @@ mood
 
     #[test]
     fn tables_and_sections_align() {
-        let rows = vec![vec!["decider-2b".to_string(), "1.3 GB".to_string()]];
+        let rows = vec![vec!["decider:2b".to_string(), "1.3 GB".to_string()]];
         assert_eq!(
             table(&["NAME", "SIZE"], &rows),
-            "NAME        SIZE\ndecider-2b  1.3 GB\n"
+            "NAME        SIZE\ndecider:2b  1.3 GB\n"
         );
         assert_eq!(table(&["NAME", "SIZE"], &[]), "NAME  SIZE\n");
         let shown = sections(&[
-            ("Model", vec![("name", "decider-2b".to_string())]),
+            ("Model", vec![("name", "decider:2b".to_string())]),
             ("Empty", vec![]),
             ("Files", vec![("weights", "/w.gguf".to_string())]),
         ]);
         assert_eq!(
             shown,
-            "  Model\n    name       decider-2b\n\n  Files\n    weights    /w.gguf\n"
+            "  Model\n    name       decider:2b\n\n  Files\n    weights    /w.gguf\n"
         );
     }
 

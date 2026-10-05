@@ -1,4 +1,4 @@
-// The page at high zoom and with enlarged text, against the release `ardana` serving decider-2b (see
+// The page at high zoom and with enlarged text, against the release `ardana` serving decider:2b (see
 // playwright.config.ts): what stays on screen while a run in the tab is in flight (`banner_reflow`), and rows that wrap
 // rather than run off a phone's screen (`text_reflow`). Zoom is the CSS viewport it leaves (1280x1024 at 400% is
 // 320x256), enlarged text the root's font size at 200% (`LARGE_TEXT`). A fact's tooltip opens clear of the in-flight
@@ -32,7 +32,7 @@ async function stuckRegion(page: Page): Promise<{ region: number; viewport: numb
   }));
 }
 
-// WCAG 1.4.10 and 2.4.11 while decider-0.8b downloads into the tab: at 400% zoom, with 200% text on a phone, in
+// WCAG 1.4.10 and 2.4.11 while decider:0.8b downloads into the tab: at 400% zoom, with 200% text on a phone, in
 // landscape with 200% text, and at 400% zoom with 200% text, what stays of the top bar and the banner holds at most a
 // third of the viewport, Stop stays one Tab from Run and shows when focused, no focus stop is hidden, and an editor that
 // fits the room below the bars shows whole.
@@ -119,7 +119,7 @@ function overflow() {
 // server's curl snippet and on the ardana command an "In browser" row shows.
 test('text_reflow', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
-  await page.goto(`/?autorun=1${shareHash({ ...fixture('ticket.json'), model: 'decider-2b' })}`);
+  await page.goto(`/?autorun=1${shareHash({ ...fixture('ticket.json'), model: 'decider:2b' })}`);
   await expect(page.getByTestId('answered-by')).toContainText('Answered by', { timeout: 120_000 });
   const own = testInfo.project.use.viewport!;
   await page.addStyleTag({ content: LARGE_TEXT });
@@ -137,7 +137,7 @@ test('text_reflow', async ({ page }, testInfo) => {
   ];
   for (const snippet of ['curl', 'ardana']) {
     if (snippet === 'ardana') {
-      await pickInBrowser(page, 'decider-0.8b');
+      await pickInBrowser(page, 'decider:0.8b');
     }
     for (const [width, height] of widths) {
       await page.setViewportSize({ width, height });
@@ -186,7 +186,7 @@ function tipOverBanner() {
   return { term: term.textContent, shown: true, covered: Math.round(across * down) };
 }
 
-// While decider-0.8b downloads into the tab, a fact term the keyboard brings up (Shift+Tab, which lands it just under the
+// While decider:0.8b downloads into the tab, a fact term the keyboard brings up (Shift+Tab, which lands it just under the
 // banner, then the arrow keys along its row) opens its meaning clear of the banner: at 390, 430 and 1280 px, and at 390
 // px with 200% text.
 test('term_tooltips', async ({ page }, testInfo) => {

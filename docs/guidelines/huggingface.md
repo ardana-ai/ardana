@@ -34,7 +34,7 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   of the real cache is `cargo xtask onnx publish`'s, of `~/.cache/huggingface/token` (`onnx.md`).
 - `cargo xtask fetch --tests` installs only the files plain `cargo test` reads: every `[[hf]]` file (the library's
   models) but the weights (`.gguf`, `.onnx`, `.onnx.data`), which needs no token, so CI runs it. Plain tests use only the library's models
-  (decider-2b, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8); a test that needs the gated `[[hf_local]]` Llama 3.2 tokenizer is a real-model
+  (decider, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8); a test that needs the gated `[[hf_local]]` Llama 3.2 tokenizer is a real-model
   test (`#[ignore = "e2e: ..."]`), like those on Ollama's `llama3.2`.
 - `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`. `cargo xtask fetch` lists
   the revision through `https://huggingface.co/api/models/<repo>/revision/<rev>?blobs=true`, downloads each file from
@@ -58,60 +58,83 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 
 ### Model library
 - The library is one published document, `https://ardana.ai/models.json` (`schema` 1, `{schema, default,
-  browser_default, models}`) with one manifest per model at `https://ardana.ai/models/<name>.json`
-  (`{schema, model}`), read at run time: no model list is compiled into `ardana`, and
-  `ardana_registry::library::DEFAULT_MODEL` (`decider-2b`) is the one model name the binary keeps (Q1). Its types are
-  `ardana_api::library` (`LibraryDocument`, `LibraryEntry`, `BrowserEntry`, `LibraryManifest`, `LayoutKind`; C3),
-  which `ardana-registry` reaches through `ardana-core`'s re-export. `ARDANA_LIBRARY` names the source
-  (`library::LibrarySource`, C4): unset, that URL; an `http(s)://…/models.json` URL, that index with its manifests
-  beside it; a file path, that one document and no network; `off`, no library. Tests, CI and xtask read the checked-in
-  snapshot `crates/ardana-registry/tests/data/models.json` (C5), a byte-for-byte copy of the landing's
+  browser_default, models}`), whose `models` are families with their sizes inside, with one manifest per family at
+  `https://ardana.ai/models/<family>.json` (`{schema, model}`), read at run time: no model list is compiled into
+  `ardana`, and `ardana_registry::library::DEFAULT_MODEL` (the family `decider`) is the one library name the binary
+  keeps (Q15). Its types are `ardana_api::library` (`LibraryDocument`, `LibraryFamily`, `LibrarySize`, `GgufEntry`,
+  `GgufQuant`, `BrowserEntry`, `RepoPin`, `LibraryManifest`, `LayoutKind`; C3), which `ardana-registry` reaches
+  through `ardana-core`'s re-export. `ARDANA_LIBRARY` names the source (`library::LibrarySource`): unset, that URL; an
+  `http(s)://…/models.json` URL, that index with its manifests beside it; a file path, that one document and no
+  network; `off`, no library. Tests, CI and xtask read the checked-in snapshot
+  `crates/ardana-registry/tests/data/models.json` (C5), a byte-for-byte copy of the landing's
   `src/lib/data/models.json` that `.cargo/config.toml` `[env]` and `Sandbox::env` name as `ARDANA_LIBRARY`; it is
   compiled into nothing.
-- An entry maps a short name to an `hf.co/` GGUF repository: `name`, `weights` and its `commit`, the default `quant`,
-  its GGUF `size` in bytes, `release_date`, the `tokenizer` repository with its `tokenizer_commit` and the `layout`
-  when the GGUF repository needs them, a `source` (the checkpoint `hf.co/<org>/<repo>@<40-hex commit>` that
-  `cargo xtask onnx convert` builds from), `tags` (every quant's size, for the pages) and a `browser` table
-  (`BrowserEntry`: `weights` `hf.co/ardana-ai/<name>-ONNX`, its `commit`, `quant` `int4` or `int8`, the `size` a
-  browser downloads and the `profile` `/v1/browser/<name>/profile` answers). `browser_default` names a model with one.
-  The browser sizes, and the `size` of a GGUF ardana-ai hosts (decider-0.8b's), are the bytes `cargo xtask onnx
-  convert` built and recorded (`onnx.md`); read sizes and files from the Hub API, never invent them.
-- Reading follows Q12. `LibraryDocument::parse(text, version)` and `LibraryManifest::parse` ignore unknown fields,
-  skip an entry that does not deserialize or whose `min_version` is above the running version, and refuse another
-  `schema` (checked before the shape) with an error that says to update `ardana`; the registry's
-  `Library::from_document` then leaves out an entry whose name, repositories, commits, quant or source a pull could
-  not read (`library::check_entry`), so one bad entry never hides the rest.
-- `library::LibraryClient` (the source and the cache `$ARDANA_HOME/library`, Q7) is how commands read it (Q8):
-  `lookup(name)`, for `pull` and `run` of a model not pulled, GETs `models/<lowercased name>.json` beside the index
-  every time, with `User-Agent: ardana/<version>` and no other identifying header (Q17) and a 10 s connect and 60 s
-  request timeout, keeps the body as fetched at `library/models/<name>.json` (written through `<file>.tmp`, like
-  `models.toml`), answers from that cached copy when the GET fails (no server, a status other than 200), and treats a
-  404 as no library model; `cached(name)` reads that file alone, for `list`, `show`, `rm`, `ps` and help, which send
-  nothing; `index()` gives `ardana serve` what it serves at start without the network, a file source's whole document
-  or a URL source's cached index (`library/models.json`, else no model); `refresh()` reads the source again for
-  `serve` (Q9: on start and every `--library-refresh`, `axum.md`), under a URL source one index GET with
-  `If-None-Match` on the `ETag` kept in `library/models.json.etag`, whose 200 is written to the cache (the bytes as
-  fetched, once they parse, and the new `ETag`, or none) and read, whose 304 is `None` (the copy at hand stands), and
-  whose failure, a 404 and a document this version does not read included, is the error naming the URL. A reference
-  (`hf.co/`, `ollama:`, a path) sends nothing. `Registry::named(name, &library)` then gives a pulled entry, a `LibraryPick` for `pull_library`, or
-  the unknown-model error, which lists the pulled names and points to `https://ardana.ai/models/`, naming no library
-  model (Q11), as the help texts and `Ref::parse`'s error do.
-- `ardana_registry::pull(reference, opts, runtimes, &library)` resolves a library name first: `<name>[:<quant>]`,
-  both case-insensitive, pulls `<weights>:<quant>` under the registry name `<name>` (or `<name>:<quant>`, lowercased,
-  for another quant), with the library's tokenizer, layout and release date wherever the flags and the weights give
-  none (`pull_library`). Everything else is a reference (`Ref::parse`).
-- Library repositories are read at their pinned commit, never at `main` (Q4): `pull_library` reads the weights
-  repository at the entry's `commit` and the library's tokenizer repository at its `tokenizer_commit` (a `--tokenizer`
-  flag is read as the reference it is, at `main`), and `pull_browser` and `BrowserCache` read the browser repository
-  at `browser.commit`, online and from the hub cache alike; `<name>:<quant>` picks its GGUF among the files of that
-  commit (Q16). The references stay `hf.co/<org>/<repo>`; an `hf.co/` reference typed by the user reads `main`.
-  `hub::Hub::snapshot(org, repo, commit)` takes the commit: online it lists `info().revision(commit)`
-  (`/api/models/<repo>/revision/<commit>`) and every file downloads from `resolve/<commit>/<file>`; offline it reads
-  `snapshot_download().revision(commit).local_files_only(true)`, whatever `refs/main` names, and a commit the cache
-  lacks is `NotCached` naming `hf.co/<org>/<repo> at commit <commit>`. The snapshot (C5) pins the commits
-  `xtask/fetch.toml` installs into `tmp/hf` (`the_snapshot_is_a_schema_1_library` checks both agree), and
-  `library_pulls_read_the_pinned_commit` proves the pins over a scratch cache whose `refs/main` names another
-  snapshot.
+- A family (`LibraryFamily`) is `name`, `kind`, `summary`, `license`, `layout`, `min_version`, `latest` (the size the
+  family alone and its tag `latest` stand for) and `sizes`. A size (`LibrarySize`) is one checkpoint: `size` (its tag,
+  `2b`), `params`, `base`, `release_date`, `version`, its own `kind`, `summary`, `license`, `layout` and
+  `min_version` when it overrides the family's, `source` and `tokenizer` pins (`RepoPin`, `{repo, commit}`: the
+  checkpoint `cargo xtask onnx convert` builds from, and the tokenizer repository when the GGUF repository has none),
+  its `gguf` (`GgufEntry`: `repo` `hf.co/<org>/<repo>`, `commit`, `default` and `quants`, each a `GgufQuant`
+  `{quant, file, bytes}`, the default first) and at most one `browser` (`BrowserEntry`: `repo`
+  `hf.co/ardana-ai/<name>-ONNX`, its `commit`, `quant` `int4` or `int8`, the `bytes` a browser downloads and the
+  `profile` `/v1/browser/<name>/profile` answers). `browser_default` names a size with one. The browser bytes, and the
+  bytes of a GGUF ardana-ai hosts (decider:0.8b's), are what `cargo xtask onnx convert` built and recorded
+  (`onnx.md`); read files and sizes from the Hub API, never invent them.
+- Reading follows Q3, Q4 and Q13. `LibraryDocument::parse(text, version)` and `LibraryManifest::parse` ignore unknown
+  fields at every level, leave out a size that does not deserialize, whose own `min_version` is above the running
+  version (`min_version` is not inherited) or whose repository is not `hf.co/<org>/<repo>` or commit not 40
+  lowercase hex (`LibrarySize::pinned`), a family that does not deserialize or whose own `min_version` is above, a
+  family with no size left and a family whose name an earlier one took, so one bad size never hides the rest; fill
+  each size's `kind`, `summary`, `license` and `layout` from its family where it carries none, and refuse another
+  `schema` (checked before the shape) with an error that says to update `ardana`. Every reader (the registry's
+  `Library::from_document`, the standalone playground, xtask) takes the parsed document as it is. A reader checks
+  nothing else; the landing's unit test keeps the document well-formed. `LibrarySize::default_quant`, `tag`, `name`
+  (Q7) and `reference` (Q14) are the one place a canonical name and a pull's reference are built.
+- `Library::find(input)` is the one implementation of library names (Q8 to Q12, C4). An input holding a `/`, starting
+  with `ollama:` or ending in `.gguf` is a reference, and a family the library lacks is none of its business: both
+  `Ok(None)`. Any other input is `<family>[:<tag>]` split once at its first `:` (`library::library_name` gives the
+  family); the family's tags are `latest`, `<size>` for each size's default quant and `<size>-<quant>` for every
+  quant, enumerated and never parsed (no code splits a tag at `-`), the input's tag (`latest` when it has none)
+  compared ASCII case-insensitively and whole, the first match in document order the answer, a `LibraryPick {family,
+  size, quant}`. A tag the family does not list is `RegistryError::UnknownTag { family, tag, tags }`: `gemma-4 has no
+  tag "9b"; its tags are e2b, e2b-q8_0, …`, its canonical tags in document order. `LibraryPick::name()` is the
+  canonical name (Q7), `<family>:<size>` for the default quant and `<family>:<size>-<quant>` for another, and
+  `reference()` the file a pull reads, `hf.co/<org>/<repo>:<file>` (Q14). `Library::sizes()` lists each size's
+  default quant, `Library::browser(name)` finds a size with a browser variant by its canonical name exactly (Q19).
+- `library::LibraryClient` (the source and the cache `$ARDANA_HOME/library`) is how commands read it:
+  `lookup(name)`, for `pull` and `run` of a model not pulled, GETs the family's `models/<lowercased family>.json`
+  beside the index every time (Q16), with `User-Agent: ardana/<version>` and no other identifying header and a 10 s
+  connect and 60 s request timeout, keeps the body as fetched at `library/models/<family>.json` (written through
+  `<file>.tmp`, like `models.toml`), answers from that cached copy when the GET fails (no server, a status other than
+  200), and treats a 404 as no library model; `cached(name)` reads that file alone, for `list`, `show`, `rm`, `ps`
+  and help, which send nothing; `index()` gives `ardana serve` what it serves at start without the network, a file
+  source's whole document or a URL source's cached index (`library/models.json`, else no model); `refresh()` reads
+  the source again for `serve` (on start and every `--library-refresh`, `axum.md`), under a URL source one index GET
+  with `If-None-Match` on the `ETag` kept in `library/models.json.etag`, whose 200 is written to the cache (the bytes
+  as fetched, once they parse, and the new `ETag`, or none) and read, whose 304 is `None` (the copy at hand stands),
+  and whose failure, a 404 and a document this version does not read included, is the error naming the URL. A
+  reference (`hf.co/`, `ollama:`, a path) sends nothing. `Registry::named(name, &library)` then gives a pulled entry
+  by its exact name first (Q25), else the `LibraryPick` the library names (`Named::Pulled` when that pick's canonical
+  name is pulled, Q10, else `Named::Library` for `pull_library`), else the unknown-model error, which lists the pulled
+  names and points to `https://ardana.ai/models/`, naming no library model (Q12), as the help texts and
+  `Ref::parse`'s error do; a tag the family lacks is its `UnknownTag`.
+- `ardana_registry::pull(reference, opts, runtimes, &library)` resolves a library name first: the pick's file,
+  `hf.co/<org>/<repo>:<file>` (an `HfFile::Name`, read exactly; `matches_quant` and `companion_of` serve typed
+  `hf.co/<org>/<repo>:<quant>` references only), recorded under its canonical name with that reference as its
+  `source`, with the size's tokenizer, layout and release date wherever the flags and the weights give none
+  (`pull_library`); a size without its own `decider_config.json` gets the stock profile named after the canonical
+  name (Q17). Everything else is a reference (`Ref::parse`).
+- Library repositories are read at their pinned commit, never at `main`: `pull_library` reads the GGUF repository at
+  `gguf.commit` and the size's tokenizer repository at `tokenizer.commit` (a `--tokenizer` flag is read as the
+  reference it is, at `main`), and `pull_browser` and `BrowserCache` read the browser repository at `browser.commit`,
+  online and from the hub cache alike. The references stay `hf.co/<org>/<repo>`; an `hf.co/` reference typed by the
+  user reads `main`. `hub::Hub::snapshot(org, repo, commit)` takes the commit: online it lists
+  `info().revision(commit)` (`/api/models/<repo>/revision/<commit>`) and every file downloads from
+  `resolve/<commit>/<file>`; offline it reads `snapshot_download().revision(commit).local_files_only(true)`, whatever
+  `refs/main` names, and a commit the cache lacks is `NotCached` naming `hf.co/<org>/<repo> at commit <commit>`. The
+  snapshot (C5) pins the commits `xtask/fetch.toml` installs into `tmp/hf`
+  (`the_snapshot_is_a_schema_1_library_of_families` checks both agree), and `library_pulls_read_the_pinned_commit`
+  proves the pins over a scratch cache whose `refs/main` names another snapshot.
 
 ### Download progress
 - `PullOptions::progress` attaches an `hf_hub::progress::ProgressHandler` per downloaded file (`hub::FileReport`,
@@ -205,12 +228,12 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   entry names no backend; `ardana-registry` and `ardana`, native only, name `onig` themselves. The default
   `progressbar` and `esaxx_fast` only serve training. Both backends read decider's prompt goldens to the same ids.
 - Load with `Tokenizer::from_file(path)`; map its `Box<dyn Error + Send + Sync>` into a typed error naming the path.
-  `Tokenizer` is `Clone + Send + Sync`: load once per model and share it. Loading decider-2b's 20 MB
+  `Tokenizer` is `Clone + Send + Sync`: load once per model and share it. Loading decider:2b's 20 MB
   `tokenizer.json` takes about a second in a debug build, so tests load it once and clone.
 - Encode with `tokenizer.encode_fast(text, false)` (`encode` without offsets): the prompt builder and the chat
   head/tail own every special token, and `true` would let the post-processor add its own (a double BOS). Assert the
   head ids in tests (R3.1, R3.3).
-- transformers 5.17 builds decider-2b's `Qwen2Tokenizer` from `tokenizer.json`'s pre-tokenizer and ignores the
+- transformers 5.17 builds decider:2b's `Qwen2Tokenizer` from `tokenizer.json`'s pre-tokenizer and ignores the
   differing `pretokenize_regex` in its `tokenizer_config.json` (checked: equal ids on text with combining marks), so
   `tokenizer.json` alone reproduces decider's ids.
 - Keep ids as `u32` end to end (`Encoding::get_ids() -> &[u32]`); convert to llama.cpp's `i32` only inside

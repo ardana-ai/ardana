@@ -1,4 +1,4 @@
-//! A running `ardana serve` for the end-to-end suites: the release binary serving decider-2b, pulled offline from
+//! A running `ardana serve` for the end-to-end suites: the release binary serving decider:2b, pulled offline from
 //! `tmp/hf` into its own `ARDANA_HOME` under `tmp/e2e/<suite>` (or with that home empty, so the first request pulls
 //! it, over an empty Hub cache of its own when asked), on a free port of 127.0.0.1. Dropping it stops the server.
 
@@ -11,8 +11,9 @@ use anyhow::{Context, Result, bail};
 
 use crate::sandbox::{Sandbox, cargo};
 
-/// The model every suite serves: the library name `ardana pull` resolves to `hf.co/Mapika/decider-2b-GGUF:Q4_K_M`.
-pub const MODEL: &str = "decider-2b";
+/// The model every suite serves: the library name `ardana pull` resolves to
+/// `hf.co/Mapika/decider-2b-GGUF:decider-2b-v11-Q4_K_M.gguf`.
+pub const MODEL: &str = "decider:2b";
 
 /// How long the server may take to answer `/health`.
 const START_TIMEOUT: Duration = Duration::from_secs(60);
@@ -49,15 +50,15 @@ pub struct Server {
 
 /// How [`Server::launch`] starts `ardana serve`.
 enum Mode<'a> {
-    /// decider-2b pulled first, and the API key when given.
+    /// decider:2b pulled first, and the API key when given.
     Pulled(Option<&'a str>),
-    /// On an empty registry: its first request pulls decider-2b. Its Hub cache is `<dir>/hf` when `own_cache` (empty:
+    /// On an empty registry: its first request pulls decider:2b. Its Hub cache is `<dir>/hf` when `own_cache` (empty:
     /// every pull fails, offline), else `tmp/hf`.
     Empty { own_cache: bool },
 }
 
 impl Server {
-    /// Pulls decider-2b into `tmp/e2e/<name>/home` and starts `ardana serve` there (from the binary's own
+    /// Pulls decider:2b into `tmp/e2e/<name>/home` and starts `ardana serve` there (from the binary's own
     /// directory), with `ARDANA_API_KEY` set to `api_key` when given; returns once `/health` answers.
     pub fn start(
         sandbox: &Sandbox,
@@ -68,7 +69,7 @@ impl Server {
         Server::launch(sandbox, ardana, name, Mode::Pulled(api_key))
     }
 
-    /// Starts `ardana serve` on the empty home `tmp/e2e/<name>/home`: its first request pulls decider-2b, offline from
+    /// Starts `ardana serve` on the empty home `tmp/e2e/<name>/home`: its first request pulls decider:2b, offline from
     /// `tmp/hf`.
     pub fn start_empty(sandbox: &Sandbox, ardana: &Path, name: &str) -> Result<Server> {
         Server::launch(sandbox, ardana, name, Mode::Empty { own_cache: false })

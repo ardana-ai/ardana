@@ -1,5 +1,5 @@
 // R3.5, the first run on an empty registry: `cargo xtask e2e playground` starts one more release `ardana serve` with
-// an empty `ARDANA_HOME` and `HF_HUB_OFFLINE=1` over `tmp/hf` (`ARDANA_EMPTY_URL`). The default model (decider-2b)
+// an empty `ARDANA_HOME` and `HF_HUB_OFFLINE=1` over `tmp/hf` (`ARDANA_EMPTY_URL`). The default model (decider:2b)
 // is not pulled, so the picker opens on the browser default's row in the tab (Q11), nothing on the page speaks of Jev,
 // and the first Run answers in the tab: the registry stays empty for the next viewport.
 import { expect, test } from '@playwright/test';
@@ -24,12 +24,12 @@ test('first_run', async ({ page }, testInfo) => {
   const base = process.env.ARDANA_EMPTY_URL;
   expect(base, 'xtask passes the empty server').toBeTruthy();
 
-  // Nothing is pulled; decider-2b is the default model and decider-0.8b the browser default.
+  // Nothing is pulled; decider:2b is the default model and decider:0.8b the browser default.
   const listed = (await (await page.request.get(`${base}/v1/models`)).json()) as { models: ModelInfo[] };
   expect(listed.models.every((m) => m.x_pulled === false)).toBe(true);
-  expect(listed.models.find((m) => m.x_default)!.name).toBe('decider-2b');
+  expect(listed.models.find((m) => m.x_default)!.name).toBe('decider:2b');
   const browserDefault = listed.models.filter((m) => m.x_browser_default);
-  expect(browserDefault.map((m) => m.name)).toEqual(['decider-0.8b']);
+  expect(browserDefault.map((m) => m.name)).toEqual(['decider:0.8b']);
   const size = browserDefault[0].x_browser!;
 
   // A share link as Jev writes it (`jev-latest`) opens on the browser default's row in the tab.
@@ -37,7 +37,7 @@ test('first_run', async ({ page }, testInfo) => {
   expect(ticket.model).toBe('jev-latest');
   await page.goto(`${base}/${shareHash(ticket)}`);
   const picker = modelPicker(page);
-  await expect(picker).toHaveValue(browserRow('decider-0.8b'));
+  await expect(picker).toHaveValue(browserRow('decider:0.8b'));
   await expect(page.getByTestId('model-note')).toHaveText(
     `Runs in this tab. The first run downloads ${decimalSize(size)}, which this browser keeps. ${IN_MEMORY}; only ` +
       'a reload frees all of it.',
@@ -68,7 +68,7 @@ test('first_run', async ({ page }, testInfo) => {
   expect(requests.filter(isSystemOne)).toEqual([]);
   const after = (await (await page.request.get(`${base}/v1/models`)).json()) as { models: ModelInfo[] };
   expect(after.models.every((m) => m.x_pulled === false)).toBe(true);
-  await expect(picker).toHaveValue(browserRow('decider-0.8b'));
+  await expect(picker).toHaveValue(browserRow('decider:0.8b'));
   expect((await visibleText(page)).toLowerCase()).not.toContain('jev');
   await screenshot(page, testInfo, 'first_run', 'answered');
 });

@@ -1,7 +1,7 @@
-// W2: decider-0.8b's "In browser" row runs the ticket preset in the tab, on the browser variant the server pulls once
-// from tmp/hf (`HF_HUB_OFFLINE=1`) and serves from /v1/browser/decider-0.8b/*. `browser_run` uses a server of its own
+// W2: decider:0.8b's "In browser" row runs the ticket preset in the tab, on the browser variant the server pulls once
+// from tmp/hf (`HF_HUB_OFFLINE=1`) and serves from /v1/browser/decider:0.8b/*. `browser_run` uses a server of its own
 // (`ARDANA_BROWSER_URL`, an empty registry), since comparing the tab with `POST /v1/systemone` pulls and loads
-// decider-0.8b there; it runs in a persistent profile of its own, emptied first: a visitor whose browser keeps the files
+// decider:0.8b there; it runs in a persistent profile of its own, emptied first: a visitor whose browser keeps the files
 // across visits (an incognito context's Cache Storage cannot hold the 447 MB weights). `insecure_origin` runs the same
 // row on a page that is no secure context, which has no Cache Storage. `browser_stop` and `browser_recover` run in fresh
 // contexts on the empty server (`ARDANA_EMPTY_URL`), whose registry their runs in the tab leave empty: a first run in
@@ -39,7 +39,7 @@ import {
   type Request,
 } from './helpers';
 
-const MODEL = 'decider-0.8b';
+const MODEL = 'decider:0.8b';
 const base = process.env.ARDANA_BROWSER_URL!;
 const empty = process.env.ARDANA_EMPTY_URL!;
 
@@ -105,7 +105,7 @@ const firstDownload = (size: number) =>
 
 /** Run's description while this tab downloads `size` bytes: the banner's words, never the bar's raw value. */
 const downloading = (size: number) =>
-  new RegExp(`^Downloading decider-0\\.8b into this tab: [\\d.]+ [KMG]?B of ${decimalSize(size).replace('.', '\\.')}$`);
+  new RegExp(`^Downloading decider:0\\.8b into this tab: [\\d.]+ [KMG]?B of ${decimalSize(size).replace('.', '\\.')}$`);
 
 /** What the run status says once a run in a tab that keeps the files is stopped. */
 const STOPPED = 'Stopped, not answered. The next run resumes the download.';
@@ -179,7 +179,7 @@ test('browser_run', async ({}, testInfo) => {
     baseURL: base,
   });
   try {
-    // The server's own answer to the same request, from decider-0.8b's GGUF (which this pulls and lists).
+    // The server's own answer to the same request, from decider:0.8b's GGUF (which this pulls and lists).
     const ticket = fixture('ticket.json');
     const request: Request = { ...ticket, model: MODEL };
     const served = await context.request.post('/v1/systemone', { data: request });
@@ -187,9 +187,9 @@ test('browser_run', async ({}, testInfo) => {
     const server = (await served.json()) as Response;
     const models = (await (await context.request.get('/v1/models')).json()) as { models: ModelInfo[] };
     const browserModels = models.models.filter((m) => m.x_browser !== undefined);
-    expect(browserModels.map((m) => m.name).sort()).toEqual(['decider-0.8b', 'decider-2b', 'qwen3.5-0.8b']);
+    expect(browserModels.map((m) => m.name).sort()).toEqual(['decider:0.8b', 'decider:2b', 'qwen3.5:0.8b']);
     const size = browserModels.find((m) => m.name === MODEL)!.x_browser!;
-    // The server holds decider-0.8b's browser files whole in its hub cache (`tmp/hf`): a request for them pulls
+    // The server holds decider:0.8b's browser files whole in its hub cache (`tmp/hf`): a request for them pulls
     // nothing.
     expect(browserModels.find((m) => m.name === MODEL)!.x_browser_pulled).toBe(true);
 
@@ -493,7 +493,7 @@ test('browser_stop', async ({ page }, testInfo) => {
   });
   const files = () => requests.filter((url) => /^\/v1\/browser\/[^/]+\/model\.onnx/.test(new URL(url).pathname));
 
-  // An autorun link onto decider-0.8b's "In browser" row, with nothing kept: the banner says what Run downloads, Run
+  // An autorun link onto decider:0.8b's "In browser" row, with nothing kept: the banner says what Run downloads, Run
   // waits for the tap, and nothing is fetched.
   const ticket = fixture('ticket.json');
   await page.goto(`${empty}/?autorun=1${shareHash({ ...ticket, model: MODEL })}`);
@@ -535,15 +535,15 @@ test('browser_stop', async ({ page }, testInfo) => {
   expect(requests.slice(0, tapped).filter((url) => new URL(url).pathname.startsWith('/v1/browser/'))).toEqual([]);
   await screenshot(page, testInfo, 'browser_stop', 'stopped');
 
-  // Picking another row stops a download as Stop does: here decider-2b's server row, which this server has not
+  // Picking another row stops a download as Stop does: here decider:2b's server row, which this server has not
   // pulled (Run is then held for it).
   await runKey(page).click();
   await expect(page.getByTestId('run-note')).toContainText(`Downloading ${MODEL} into this tab`);
-  await pickModel(page, 'decider-2b');
+  await pickModel(page, 'decider:2b');
   await expect.poll(() => aborted.filter((path) => path.endsWith('/model.onnx.data'))).toHaveLength(2);
   await expect(page.getByTestId('run-label')).toHaveText('Run');
   await expect(page.getByTestId('run-status')).toHaveText(STOPPED);
-  await expect(page.getByTestId('run-note')).toContainText('This server has not pulled decider-2b');
+  await expect(page.getByTestId('run-note')).toContainText('This server has not pulled decider:2b');
   await expect(page.getByTestId('answered-by')).toHaveCount(0);
   await throttle(cdp, null);
   expect(requests.filter(isSystemOne)).toEqual([]);
@@ -725,7 +725,7 @@ test('browser_resume', async ({}, testInfo) => {
     baseURL: proxy.url,
   });
   try {
-    // The server's own answer to the same request, from decider-0.8b's GGUF, and the length of the weights.
+    // The server's own answer to the same request, from decider:0.8b's GGUF, and the length of the weights.
     const ticket = fixture('ticket.json');
     const served = await context.request.post(`${base}/v1/systemone`, { data: { ...ticket, model: MODEL } });
     expect(served.status()).toBe(200);
@@ -772,7 +772,7 @@ test('browser_resume', async ({}, testInfo) => {
     proxy.sever();
     await expect(page.getByTestId('fault-advice')).toHaveText(
       new RegExp(
-        `^The download of decider-0\\.8b stopped at [\\d.]+ MB of ${decimalSize(size).replace('.', '\\.')}\\. ` +
+        `^The download of decider:0\\.8b stopped at [\\d.]+ MB of ${decimalSize(size).replace('.', '\\.')}\\. ` +
           'Run again once the connection is back to resume it\\.$',
       ),
       { timeout: 60_000 },
@@ -827,17 +827,17 @@ test('browser_resume', async ({}, testInfo) => {
 
     // This browser keeps each file once, whole, and none of the parts it came in.
     const kept = await page.evaluate(async () => {
-      const names = (await caches.keys()).filter((name) => name.startsWith('ardana-browser decider-0.8b '));
+      const names = (await caches.keys()).filter((name) => name.startsWith('ardana-browser decider:0.8b '));
       const cache = await caches.open(names[0]);
       const keys = (await cache.keys()).map((request) => new URL(request.url).pathname + new URL(request.url).search);
-      const blob = await (await cache.match('/v1/browser/decider-0.8b/model.onnx.data'))!.blob();
+      const blob = await (await cache.match('/v1/browser/decider:0.8b/model.onnx.data'))!.blob();
       return { names, keys: keys.sort(), weights: blob.size };
     });
     expect(kept.names).toHaveLength(1);
     expect(kept.keys).toEqual([
-      '/v1/browser/decider-0.8b/model.onnx',
-      '/v1/browser/decider-0.8b/model.onnx.data',
-      '/v1/browser/decider-0.8b/tokenizer.json',
+      '/v1/browser/decider:0.8b/model.onnx',
+      '/v1/browser/decider:0.8b/model.onnx.data',
+      '/v1/browser/decider:0.8b/tokenizer.json',
     ]);
     expect(kept.weights).toBe(weights);
     console.log(
@@ -863,7 +863,7 @@ test('browser_pull', async ({ page }, testInfo) => {
   expect(uncached, 'xtask passes the server over an empty cache').toBeTruthy();
   const listed = (await (await page.request.get(`${uncached}/v1/models`)).json()) as { models: ModelInfo[] };
   const browserModels = listed.models.filter((m) => m.x_browser !== undefined);
-  expect(browserModels.map((m) => m.name).sort()).toEqual(['decider-0.8b', 'decider-2b', 'qwen3.5-0.8b']);
+  expect(browserModels.map((m) => m.name).sort()).toEqual(['decider:0.8b', 'decider:2b', 'qwen3.5:0.8b']);
   expect(browserModels.filter((m) => m.x_browser_pulled !== undefined)).toEqual([]);
   const size = browserModels.find((m) => m.name === MODEL)!.x_browser!;
 
@@ -890,13 +890,13 @@ test('browser_pull', async ({ page }, testInfo) => {
 
 // WCAG 2.4.11 while a run in the tab downloads: the banner stays under the top bar, as tall as its words, bar and Stop
 // make it at that width and text size, and whatever takes the focus, by Tab or Shift+Tab, lands below both. The page
-// holds a server run's answers (their fact terms take the focus) while decider-0.8b downloads, narrowed to 2 MB/s.
+// holds a server run's answers (their fact terms take the focus) while decider:0.8b downloads, narrowed to 2 MB/s.
 test('banner_focus', async ({ page }, testInfo) => {
   test.setTimeout(600_000);
   const ticket = fixture('ticket.json');
   const paths: string[] = [];
   page.on('request', (r) => paths.push(new URL(r.url()).pathname));
-  await page.goto(`/?autorun=1${shareHash({ ...ticket, model: 'decider-2b' })}`);
+  await page.goto(`/?autorun=1${shareHash({ ...ticket, model: 'decider:2b' })}`);
   await expect(page.getByTestId('answered-by')).toContainText('Answered by', { timeout: 120_000 });
   // A page that runs a server model has loaded neither the engine module nor onnxruntime-web (only `engine.js`, its
   // own glue); an "In browser" pick imports both.

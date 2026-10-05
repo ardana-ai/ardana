@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use tokenizers::Tokenizer;
 
 use crate::hub::{Hub, Snapshot};
-use crate::library::{BrowserEntry, Library, LibraryEntry, LibraryPick, MODELS_PAGE};
+use crate::library::{BrowserEntry, Library, LibraryPick, MODELS_PAGE};
 use crate::refs::{DEFAULT_QUANT, HfFile, Ref, RefError, companion_of, matches_quant};
 
 pub use ardana_core::LayoutKind;
@@ -71,6 +71,13 @@ pub enum RegistryError {
     UnknownModel {
         name: String,
         available: Vec<String>,
+    },
+    /// A library family without the tag asked for (Q11, Q12): its canonical tags, in document order.
+    #[error("{family} has no tag {tag:?}; its tags are {}", .tags.join(", "))]
+    UnknownTag {
+        family: String,
+        tag: String,
+        tags: Vec<String>,
     },
     #[error("{what}: {msg}")]
     Invalid { what: String, msg: String },
@@ -255,14 +262,15 @@ impl Registry {
             })
     }
 
-    /// What `name` means here: the entry of that name, else the model `library` holds under it (which may be pulled
-    /// under its canonical name, `decider-2b` for `decider-2b:Q4_K_M`), else an [`RegistryError::UnknownModel`]
-    /// listing the pulled names.
+    /// What `name` means here (Q25): the entry of that name, else the quant `library` names by it (which may be
+    /// pulled under its canonical name, `decider:2b` for `decider` or `decider:2b-q4_k_m`, Q10), else an
+    /// [`RegistryError::UnknownModel`] listing the pulled names; a tag the library's family lacks is its
+    /// [`RegistryError::UnknownTag`].
     pub fn named<'a>(&'a self, name: &str, library: &Library) -> Result<Named<'a>, RegistryError> {
         if let Some(model) = self.models.iter().find(|m| m.name == name) {
             return Ok(Named::Pulled(model));
         }
-        let Some(pick) = library.find(name) else {
+        let Some(pick) = library.find(name)? else {
             return Err(RegistryError::UnknownModel {
                 name: name.to_string(),
                 available: self.names(),
@@ -353,7 +361,7 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), Registry
 pub enum Named<'a> {
     /// A pulled entry.
     Pulled(&'a ResolvedModel),
-    /// A library model not pulled yet; [`pull_library`] it. Boxed: an entry outweighs a reference many times.
+    /// A library model not pulled yet; [`pull_library`] it. Boxed: a size outweighs a reference many times.
     Library(Box<LibraryPick>),
 }
 
@@ -380,26 +388,27 @@ pub async fn pull(
     runtimes: &Runtimes,
     library: &Library,
 ) -> Result<ResolvedModel, RegistryError> {
-    match library.find(reference) {
+    match library.find(reference)? {
         Some(pick) => pull_library(&pick, opts, runtimes).await,
         None => pull_ref(reference, opts, runtimes, Revisions::default()).await,
     }
 }
 
-/// Pulls the library model `pick` names: the reference it stands for, under its [`LibraryPick::name`], with the
-/// library's tokenizer, layout and release date where `opts` and the weights give none. The weights are read at the
-/// entry's `commit` and the library's tokenizer at its `tokenizer_commit`, never at `main` (Q4); a `--tokenizer` of
+/// Pulls the library quant `pick`: its file, `hf.co/<org>/<repo>:<file>` (Q14), under its canonical
+/// [`LibraryPick::name`], with the size's tokenizer, layout and release date where `opts` and the weights give none.
+/// The weights are read at `gguf.commit` and the size's tokenizer at its commit, never at `main`; a `--tokenizer` of
 /// `opts` is read as the reference it is.
 pub async fn pull_library(
     pick: &LibraryPick,
     opts: &PullOptions,
     runtimes: &Runtimes,
 ) -> Result<ResolvedModel, RegistryError> {
+    let tokenizer = pick.size.tokenizer.as_ref();
     let revisions = Revisions {
-        weights: Some(&pick.model.commit),
+        weights: Some(&pick.size.gguf.commit),
         tokenizer: match opts.tokenizer {
             Some(_) => None,
-            None => pick.model.tokenizer_commit.as_deref(),
+            None => tokenizer.map(|pin| pin.commit.as_str()),
         },
     };
     let opts = PullOptions {
@@ -407,19 +416,19 @@ pub async fn pull_library(
         tokenizer: opts
             .tokenizer
             .clone()
-            .or_else(|| pick.model.tokenizer.clone()),
-        layout: opts.layout.or(pick.model.layout),
+            .or_else(|| tokenizer.map(|pin| pin.repo.clone())),
+        layout: opts.layout.or(pick.size.layout),
         progress: opts.progress,
     };
     let mut model = pull_ref(&pick.reference(), &opts, runtimes, revisions).await?;
     model
         .profile
         .release_date
-        .get_or_insert_with(|| pick.model.release_date.clone());
+        .get_or_insert_with(|| pick.size.release_date.clone());
     Ok(model)
 }
 
-/// The commits a pull reads its Hugging Face repositories at: a library model's pins; `None` reads `main`, as an
+/// The commits a pull reads its Hugging Face repositories at: a library size's pins; `None` reads `main`, as an
 /// `hf.co/` reference does.
 #[derive(Debug, Clone, Copy, Default)]
 struct Revisions<'a> {
@@ -535,11 +544,11 @@ fn default_layout(config: Option<&Path>) -> LayoutKind {
     }
 }
 
-/// A library model's browser variant in the hub cache: the files a tab downloads ([`BROWSER_FILES`]) and the profile it
+/// A library size's browser variant in the hub cache: the files a tab downloads ([`BROWSER_FILES`]) and the profile it
 /// reads them with.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BrowserModel {
-    /// The library name.
+    /// The size's canonical name.
     pub name: String,
     /// `hf.co/<org>/<repo>`, the ONNX repository.
     pub reference: String,
@@ -559,14 +568,14 @@ impl BrowserModel {
     }
 }
 
-/// Resolves the browser variant of the library model `model` in the hub cache, cache first: a variant the cache holds
+/// Resolves the browser variant of the library size `model` in the hub cache, cache first: a variant the cache holds
 /// completely is read in place without a Hub call (as `HF_HUB_OFFLINE` reads a repository), so it is pulled once;
-/// otherwise its repository is pulled, unless `HF_HUB_OFFLINE` is set. Either way the files are those of the entry's
-/// `browser.commit`, never of `main` (Q4). The profile is derived as [`pull`] derives the library model's own:
-/// `decider_config.json` beside the files, else the stock profile named after the model in the library's layout, dated
-/// by the library's release date.
+/// otherwise its repository is pulled, unless `HF_HUB_OFFLINE` is set. Either way the files are those of the size's
+/// `browser.commit`, never of `main`. The profile is derived as [`pull`] derives the size's own: `decider_config.json`
+/// beside the files, else the stock profile named after the canonical name in the size's layout (Q17), dated by the
+/// size's release date.
 pub async fn pull_browser(
-    model: &LibraryEntry,
+    model: &LibraryPick,
     progress: bool,
 ) -> Result<BrowserModel, RegistryError> {
     let browser = browser_of(model)?;
@@ -574,12 +583,13 @@ pub async fn pull_browser(
 }
 
 /// The browser variant of `model`; an error when it has none.
-fn browser_of(model: &LibraryEntry) -> Result<&BrowserEntry, RegistryError> {
+fn browser_of(model: &LibraryPick) -> Result<&BrowserEntry, RegistryError> {
     model
+        .size
         .browser
         .as_ref()
         .ok_or_else(|| RegistryError::Invalid {
-            what: format!("the model {:?}", model.name),
+            what: format!("the model {:?}", model.name()),
             msg: "the library model has no browser variant".into(),
         })
 }
@@ -588,7 +598,7 @@ fn browser_of(model: &LibraryEntry) -> Result<&BrowserEntry, RegistryError> {
 /// all of it, else (whatever the cache lacks or holds unreadable) the repository from the Hub, unless `hub` is offline.
 async fn browser_variant(
     hub: &Hub,
-    model: &LibraryEntry,
+    model: &LibraryPick,
     browser: &BrowserEntry,
 ) -> Result<BrowserModel, RegistryError> {
     match browser_files(&hub.cache_only(), model, browser).await {
@@ -599,26 +609,28 @@ async fn browser_variant(
 
 async fn browser_files(
     hub: &Hub,
-    model: &LibraryEntry,
+    model: &LibraryPick,
     browser: &BrowserEntry,
 ) -> Result<BrowserModel, RegistryError> {
     let located = browser_paths(hub, model, browser).await?;
     let tokenizer = load_tokenizer(&located.tokenizer)?;
     let layout = model
+        .size
         .layout
         .unwrap_or_else(|| default_layout(located.config.as_deref()));
+    let name = model.name();
     let mut profile = read_profile(
         &located.tokenizer,
         &tokenizer,
         located.config.as_deref(),
         layout,
-        &model.name,
+        &name,
     )?;
     profile
         .release_date
-        .get_or_insert_with(|| model.release_date.clone());
+        .get_or_insert_with(|| model.size.release_date.clone());
     Ok(BrowserModel {
-        name: model.name.clone(),
+        name,
         reference: located.snapshot.id(),
         commit: located.snapshot.commit().to_string(),
         files: located.files,
@@ -640,17 +652,17 @@ struct BrowserPaths {
 /// downloads what the cache lacks unless it is offline.
 async fn browser_paths(
     hub: &Hub,
-    model: &LibraryEntry,
+    model: &LibraryPick,
     browser: &BrowserEntry,
 ) -> Result<BrowserPaths, RegistryError> {
     let Ref::Hf {
         org,
         repo,
         file: None,
-    } = Ref::parse(&browser.weights)?
+    } = Ref::parse(&browser.repo)?
     else {
         return Err(RegistryError::Invalid {
-            what: browser.weights.clone(),
+            what: browser.repo.clone(),
             msg: format!(
                 "a browser variant is a whole repository, {}<org>/<repo>",
                 refs::HF_PREFIX
@@ -659,14 +671,15 @@ async fn browser_paths(
     };
     let snapshot = hub.snapshot(&org, &repo, Some(&browser.commit)).await?;
     let tokenizer = hf_tokenizer(hub, &snapshot).await?;
-    // A model whose library entry names no layout reads its profile from `decider_config.json`. A cached snapshot
-    // lists only the files the cache holds, so there the config is required: a cache without it holds part of the
-    // variant, which would read as the stock profile in the chat layout.
-    let config = if snapshot.has(DECIDER_CONFIG) || (hub.is_offline() && model.layout.is_none()) {
-        Some(hub.file(&snapshot, DECIDER_CONFIG).await?)
-    } else {
-        None
-    };
+    // A size whose family names no layout reads its profile from `decider_config.json`. A cached snapshot lists only
+    // the files the cache holds, so there the config is required: a cache without it holds part of the variant, which
+    // would read as the stock profile in the chat layout.
+    let config =
+        if snapshot.has(DECIDER_CONFIG) || (hub.is_offline() && model.size.layout.is_none()) {
+            Some(hub.file(&snapshot, DECIDER_CONFIG).await?)
+        } else {
+            None
+        };
     let mut files = Vec::with_capacity(BROWSER_FILES.len());
     for file in BROWSER_FILES {
         files.push(if file == TOKENIZER_FILE {
@@ -705,18 +718,18 @@ impl BrowserCache {
         Ok(BrowserCache(Hub::new(client, true, false)))
     }
 
-    /// The browser variant of the library model `model` as the cache holds it, read as [`pull_browser`] reads it from
-    /// there: its commit and the profile; an error when the cache does not hold every file of it at the entry's commit.
-    pub async fn variant(&self, model: &LibraryEntry) -> Result<BrowserModel, RegistryError> {
+    /// The browser variant of the library size `model` as the cache holds it, read as [`pull_browser`] reads it from
+    /// there: its commit and the profile; an error when the cache does not hold every file of it at the size's commit.
+    pub async fn variant(&self, model: &LibraryPick) -> Result<BrowserModel, RegistryError> {
         let browser = browser_of(model)?;
         browser_files(&self.0, model, browser).await
     }
 
-    /// Whether the cache holds the browser variant of the library model `model` whole at the entry's commit: every file
+    /// Whether the cache holds the browser variant of the library size `model` whole at the size's commit: every file
     /// [`pull_browser`] reads, so a pull reads it in place, without the Hub. The files are found, not read: one that
     /// does not read sends a pull to the Hub all the same.
-    pub async fn holds(&self, model: &LibraryEntry) -> bool {
-        let Some(browser) = &model.browser else {
+    pub async fn holds(&self, model: &LibraryPick) -> bool {
+        let Some(browser) = &model.size.browser else {
             return false;
         };
         browser_paths(&self.0, model, browser).await.is_ok()
@@ -991,8 +1004,8 @@ mod tests {
         dir.join("snapshots").join(commit.trim()).join(name)
     }
 
-    /// A hub cache in `$ARDANA_TMP/<test>` holding decider-2b's browser repository at `commit` with `files`: its text
-    /// files as the repository has them (decider-2b's tokenizer and config, Qwen3.5's chat template), its graph and
+    /// A hub cache in `$ARDANA_TMP/<test>` holding decider:2b's browser repository at `commit` with `files`: its text
+    /// files as the repository has them (decider:2b's tokenizer and config, Qwen3.5's chat template), its graph and
     /// weights empty; and a client of that cache whose every Hub call goes to a closed port, not retried, so a lookup
     /// that leaves the cache fails. Returns the client and the snapshot directory.
     fn browser_cache(test: &str, commit: &str, files: &[&str]) -> (hf_hub::HFClient, PathBuf) {
@@ -1038,16 +1051,17 @@ mod tests {
             .block_on(future)
     }
 
-    /// A browser variant is taken from the cache only when the cache holds all of it: decider-2b's entry names no
-    /// layout, so its profile comes from `decider_config.json`, and a cache without that file (or with a file it cannot
-    /// read) sends the lookup to the Hub, or, offline, fails, rather than serve the stock profile.
+    /// A browser variant is taken from the cache only when the cache holds all of it: the decider family names no
+    /// layout, so the profile of `decider:2b` comes from `decider_config.json`, and a cache without that file (or with a
+    /// file it cannot read) sends the lookup to the Hub, or, offline, fails, rather than serve the stock profile.
     #[test]
     fn cached_browser_variants_are_complete() {
         let library = snapshot();
-        let (model, browser) = library.browser("decider-2b").unwrap();
-        let reference = browser.weights.as_str();
+        let model = &library.browser("decider:2b").unwrap();
+        let browser = model.size.browser.as_ref().unwrap();
+        let reference = browser.repo.as_str();
         assert_eq!(reference, "hf.co/ardana-ai/decider-2b-ONNX");
-        assert_eq!(model.layout, None);
+        assert_eq!(model.size.layout, None);
         let commit = browser.commit.as_str();
         let lookup = |client: &hf_hub::HFClient, offline: bool| {
             block_on(browser_variant(
@@ -1077,7 +1091,7 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(snapshot.join(DECIDER_CONFIG)).unwrap())
                 .unwrap();
         let mut profile = from_decider_config(&config, Layout::Plain).unwrap();
-        profile.release_date = Some(model.release_date.clone());
+        profile.release_date = Some(model.size.release_date.clone());
         assert_eq!(variant.profile, profile);
         assert_eq!(
             (variant.commit.as_str(), variant.reference.as_str()),
@@ -1119,7 +1133,7 @@ mod tests {
         assert!(!held(&client));
     }
 
-    /// Q11: the unknown-model error lists the pulled names and points to the library's page, naming no library model.
+    /// Q12: the unknown-model error lists the pulled names and points to the library's page, naming no library model.
     #[test]
     fn unknown_model_lists_pulled_names_and_the_library_page() {
         let err = RegistryError::UnknownModel {
@@ -1140,40 +1154,46 @@ mod tests {
         );
     }
 
-    /// A pulled entry answers under its exact name whatever the library holds; another spelling of a library model
-    /// goes through the library, and a name neither holds is unknown.
+    /// A pulled entry answers under its exact name whatever the library holds (Q25); another spelling of a library
+    /// size goes through the library to its canonical name (Q10), and a name neither holds is unknown.
     #[test]
     fn names_are_pulled_entries_first() {
         let library = snapshot();
         let mut registry = Registry::open(Path::new("/nonexistent/home")).unwrap();
         assert!(matches!(
-            registry.named("decider-2b", &library),
-            Ok(Named::Library(pick)) if pick.name() == "decider-2b"
+            registry.named("decider", &library),
+            Ok(Named::Library(pick)) if pick.name() == "decider:2b"
         ));
         assert!(matches!(
-            registry.named("decider-2b", &Library::empty()),
+            registry.named("decider:2b", &Library::empty()),
             Err(RegistryError::UnknownModel { .. })
         ));
         registry.insert(ResolvedModel {
-            name: "decider-2b".into(),
-            source: "hf.co/Mapika/decider-2b-GGUF:Q4_K_M".into(),
+            name: "decider:2b".into(),
+            source: "hf.co/Mapika/decider-2b-GGUF:decider-2b-v11-Q4_K_M.gguf".into(),
             weights: "/w.gguf".into(),
             tokenizer: "/t/tokenizer.json".into(),
             runtime: "llama.cpp".into(),
-            profile: ModelProfile::stock("decider-2b", Layout::Plain),
+            profile: ModelProfile::stock("decider-2b-v11", Layout::Plain),
             pulled_at: "2026-09-28".into(),
         });
         assert!(matches!(
-            registry.named("decider-2b", &Library::empty()),
-            Ok(Named::Pulled(model)) if model.name == "decider-2b"
+            registry.named("decider:2b", &Library::empty()),
+            Ok(Named::Pulled(model)) if model.name == "decider:2b"
+        ));
+        for spelling in ["decider", "Decider:LATEST", "Decider:2B-Q4_K_M"] {
+            assert!(matches!(
+                registry.named(spelling, &library),
+                Ok(Named::Pulled(model)) if model.name == "decider:2b"
+            ));
+        }
+        assert!(matches!(
+            registry.named("decider:2b-Q8_0", &library),
+            Ok(Named::Library(pick)) if pick.name() == "decider:2b-q8_0"
         ));
         assert!(matches!(
-            registry.named("Decider-2B:Q4_K_M", &library),
-            Ok(Named::Pulled(model)) if model.name == "decider-2b"
-        ));
-        assert!(matches!(
-            registry.named("decider-2b:q8_0", &library),
-            Ok(Named::Library(pick)) if pick.name() == "decider-2b:q8_0"
+            registry.named("decider:9b", &library),
+            Err(RegistryError::UnknownTag { family, .. }) if family == "decider"
         ));
     }
 }

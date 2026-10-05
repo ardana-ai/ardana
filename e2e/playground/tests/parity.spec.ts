@@ -1,6 +1,6 @@
 // W7 cases, Jev playground parity: the builder, state modes, the docs share links, the share round trip, the presets
 // and the snippets (with W3's ardana commands for a model this server does not run), against the release `ardana`
-// serving decider-2b (see playwright.config.ts).
+// serving decider:2b (see playwright.config.ts).
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import {
   channel,
   editorTexts,
   expectFiguresMatch,
+  expectSendsNothing,
   loadPreset,
   pickInBrowser,
   pickModel,
@@ -31,7 +32,7 @@ import {
 
 const questionsJson = async (page: Page) => JSON.parse(await questionsBox(page).inputValue()) as Record<string, Json>;
 
-/** The model `ardana serve` has pulled: decider-2b. */
+/** The model `ardana serve` has pulled: decider:2b. */
 /** The server's default model, which the picker starts on. */
 async function servedModel(page: Page): Promise<string> {
   const list = (await (await page.request.get('/v1/models')).json()) as { models: { name: string; x_default?: boolean }[] };
@@ -282,22 +283,25 @@ test.describe('jev_share_links', () => {
       expect(payload.apiVersion).toBe('v1');
       const ids = Object.keys(JSON.parse(payload.promptsText));
 
+      const requests: string[] = [];
+      page.on('request', (r) => requests.push(r.url()));
       await page.goto(`/#share/${encoded}`);
       await expect(stateBox(page)).toHaveValue(payload.documentText);
       await expect(questionsBox(page)).toHaveValue(payload.promptsText);
       await expect(page.getByTestId('share-error')).toHaveCount(0);
       await expect(page.getByTestId('channel')).toHaveCount(ids.length);
-      // A link without a model, or with a `jev-*` alias, opens on the server's default model.
+      // A link without a model, or with a `jev-*` alias, opens on the server's default model; one naming a model no
+      // row carries (`speed_latest`) opens on that name as written.
       const served = await servedModel(page);
       const linked = payload.selectedModels?.[0];
       const model = linked === undefined || linked.startsWith('jev-') ? served : linked;
       await expect(picker(page)).toHaveValue(model);
 
       if (model !== served) {
-        // A model this server does not have is refused with the names it has (Q7); then run on decider-2b.
-        const refused = await run(page);
-        expect(refused.status()).toBe(404);
-        await expect(page.getByTestId('fault-message')).toContainText(`no model named "${model}"`);
+        // A name no row carries is no row (Q20): the ardana CLI's commands under that name, and Run sends nothing;
+        // then run on the default model.
+        await expect(page.getByTestId('pull')).toHaveText(`ardana pull ${model}`);
+        await expectSendsNothing(page, requests);
         await pickModel(page, served);
       }
       const response = await run(page);
@@ -512,23 +516,23 @@ test('snippets', async ({ page, baseURL }, testInfo) => {
   await language('curl').check();
   const edited = JSON.parse((await snippet.textContent())!.split("<<'JSON'\n")[1].split('\nJSON\n')[0]) as Request;
   expect(edited.state).toBe('I was charged twice for order B-7.');
-  expect(edited.model).toBe('decider-2b');
+  expect(edited.model).toBe('decider:2b');
   await language('TypeScript').check();
   await expect(snippet).toContainText('state: "I was charged twice for order B-7."');
 
   // R3.4, as amended: with a browser row picked, the snippets are the ardana CLI's commands for the same request, and
-  // on this local server, which ardana runs already, without ardana.ai's install line: `ardana pull decider-0.8b`
+  // on this local server, which ardana runs already, without ardana.ai's install line: `ardana pull decider:0.8b`
   // first, since the server has not pulled it, then `ardana run`. Run as shown with the binary under test in a home of
-  // its own, offline, the pull takes decider-0.8b's GGUF from tmp/hf and the run answers every question.
-  await pickInBrowser(page, 'decider-0.8b');
+  // its own, offline, the pull takes decider:0.8b's GGUF from tmp/hf and the run answers every question.
+  await pickInBrowser(page, 'decider:0.8b');
   await expect(language('curl')).toHaveCount(0);
   await expect(page.getByTestId('install')).toHaveCount(0);
   const pull = (await page.getByTestId('pull').textContent())!;
-  expect(pull).toBe('ardana pull decider-0.8b');
+  expect(pull).toBe('ardana pull decider:0.8b');
   const command = await ardanaCommand(page);
-  expect(command.line).toBe(`ardana run decider-0.8b --request - <<'JSON'`);
+  expect(command.line).toBe(`ardana run decider:0.8b --request - <<'JSON'`);
   const request = JSON.parse(command.body) as Request;
-  expect(request).toEqual({ ...edited, model: 'decider-0.8b' });
+  expect(request).toEqual({ ...edited, model: 'decider:0.8b' });
   fs.writeFileSync(path.join(dir, 'pull.sh'), `${pull}\n`);
   fs.writeFileSync(path.join(dir, 'ardana.sh'), command.text);
   const shell = (script: string) =>
@@ -549,11 +553,11 @@ test('snippets', async ({ page, baseURL }, testInfo) => {
     expect(cli, 'ardana run titles each answer with its question').toContain(spec.instructions);
   }
   expect(cli.match(/^ {2}\* /gm), `one answer marked per choice question:\n${cli}`).toHaveLength(1);
-  console.log(`snippets ${testInfo.project.name}: ardana run decider-0.8b answered\n${cli}`);
+  console.log(`snippets ${testInfo.project.name}: ardana run decider:0.8b answered\n${cli}`);
   await screenshot(page, testInfo, 'snippets', 'cli');
 
   // A pulled model keeps curl, Python and TypeScript at the page origin.
-  await pickModel(page, 'decider-2b');
+  await pickModel(page, 'decider:2b');
   await expect(language('TypeScript')).toBeChecked();
   await expect(snippet).toContainText(`baseURL: "${origin}"`);
   await language('curl').check();

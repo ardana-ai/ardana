@@ -17,7 +17,7 @@ const QWEN35_PULL: [&str; 6] = [
     "--tokenizer",
     "hf.co/Qwen/Qwen3.5-0.8B",
     "--name",
-    "qwen3.5-0.8b",
+    "qwen3.5:0.8b",
 ];
 const SMOLLM3_PULL: [&str; 6] = [
     "pull",
@@ -25,7 +25,7 @@ const SMOLLM3_PULL: [&str; 6] = [
     "--tokenizer",
     "hf.co/HuggingFaceTB/SmolLM3-3B",
     "--name",
-    "smollm3-3b",
+    "smollm3:3b",
 ];
 const LLAMA32_PULL: [&str; 4] = [
     "pull",
@@ -174,7 +174,7 @@ fn pull_decider() -> Result<()> {
 fn pull_stock() -> Result<()> {
     let ardana = Ardana::new("e2e-registry-pull-stock")?;
     ardana.ok(QWEN35_PULL)?;
-    let qwen = ardana.entry("qwen3.5-0.8b")?;
+    let qwen = ardana.entry("qwen3.5:0.8b")?;
     assert_eq!(
         path_of(&qwen, "weights")?,
         common::hf_file("ggml-org/Qwen3.5-0.8B-GGUF", "Qwen3.5-0.8B-Q4_0.gguf")?
@@ -183,13 +183,13 @@ fn pull_stock() -> Result<()> {
         path_of(&qwen, "tokenizer")?,
         common::hf_file("Qwen/Qwen3.5-0.8B", "tokenizer.json")?
     );
-    check_stock_chat(&qwen, "qwen3.5-0.8b")?;
+    check_stock_chat(&qwen, "qwen3.5:0.8b")?;
     // R3.1's head, from the chat template next to the tokenizer.
     let head = profile(&qwen)?["layout"]["head"].clone();
     assert_eq!(head, Value::try_from(vec![248_045, 846, 198])?);
 
     ardana.ok(SMOLLM3_PULL)?;
-    let smollm = ardana.entry("smollm3-3b")?;
+    let smollm = ardana.entry("smollm3:3b")?;
     assert_eq!(
         path_of(&smollm, "weights")?,
         common::hf_file("ggml-org/SmolLM3-3B-GGUF", "SmolLM3-Q4_K_M.gguf")?
@@ -198,7 +198,7 @@ fn pull_stock() -> Result<()> {
         path_of(&smollm, "tokenizer")?,
         common::hf_file("HuggingFaceTB/SmolLM3-3B", "tokenizer.json")?
     );
-    check_stock_chat(&smollm, "smollm3-3b")?;
+    check_stock_chat(&smollm, "smollm3:3b")?;
     Ok(())
 }
 
@@ -273,7 +273,7 @@ fn run_by_name() -> Result<()> {
     assert_eq!(metal, cpu, "the CPU run has the same argmaxes");
 
     let sentiment = common::request("sentiment.json");
-    for name in ["qwen3.5-0.8b", "smollm3-3b", "llama3.2"] {
+    for name in ["qwen3.5:0.8b", "smollm3:3b", "llama3.2"] {
         let resp = ardana.run_named(name, &sentiment, &[])?;
         assert_eq!(resp["model"], name, "a stock model reports its entry name");
         common::check_sentiment(&resp).with_context(|| format!("{name}: {resp}"))?;

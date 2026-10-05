@@ -111,7 +111,7 @@ llama.cpp.
 
 ### Numerics against decider
 - Given the same slot logits, Ardana's readout equals decider 1.6.0's (`engine_gguf.py` float32 softmax plus
-  `systemone.assemble`) answer for answer, and its prompt ids equal decider's; checked on decider-2b Q4_K_M with
+  `systemone.assemble`) answer for answer, and its prompt ids equal decider's; checked on decider:2b Q4_K_M with
   decider's own code in a sandbox venv, on Metal and at `--gpu-layers 0`.
 - The logits themselves depend on the llama.cpp build. decider's `llama-cpp-python` 0.3.35 bundles ggml 0.20 with
   Accelerate BLAS; `llama-cpp-2` 0.1.157 bundles `26394b4` (ggml 0.24) without BLAS. On the ticket fixture the two
@@ -120,9 +120,9 @@ llama.cpp.
 
 ## Testing
 - Unit tests in `ardana-core` use fake `LoadedModel`s; tests that load a GGUF are `#[ignore]` and run through
-  `cargo xtask e2e rust` against the official models in `tmp/hf` (decider-2b Q4_K_M, Qwen3.5-0.8B Q4_0,
+  `cargo xtask e2e rust` against the official models in `tmp/hf` (decider:2b Q4_K_M, Qwen3.5-0.8B Q4_0,
   SmolLM3-3B Q4_K_M, Gemma 4 E2B Q4_0) or the local Ollama `llama3.2` blob, never an invented fixture.
-- Run the decider-2b ticket check at default offload and at `--gpu-layers 0` and compare argmaxes (R2.7).
+- Run the decider:2b ticket check at default offload and at `--gpu-layers 0` and compare argmaxes (R2.7).
 
 ## Sources
 - https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/index.html — crate overview, modules, logging redirection

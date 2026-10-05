@@ -7,8 +7,8 @@
 //! published document is listed and pulled without a restart, and the first requests wait for the first read. A
 //! request naming a library model that is not pulled yet (the library default, for `jev-*` and no model, while the
 //! registry is empty) pulls it first; requests for the same model share one pull, which finishes even when its
-//! requester goes away. A name the index lacks is asked of the library once, by its manifest; a 404 is remembered
-//! until the next refresh (Q10).
+//! requester goes away. A name the index does not resolve (a family it lacks, or a tag its family lacks) is asked of
+//! the library by its family's manifest, once until the next refresh (Q16).
 //!
 //! A library model's browser variant is pulled the same way, into the hub cache only, by the first request for its
 //! files ([`Models::browser`]).
@@ -23,7 +23,7 @@
 //! and decoding requests over all models, until the worker is done with them, and refuses a request that would exceed
 //! `max_queued_rows`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::Future;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
@@ -96,12 +96,12 @@ pub struct Models {
     /// Whether the library was read from its source since the server started (`true` at once but for a URL source,
     /// whose first GET [`Models::refresh_library`] sends): the first requests wait for it.
     read: watch::Sender<bool>,
-    /// The names a URL source's index lacked and whose manifest answered 404, lowercased, asked no more until the
-    /// next refresh (Q10).
-    missing: Mutex<HashSet<String>>,
+    /// The manifests a URL source answered for the names its index did not resolve, by family lowercased (no model for
+    /// a 404), asked no more until the next refresh (Q16).
+    manifests: Mutex<HashMap<String, Library>>,
     runtimes: Arc<Runtimes>,
     opts: ModelOptions,
-    /// `--default-model` as the registry names it (`decider-2b` for `decider-2b:Q4_K_M`).
+    /// `--default-model` as the registry names it (`decider:2b` for `decider`).
     default: Option<String>,
     /// Per model, the reader built from its registry entry.
     deciders: Mutex<HashMap<String, (ResolvedModel, Arc<Decider>)>>,
@@ -147,13 +147,14 @@ impl Models {
             return Err(ModelsError::Zero("the queued-row limit"));
         }
         let library = client.index().map_err(ModelsError::Library)?;
-        // A library name the index at hand lacks is a URL source's to answer: the first request asks for its manifest
-        // (Q10), as it does for any name, so a fresh home serves `--default-model` before its first index GET.
+        // A library name the index at hand does not resolve is a URL source's to answer: the first request asks for
+        // its family's manifest (Q16), as it does for any name, so a fresh home serves `--default-model` before its
+        // first index GET.
         let default = match &opts.default_model {
             Some(name) => Some(match registry.named(name, &library) {
                 Ok(Named::Pulled(model)) => model.name.clone(),
                 Ok(Named::Library(pick)) => pick.name(),
-                Err(RegistryError::UnknownModel { .. })
+                Err(RegistryError::UnknownModel { .. } | RegistryError::UnknownTag { .. })
                     if matches!(client.source(), LibrarySource::Url(_))
                         && library_name(name).is_some() =>
                 {
@@ -177,7 +178,7 @@ impl Models {
             client,
             library: Mutex::new(Arc::new(library)),
             read: watch::Sender::new(!fetches),
-            missing: Mutex::new(HashSet::new()),
+            manifests: Mutex::new(HashMap::new()),
             runtimes: Arc::new(runtimes),
             opts,
             default,
@@ -221,7 +222,7 @@ impl Models {
 
     /// Reads the library from its source again ([`LibraryClient::refresh`]) and serves what it read; when the read
     /// fails, logs why (naming the URL) and keeps serving the library at hand. A read, changed or not, lets the names
-    /// its index lacked be asked for again (Q10); either way the first requests stop waiting.
+    /// its index did not resolve be asked for again (Q16); either way the first requests stop waiting.
     pub async fn refresh_library(&self) {
         match self.client.refresh().await {
             Ok(Some(library)) => {
@@ -231,12 +232,12 @@ impl Models {
                     eprintln!(
                         "ardana serve: the library at {} lists {} models",
                         self.client.source(),
-                        now.models.len()
+                        now.sizes().len()
                     );
                 }
-                lock(&self.missing).clear();
+                lock(&self.manifests).clear();
             }
-            Ok(None) => lock(&self.missing).clear(),
+            Ok(None) => lock(&self.manifests).clear(),
             Err(err) => {
                 let kept = if self.current_library().models.is_empty() {
                     "the pulled models alone"
@@ -262,13 +263,22 @@ impl Models {
         }
     }
 
-    /// The model `jev-*` names and requests without a model mean: `--default-model`, else the first registry entry,
+    /// The model `jev-*` names and requests without a model mean: `--default-model` under the name it means now (a
+    /// spelling the library did not resolve at start is canonical once it does, Q10), else the first registry entry,
     /// else the library default (the default-model constant while no document is at hand).
     fn default_name(&self, registry: &Registry, library: &Library) -> String {
-        self.default
-            .clone()
-            .or_else(|| registry.names().into_iter().next())
-            .unwrap_or_else(|| library.default.clone())
+        match &self.default {
+            Some(name) => match registry.named(name, library) {
+                Ok(Named::Pulled(model)) => model.name.clone(),
+                Ok(Named::Library(pick)) => pick.name(),
+                Err(_) => name.clone(),
+            },
+            None => registry
+                .names()
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| library.default.clone()),
+        }
     }
 
     /// The model a request without a model uses now, over the registry and the library as last read.
@@ -278,8 +288,9 @@ impl Models {
     }
 
     /// The registry entry a request's `model` means, pulling a library model that is not pulled yet: `jev-*` and no
-    /// model are the default model (Q7); a name that is neither pulled nor in the library is asked of a URL source
-    /// once by its manifest (Q10), and a name no one knows is a 404 listing the pulled names.
+    /// model are the default model (Q7); a name that is neither pulled nor resolved by the library's index (a family
+    /// it lacks, or a tag its family lacks) is asked of a URL source by its family's manifest (Q16), a name no one
+    /// knows is a 404 listing the pulled names, and a tag the family lacks a 404 listing its tags (Q12).
     pub async fn resolve(&self, requested: Option<&str>) -> Result<ResolvedModel, ApiError> {
         let registry = self.registry()?;
         let library = self.library().await;
@@ -288,10 +299,12 @@ impl Models {
             _ => self.default_name(&registry, &library),
         };
         let named = match registry.named(&name, &library) {
-            Err(RegistryError::UnknownModel { .. }) => match self.manifest(&name).await {
-                Some(manifest) => registry.named(&name, &manifest),
-                None => registry.named(&name, &library),
-            },
+            Err(RegistryError::UnknownModel { .. } | RegistryError::UnknownTag { .. }) => {
+                match self.manifest(&name).await {
+                    Some(manifest) => registry.named(&name, &manifest),
+                    None => registry.named(&name, &library),
+                }
+            }
             named => named,
         };
         let name = match named {
@@ -308,23 +321,21 @@ impl Models {
             .map_err(|err| ApiError::Internal(err.to_string()))
     }
 
-    /// Q10: the library's manifest for `name`, a library name its index lacks, fetched from a URL source
-    /// ([`LibraryClient::lookup`]: the cached copy when the GET fails) unless its last manifest GET since the index
-    /// was refreshed answered 404, which is remembered. `None` where nothing was asked, or the GET failed with no
-    /// cached copy, which is logged.
+    /// Q16: the manifest of the family of `name`, a library name its index does not resolve, fetched from a URL
+    /// source ([`LibraryClient::lookup`]: the cached copy when the GET fails) unless it was answered since the index
+    /// was refreshed, which is remembered, a 404 as no model. `None` where nothing was asked, or the GET failed with
+    /// no cached copy, which is logged.
     async fn manifest(&self, name: &str) -> Option<Library> {
         let LibrarySource::Url(_) = self.client.source() else {
             return None;
         };
-        let key = library_name(name)?.to_ascii_lowercase();
-        if lock(&self.missing).contains(&key) {
-            return None;
+        let family = library_name(name)?.to_ascii_lowercase();
+        if let Some(manifest) = lock(&self.manifests).get(&family) {
+            return Some(manifest.clone());
         }
         match self.client.lookup(name).await {
             Ok(manifest) => {
-                if manifest.models.is_empty() {
-                    lock(&self.missing).insert(key);
-                }
+                lock(&self.manifests).insert(family, manifest.clone());
                 Some(manifest)
             }
             Err(err) => {
@@ -350,14 +361,13 @@ impl Models {
             .await
     }
 
-    /// The browser variant of the library model `name` (one whose entry has a `browser` table), pulled into the hub
-    /// cache by the first request for it; requests for the same model share that pull.
+    /// The browser variant of the library size `name`, its canonical name (one whose size has a `browser` table),
+    /// pulled into the hub cache by the first request for it; requests for the same model share that pull.
     pub async fn browser(&self, name: &str) -> Result<Arc<BrowserModel>, ApiError> {
         let library = self.library().await;
-        let Some((model, _)) = library.browser(name) else {
+        let Some(model) = library.browser(name) else {
             return Err(ApiError::NotFound);
         };
-        let model = model.clone();
         let what = format!("the browser variant of {name}");
         self.browsers
             .get(name, &what, || browser::pull(model))
@@ -370,9 +380,10 @@ impl Models {
     }
 
     /// `GET /v1/models`: every registry entry, described by its source reference and dated by its profile's release
-    /// date, else the day it was pulled, then every library model not pulled yet, described by the reference it
-    /// pulls, with its download size. `x_pulled` tells them apart and `x_default` marks the default model; `x_browser`
-    /// gives the download size of the browser variant of a library model that has one, pulled or not,
+    /// date, else the day it was pulled, then every library size not pulled yet under its canonical name, described by
+    /// the reference it pulls, with its default quant's download size. `x_pulled` tells them apart and `x_default`
+    /// marks the default model; `x_browser` gives the download size of the browser variant of a size that has one,
+    /// pulled or not,
     /// `x_browser_pulled` marks a browser variant the hub cache holds whole (a tab's request for its files pulls
     /// nothing), and `x_browser_default` marks the library's browser default.
     pub async fn list(&self) -> Result<ModelsResponse, ApiError> {
@@ -395,18 +406,17 @@ impl Models {
             x_browser_default: library.is_browser_default(&m.name),
         });
         let pullable = library
-            .models
-            .iter()
-            .filter(|m| registry.entry(&m.name).is_err())
-            .filter_map(|m| library.find(&m.name))
+            .sizes()
+            .into_iter()
+            .filter(|pick| registry.entry(&pick.name()).is_err())
             .map(|pick| {
                 let name = pick.name();
                 ModelInfo {
                     description: pick.reference(),
-                    release_date: pick.model.release_date.clone(),
+                    release_date: pick.size.release_date.clone(),
                     x_pulled: Some(false),
                     x_default: name == default,
-                    x_size: pick.size(),
+                    x_size: Some(pick.quant.bytes),
                     x_browser: library.browser_size(&name),
                     x_browser_pulled: false,
                     x_browser_default: library.is_browser_default(&name),
@@ -416,8 +426,8 @@ impl Models {
         let mut models: Vec<ModelInfo> = pulled.chain(pullable).collect();
         if let Some(cache) = &self.browser_cache {
             for model in models.iter_mut() {
-                if let Some((entry, _)) = library.browser(&model.name) {
-                    model.x_browser_pulled = cache.holds(entry).await;
+                if let Some(pick) = library.browser(&model.name) {
+                    model.x_browser_pulled = cache.holds(&pick).await;
                 }
             }
         }
@@ -764,11 +774,11 @@ async fn pull_into(
     {
         return Ok(());
     }
-    let size = pick
-        .size()
-        .map(|bytes| format!(", {}", ardana_api::human_size(bytes)))
-        .unwrap_or_default();
-    eprintln!("ardana serve: pulling {name} ({}{size})", pick.reference());
+    eprintln!(
+        "ardana serve: pulling {name} ({}, {})",
+        pick.reference(),
+        ardana_api::human_size(pick.quant.bytes)
+    );
     let opts = PullOptions {
         progress: true,
         ..PullOptions::default()

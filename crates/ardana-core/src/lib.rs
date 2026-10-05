@@ -16,8 +16,8 @@ pub mod systemone;
 /// For the crates that may depend on the core only (`ardana-registry`): the size format and the library document's
 /// types (C3), which the registry reads at run time.
 pub use ardana_api::{
-    BrowserEntry, LayoutKind, LibraryDocument, LibraryEntry, LibraryError, LibraryManifest,
-    LibraryTag, human_size,
+    BrowserEntry, GgufEntry, GgufQuant, LayoutKind, LibraryDocument, LibraryError, LibraryFamily,
+    LibraryManifest, LibrarySize, RepoPin, human_size,
 };
 pub use chat::{ChatTemplateError, TemplateSpecials, chat_layout, read_template};
 pub use engine::{DecideError, Decider, Decode, Limits, Plan};

@@ -125,10 +125,11 @@ from memory with `memory-serve`, and serving library models' browser variants fr
   removes while `serve` runs takes effect without a restart. A reader (`Decider`) or a loaded worker built from an
   older entry of the same name is rebuilt: both remember the `ResolvedModel` they came from and are compared with the
   current entry.
-- Model resolution: `jev-*` and no model mean the default (`--default-model`, else the first registry entry, else the
-  library default, the default-model constant while no document is at hand); `Registry::named(name, &library)` then
-  gives a pulled entry, a library model to pull, or the 404 listing the pulled names and pointing to
-  `https://ardana.ai/models/` (Q11). `Models::new` takes the `LibraryClient` (`huggingface.md`) and reads the library
+- Model resolution: `jev-*` and no model mean the default (`--default-model`, resolved through `Registry::named` each
+  time so any spelling is the canonical name it means once the library resolves it, else the first registry entry,
+  else the library default, the default-model constant while no document is at hand); `Registry::named(name,
+  &library)` then gives a pulled entry, a library model to pull, the 404 listing the pulled names and pointing to
+  `https://ardana.ai/models/` (Q11), or for a tag the family lacks the 404 listing its tags (Q12). `Models::new` takes the `LibraryClient` (`huggingface.md`) and reads the library
   without the network (`LibraryClient::index`: a file `ARDANA_LIBRARY` source's document, a URL source's cached index
   at `$ARDANA_HOME/library/models.json`, no model under `off`); the binary then spawns `Models::keep_library_fresh`,
   which reads the source on start and once every `--library-refresh` (default `1h`, also `ARDANA_LIBRARY_REFRESH`;
@@ -139,9 +140,11 @@ from memory with `memory-serve`, and serving library models' browser variants fr
   flag set by the first `refresh_library`, already set for a file source and `off`), so the first request after start
   answers from the fetched document. A library model added to the published document is therefore listed and pulled
   without a restart; `ARDANA_LIBRARY=off` sends nothing and serves the pulled models alone, a request without a model
-  resolving to the default-model constant. A name the index lacks (one in the library's name grammar) is asked of a
-  URL source once by its manifest (`LibraryClient::lookup`, the cached manifest when the GET fails); a 404 is
-  remembered, lowercased, until the next index refresh and answers the unknown-model 404 meanwhile (Q10). `ardana
+  resolving to the default-model constant. A name the index does not resolve (one in the library's name grammar:
+  `UnknownModel`, a family it lacks, or `UnknownTag`, a tag its family lacks) is asked of a URL source by its
+  family's manifest (`LibraryClient::lookup`, the cached manifest when the GET fails); the answer, a 404 as no model,
+  is kept in `Models::manifests` by the family lowercased until the next index refresh, so a family is asked once
+  meanwhile (Q16). `ardana
   serve --help` states the URL, the interval and `ARDANA_LIBRARY=off` (`help::serve`, Q17).
 - A library model that is not pulled is pulled by one detached `tokio::spawn`ed task per registry name
   (`models.rs#Pulls`, a `watch` channel per pull, shared with the browser variants' pulls; a library pull is forgotten
@@ -153,24 +156,25 @@ from memory with `memory-serve`, and serving library models' browser variants fr
 - The server logs pulls on stderr (`ardana serve: pulling <name> (<ref>, <size>)`, byte progress of each download,
   `pulled <name> into <models.toml>`); there is still no tracing subscriber.
 - `GET /v1/models` keeps Jev's `{name, description, release_date}` per entry and adds `x_pulled` (every entry),
-  `x_default` (the default model only), `x_size` (library models not pulled yet, the GGUF's bytes), `x_browser`
-  (a library model with a browser variant, pulled or not: the bytes a tab downloads, the document's browser `size`)
+  `x_default` (the default model only), `x_size` (one row per library size not pulled yet, under its canonical name:
+  its default quant's bytes), `x_browser` (a size with a browser variant, pulled or not: the bytes a tab downloads,
+  the document's browser `bytes`)
   and `x_browser_pulled` (a browser variant the hub cache holds whole, so a request for its files pulls nothing).
   `Models` asks `ardana_registry::BrowserCache`, built once, which finds every file a pull reads
   in the cache without reading one or calling the Hub, so the list stays cheap; the playground says the server pulls
   only when it does not hold the variant.
 
 ## Browser variants (`/v1/browser`)
-- `GET /v1/browser/{name}/{file}` serves the browser variant of the library model `name` (exactly a library name with
-  a `[model.browser]` table): `model.onnx`, `model.onnx.data` and `tokenizer.json` from the server's hub cache, and
-  `profile`, the `ardana_core::ModelProfile` the registry derives for the variant (`ardana_registry::pull_browser`:
-  `decider_config.json` beside the files, else the stock profile in the library's layout), as JSON. Every other name
-  or file, a `name:quant`, a path a percent-encoded `/` or `..` builds and a path segment that is not UTF-8 (the `Path`
+- `GET /v1/browser/{name}/{file}` serves the browser variant of the library size `name` (exactly the canonical name of
+  a size with a `browser` table, `Library::browser`): `model.onnx`, `model.onnx.data` and `tokenizer.json` from the
+  server's hub cache, and `profile`, the `ardana_core::ModelProfile` the registry derives for the variant
+  (`ardana_registry::pull_browser`: `decider_config.json` beside the files, else the stock profile named canonically in
+  the size's layout), as JSON. Every other name or file, another spelling of the size, a path a percent-encoded `/` or `..` builds and a path segment that is not UTF-8 (the `Path`
   rejection) are the API's 404 before anything is pulled; another method is its 405. No path or URL comes from the
   request: the files are the ones the pull returned.
 - The first request for a model pulls its variant, cache first: a variant whose files are all in the hub cache is read
   in place without a Hub call (as `HF_HUB_OFFLINE` reads a repository), so the server pulls it once; otherwise the
-  repository is pulled (unless `HF_HUB_OFFLINE` is set). Either way the files are those of the entry's
+  repository is pulled (unless `HF_HUB_OFFLINE` is set). Either way the files are those of the size's
   `browser.commit`, never of `main`, and `x_browser_pulled` is true only when the cache holds that commit whole. Cache first keeps a page load off the
   Hub, and lets the in-process tests and the offline e2e servers read `tmp/hf` without the variable. Requests for one
   model share one pull (`models.rs#Pulls`, the library pulls' mechanism, kept in `Models`; `browser.rs#pull` is the pull
@@ -224,7 +228,7 @@ from memory with `memory-serve`, and serving library models' browser variants fr
 - Test handlers in `crates/ardana-server/tests/*.rs` without binding a port: build the app with a fake `Runtime`
   and call `app.clone().oneshot(Request::builder()...body(Body::empty())?)` from `tower::ServiceExt`; read bodies
   with `axum::body::to_bytes(body, usize::MAX)`. The fake runtime (`tests/common/mod.rs`) counts loads and drops and
-  can hold loads and decodes; requests are read with decider-2b's real tokenizer and profile from `tmp/hf`.
+  can hold loads and decodes; requests are read with decider:2b's real tokenizer and profile from `tmp/hf`.
 - Assert status, headers (`Retry-After`, `Content-Type`) and the exact JSON shape of every error body, including
   that no bad-input case returns 5xx.
 - `tests/browser.rs`: `browser_routes` (plain) checks `x_browser` in `/v1/models`, the 404s and 405s of `/v1/browser`
@@ -232,16 +236,16 @@ from memory with `memory-serve`, and serving library models' browser variants fr
   `cargo xtask onnx convert` writes into `tmp/hf`, which CI does not fetch) checks one shared pull, the three files
   byte for byte, uncompressed with their length under `Accept-Encoding: br`, the `ETag`, byte ranges of the graph and
   the weights (each part byte for byte, `If-Range`, the whole file for another version or several ranges, the 416) and
-  the profiles of decider-0.8b and qwen3.5-0.8b. `browser.rs`'s unit test reads every kind of `Range` and `If-Range`
+  the profiles of decider:0.8b and qwen3.5:0.8b. `browser.rs`'s unit test reads every kind of `Range` and `If-Range`
   without a file.
 - Fake runtimes are for lifecycle and error-path tests only; end-to-end checks (`cargo xtask e2e jevcompat|sdk|
-  jevbench`) run the release binary on decider-2b pulled offline from `tmp/hf`, each in its own `ARDANA_HOME` under
+  jevbench`) run the release binary on decider:2b pulled offline from `tmp/hf`, each in its own `ARDANA_HOME` under
   `tmp/e2e/<suite>`, on a free port of 127.0.0.1, stopped with SIGTERM afterwards. `crates/ardana/tests/serve.rs`
   starts the debug binary: it binds 127.0.0.1, reads `ARDANA_API_KEY`, and has one mode (`--public` is clap's
   unexpected argument, and the variable it would have is not read); its library cases run it against
   `tests/common/mod.rs#LibraryServer`, a loopback server of the snapshot with an `ETag` (304 on `If-None-Match`),
   manifests and a request log, against a closed port, and under `ARDANA_LIBRARY=off`. `tests/http.rs` "unknown names
-  ask the library once" builds `Models` on a URL source through `common::models_from` over an axum loopback and calls
+  ask the library once" (and "defaults", for `--default-model` on a fresh home) builds `Models` on a URL source through `common::models_from` over an axum loopback and calls
   `Models::refresh_library` itself, as the binary's refresh task would: a `Models` on a URL source answers no model
   request before that first read.
 

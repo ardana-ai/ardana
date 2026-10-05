@@ -14,8 +14,8 @@ use serde_json::Value;
 
 pub use error::{Detail, ErrorBody, ValidationItem};
 pub use library::{
-    BrowserEntry, LIBRARY_SCHEMA, LayoutKind, LibraryDocument, LibraryEntry, LibraryError,
-    LibraryManifest, LibraryTag,
+    BrowserEntry, GgufEntry, GgufQuant, LIBRARY_SCHEMA, LayoutKind, LibraryDocument, LibraryError,
+    LibraryFamily, LibraryManifest, LibrarySize, RepoPin,
 };
 
 /// A request's `state` from text as a person typed it: text that parses as a JSON object or array is sent as that
