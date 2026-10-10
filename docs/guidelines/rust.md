@@ -63,7 +63,8 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   thread (the notice of a version seen within the day is there at once) and does everything that builds a client or
   sends a request on a `std::thread` of its own, handing the notice back over an `mpsc` channel: `run` takes what is
   there at exit (`try_recv`), `serve` waits for it on one more thread. No command waits on the lookup, and a new
-  caller must not either.
+  caller must not either. That thread dates the lookup in the file under the file's own lock (`File::lock`, read to
+  write), so of the ardanas that find a lookup due together one sends it; write the file through `locked` only.
 - `[profile.release.package.brotli]` and `[profile.release.package.sha2]` set `opt-level = 3`: `ardana-server`'s build
   script embeds the playground through memory-serve, which brotli-compresses (quality 11) and hashes every asset,
   onnxruntime-web's 41 MB of WASM among them, and release builds compile a build script's dependencies unoptimised.

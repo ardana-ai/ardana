@@ -239,7 +239,8 @@ change them) and its Requirements are the definition of done.
   `ardana run` and `ardana serve` (once, at start) make the same lookup at most once a day per `ARDANA_HOME`, on a
   thread of its own, so no answer, bind or model load waits on it: `$ARDANA_HOME/update-check.json` records the time
   when a lookup starts (`checked_at`, Unix seconds) and the newest version seen once it answers (`version`), a failed
-  lookup standing for the day like an answered one. While that version is above the binary's, `run` prints `a newer
+  lookup standing for the day like an answered one (the file is dated under its own lock, so ardanas started together
+  send one lookup). While that version is above the binary's, `run` prints `a newer
   ardana is available: <latest> (this is <version>); run `ardana update`` as its last stderr line, after its answers
   and without waiting for a lookup still in flight, and `serve` logs it once after `ardana serve: `, from the file
   alone within the day. The check says nothing when its lookup fails, sends and writes nothing for a copy without a
