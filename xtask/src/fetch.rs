@@ -570,8 +570,8 @@ struct HubFile {
     size: u64,
 }
 
-/// The weight files `fetch --tests` leaves out, by suffix: GGUF, and an ONNX graph with its external data.
-const WEIGHTS: [&str; 3] = [".gguf", ".onnx", ".onnx.data"];
+/// The weight files `fetch --tests` leaves out, by suffix: GGUF, an ONNX graph with its external data, and safetensors.
+const WEIGHTS: [&str; 4] = [".gguf", ".onnx", ".onnx.data", ".safetensors"];
 
 impl Hf {
     /// This repository without its weights ([`WEIGHTS`]): the files plain `cargo test` reads.

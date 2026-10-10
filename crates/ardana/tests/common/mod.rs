@@ -35,6 +35,21 @@ pub fn hf_file(repo: &str, name: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// The pinned snapshot directory of `repo` (`org/name`) in `$HF_HOME/hub`, as `cargo xtask fetch` wrote it.
+pub fn hf_snapshot(repo: &str) -> Result<PathBuf> {
+    let hf_home = std::env::var_os("HF_HOME").context("HF_HOME is not set")?;
+    let dir = PathBuf::from(hf_home)
+        .join("hub")
+        .join(format!("models--{}", repo.replace('/', "--")));
+    let rev = std::fs::read_to_string(dir.join("refs/main")).with_context(|| {
+        format!(
+            "{} has no refs/main; run `cargo xtask fetch`",
+            dir.display()
+        )
+    })?;
+    Ok(dir.join("snapshots").join(rev.trim()))
+}
+
 /// A request fixture in `tests/fixtures/requests`.
 pub fn request(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -463,6 +478,137 @@ fn answer(
         body.len()
     )?;
     stream.write_all(&body)?;
+    Ok(())
+}
+
+/// A loopback stand-in for the Hugging Face Hub serving one repository at the commit `cargo xtask fetch` pinned in
+/// `tmp/hf`: `GET /api/models/<org>/<repo>` names that commit and lists `listing` as the repository's files, and
+/// `HEAD` or `GET /<org>/<repo>/resolve/<commit>/<file>` answers a file the pinned snapshot holds with its blob name as
+/// the `ETag` (a 404 for any other file). Every request is recorded as `<METHOD> <path>`.
+pub struct HubStandIn {
+    /// What `HF_ENDPOINT` names.
+    pub endpoint: String,
+    requests: Arc<Mutex<Vec<String>>>,
+}
+
+impl HubStandIn {
+    pub fn start(repo: &str, listing: &[&str]) -> Result<HubStandIn> {
+        let snapshot = hf_snapshot(repo)?;
+        let commit = snapshot
+            .file_name()
+            .context("a snapshot directory")?
+            .to_string_lossy()
+            .into_owned();
+        let info = serde_json::to_vec(&json!({
+            "id": repo,
+            "sha": commit,
+            "siblings": listing.iter().map(|f| json!({"rfilename": f})).collect::<Vec<_>>(),
+        }))?;
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let endpoint = format!("http://{}", listener.local_addr()?);
+        let requests: Arc<Mutex<Vec<String>>> = Arc::default();
+        let seen = requests.clone();
+        let (info_path, resolve) = (
+            format!("/api/models/{repo}"),
+            format!("/{repo}/resolve/{commit}/"),
+        );
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { return };
+                let _ = answer_hub(
+                    stream, &seen, &info_path, &info, &resolve, &snapshot, &commit,
+                );
+            }
+        });
+        Ok(HubStandIn { endpoint, requests })
+    }
+
+    pub fn requests(&self) -> Vec<String> {
+        self.requests.lock().expect("the request log").clone()
+    }
+
+    /// The files asked for by name, each once (a `HEAD` and a `GET` of a file are one), in order.
+    pub fn files(&self) -> Vec<String> {
+        let mut files: Vec<String> = Vec::new();
+        for request in self.requests() {
+            let file = request
+                .split_once("/resolve/")
+                .and_then(|(_, rest)| rest.split_once('/'))
+                .map(|(_, file)| file.to_string());
+            if let Some(file) = file.filter(|file| !files.contains(file)) {
+                files.push(file);
+            }
+        }
+        files
+    }
+
+    /// A hub cache in `dir` holding the blobs of the pinned snapshot of `repo` (links to those in `tmp/hf`, so no
+    /// weights are copied) and nothing else: a pull through it still asks the Hub for every file by name, and takes
+    /// the blob the answer's `ETag` names without downloading it.
+    pub fn cache_with_blobs(dir: &Path, repo: &str) -> Result<()> {
+        let blobs = dir
+            .join(format!("models--{}", repo.replace('/', "--")))
+            .join("blobs");
+        std::fs::create_dir_all(&blobs)?;
+        for entry in std::fs::read_dir(hf_snapshot(repo)?)? {
+            let blob = std::fs::canonicalize(entry?.path())?;
+            let name = blob.file_name().context("a blob name")?;
+            std::os::unix::fs::symlink(&blob, blobs.join(name))?;
+        }
+        Ok(())
+    }
+}
+
+/// Answers the one request on `stream` as [`HubStandIn`] describes, recording it in `seen`.
+fn answer_hub(
+    mut stream: TcpStream,
+    seen: &Mutex<Vec<String>>,
+    info_path: &str,
+    info: &[u8],
+    resolve: &str,
+    snapshot: &Path,
+    commit: &str,
+) -> Result<()> {
+    let mut head = Vec::new();
+    let mut byte = [0u8; 1];
+    while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte)? == 1 {
+        head.push(byte[0]);
+    }
+    let head = String::from_utf8_lossy(&head).into_owned();
+    let mut line = head.lines().next().unwrap_or_default().split(' ');
+    let (method, target) = (
+        line.next().unwrap_or_default(),
+        line.next().unwrap_or_default(),
+    );
+    let path = target.split('?').next().unwrap_or_default();
+    seen.lock()
+        .expect("the request log")
+        .push(format!("{method} {path}"));
+    let file = path.strip_prefix(resolve).map(|file| snapshot.join(file));
+    if path == info_path {
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            info.len()
+        )?;
+        stream.write_all(info)?;
+    } else if let Some(file) = file.filter(|file| file.is_file()) {
+        let blob = std::fs::canonicalize(&file)?;
+        let name = blob.file_name().context("a blob name")?.to_string_lossy();
+        let size = std::fs::metadata(&blob)?.len();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Length: {size}\r\nETag: \"{name}\"\r\nX-Repo-Commit: {commit}\r\nConnection: close\r\n\r\n"
+        )?;
+        if method == "GET" {
+            std::io::copy(&mut std::fs::File::open(&blob)?, &mut stream)?;
+        }
+    } else {
+        write!(
+            stream,
+            "HTTP/1.1 404 Not Found\r\nX-Error-Code: EntryNotFound\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )?;
+    }
     Ok(())
 }
 

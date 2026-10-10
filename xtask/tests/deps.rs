@@ -34,6 +34,9 @@ fn rejects_forbidden_edge() {
         ("ardana-registry", "ardana-llama", json!("dev")),
         ("ardana-server", "ardana-llama", json!("build")),
         ("ardana-playground", "ardana-registry", Value::Null),
+        ("ardana-server", "ardana-candle", Value::Null),
+        ("ardana-candle", "ardana-registry", Value::Null),
+        ("ardana-candle", "ardana-api", json!("dev")),
     ] {
         let mut broken = workspace.clone();
         add_edge(&mut broken, from, to, kind);
@@ -47,6 +50,8 @@ fn rejects_forbidden_edge() {
     for (from, to) in [
         ("ardana-core", "ardana-api"),
         ("ardana-server", "ardana-registry"),
+        ("ardana-candle", "ardana-core"),
+        ("ardana", "ardana-candle"),
     ] {
         let mut allowed = workspace.clone();
         add_edge(&mut allowed, from, to, Value::Null);

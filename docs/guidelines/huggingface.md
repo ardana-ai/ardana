@@ -33,9 +33,10 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   snapshot and writes `refs/main`. Ardana itself never reads or writes the user's real HF cache. The one other read
   of the real cache is `cargo xtask onnx publish`'s, of `~/.cache/huggingface/token` (`onnx.md`).
 - `cargo xtask fetch --tests` installs only the files plain `cargo test` reads: every `[[hf]]` file (the library's
-  models) but the weights (`.gguf`, `.onnx`, `.onnx.data`), which needs no token, so CI runs it. Plain tests use only the library's models
-  (decider, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8); a test that needs the gated `[[hf_local]]` Llama 3.2 tokenizer is a real-model
-  test (`#[ignore = "e2e: ..."]`), like those on Ollama's `llama3.2`.
+  models, and the Candle runtime's Qwen3-1.7B checkpoint and its GGUF) but the weights (`.gguf`, `.onnx`,
+  `.onnx.data`, `.safetensors`), which needs no token, so CI runs it. Plain tests use only those models
+  (decider, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8, Qwen3-1.7B); a test that needs the gated `[[hf_local]]` Llama 3.2
+  tokenizer is a real-model test (`#[ignore = "e2e: ..."]`), like those on Ollama's `llama3.2`.
 - `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`. `cargo xtask fetch` lists
   the revision through `https://huggingface.co/api/models/<repo>/revision/<rev>?blobs=true`, downloads each file from
   `resolve/<rev>/<file>` with `curl` into `blobs/<LFS sha256 or git blob id>`, verifies that hash (`shasum -a 256`,
@@ -183,6 +184,15 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   `mmproj-`, `mtp-` and `dflash-` files) and is left out, so `gemma-4-E4B-it-Q4_0.gguf` is picked next to
   `mtp-gemma-4-E4B-it-Q4_0.gguf`.
   `hf.co/<org>/<repo>:<file>.gguf` names the file.
+- A repository without a GGUF and with a `config.json`, named without a quant or file, is a safetensors checkpoint
+  (Q6): the pull takes `config.json` first, hands its snapshot directory to the runtime whose `supports` reads that
+  file (`Runtimes::for_weights`, `candle.md`) and fails with `RegistryError::Architecture`, naming
+  `config.json#architectures`, when none does (Q7), before any weight file; then it takes the shards
+  `model.safetensors.index.json` names (`ardana_core::snapshot::shards`), else `model.safetensors`, then the root
+  tokenizer files and `decider_config.json` as a GGUF pull does, and nothing else the repository lists. The recorded
+  `weights` is the snapshot directory, which carries the commit as a GGUF's path does; `ResolvedModel::weights_bytes`
+  sums the files its index names for `ardana list`. A repository with neither a GGUF nor a `config.json` fails naming
+  both; a ref with a quant or file is a GGUF pull as before.
 - A tokenizer repository contributes `tokenizer.json` plus `tokenizer_config.json` and `chat_template.jinja` when it
   has them, all at one commit, so the chat template sits next to the tokenizer in `snapshots/<commit>/`.
 - `decider_config.json` in the weights repository gives the profile (plain layout); without it the model gets

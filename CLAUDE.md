@@ -2,9 +2,10 @@
 
 Ardana is a local-first tool that pulls and runs open System 1 decision models (decider-style one-pass readouts) the
 way Ollama does, from one `ardana` Rust binary that serves them over an HTTP API (compatible with Jev and TypeSafe
-clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime` abstraction; Qwen3.5
-is the first model family. Planning documents live in gitignored `*-prd/` folders; when one is present locally, its
-Decisions and Contracts are binding (as its Amendments change them) and its Requirements are the definition of done.
+clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime` abstraction (GGUF
+files) and Candle the second (safetensors causal LMs); Qwen3.5 is the first model family. Planning documents live in
+gitignored `*-prd/` folders; when one is present locally, its Decisions and Contracts are binding (as its Amendments
+change them) and its Requirements are the definition of done.
 
 ## Workspace
 
@@ -12,10 +13,11 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
 |-------|------|----------------------------------|
 | `crates/ardana` | binary, wires runtimes into registry and server | any |
 | `crates/ardana-api` | Jev wire types and error bodies, compiles for `wasm32-unknown-unknown` | none |
-| `crates/ardana-core` | prompts, tokenizer, readout, runtime traits | `ardana-api` |
+| `crates/ardana-core` | prompts, tokenizer, readout, runtime traits, safetensors snapshot files | `ardana-api` |
 | `crates/ardana-llama` | llama.cpp runtime | `ardana-core` |
+| `crates/ardana-candle` | Candle runtime for safetensors causal LMs, by `config.json#architectures` | `ardana-core` |
 | `crates/ardana-registry` | refs, the model library, `models.toml`, HF and Ollama resolution | `ardana-core` |
-| `crates/ardana-server` | axum server, model lifecycle, embedded playground | anything but `ardana-llama` |
+| `crates/ardana-server` | axum server, model lifecycle, embedded playground | anything but the runtimes (`ardana-llama`, `ardana-candle`) |
 | `crates/ardana-playground` | Leptos CSR playground built by trunk, running browser models in the tab (onnxruntime-web) | `ardana-api` |
 | `crates/ardana-engine` | the in-tab engine's tokenizer, planner and readout (ardana-core), a second wasm module | `ardana-api`, `ardana-core` |
 | `xtask` | task runner | any |
@@ -31,8 +33,8 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   venvs, Hub models in `tmp/hf/hub`, `[[hf_local]]` copies of gated repos from the real `~/.cache/huggingface/hub`);
   `cargo xtask fetch --check` verifies them. It also runs `npm ci` in `e2e/playground` (`@playwright/test`,
   `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it before `cargo test`: plain tests read the library models' (decider:2b,
-  Qwen3.5, SmolLM3, Gemma 4, Qwen3.8) tokenizers, configs and chat templates from `tmp/hf`. `cargo xtask fetch --tests` installs only
-  those files (every `[[hf]]` file but the GGUF and ONNX weights, no token), which is what CI runs; the gated Llama 3.2
+  Qwen3.5, SmolLM3, Gemma 4, Qwen3.8) tokenizers, configs and chat templates, and Qwen3-1.7B's, from `tmp/hf`. `cargo xtask fetch --tests` installs only
+  those files (every `[[hf]]` file but the GGUF, ONNX and safetensors weights, no token), which is what CI runs; the gated Llama 3.2
   tokenizer serves only the `#[ignore]`d real-model tests, next to Ollama's `llama3.2`.
 - CI (`.github/workflows/ci.yml`) checks every pull request and push to `main`: `cargo fmt --check`, clippy with
   `-D warnings` and a wasm check of `ardana-api`/`ardana-playground`/`ardana-engine`, `check-deps`, `check-docs`,
@@ -169,11 +171,15 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
   family's. A size's browser variant is its `browser` table (decider:0.8b, decider:2b and qwen3.5:0.8b today,
   `browser_default` decider:0.8b); refs are
   `hf.co/<org>/<repo>[:<quant>]` (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]`
-  (read in place from `$OLLAMA_MODELS`) and local GGUF paths. Downloads go to the standard HF cache (`$HF_HOME/hub`);
-  `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list` (`ls`: name, size, pull date,
-  source), `ardana show <name> [--json]` (Model, Calibration and Files sections; a library model not pulled yet says
-  how to get it) and `ardana rm <name>...` (the entries only, named as `list` prints them, never model files; every
-  name is checked first) manage
+  (read in place from `$OLLAMA_MODELS`) and local GGUF paths. `hf.co/<org>/<repo>` of a repository with no GGUF and a
+  `config.json` pulls that safetensors checkpoint at `main` (`config.json`, the shards its index names or its
+  `model.safetensors`, the root tokenizer files), recorded with its snapshot directory as the weights and runtime
+  `candle` when `config.json#architectures` names one Candle implements (`Qwen3ForCausalLM`), and refused naming the
+  architectures before any weight file when none does; `list` sizes it by its safetensors files. Downloads go to the
+  standard HF cache (`$HF_HOME/hub`); `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list`
+  (`ls`: name, size, pull date, source), `ardana show <name> [--json]` (Model, Calibration and Files sections; a
+  library model not pulled yet says how to get it) and `ardana rm <name>...` (the entries only, named as `list` prints
+  them, never model files; every name is checked first) manage
   it; `ardana ps [--host] [--port]` lists the models a running `serve` has loaded (from `/health`).
 - `ardana run <name> [STATE] [--noul Q] [--choice Q OPTION...] [--score Q LEVEL...]` asks inline questions (`q1`,
   `q2`, ... in the order given; the state is read from stdin when left out), or `ardana run <name> --request
@@ -270,7 +276,8 @@ Decisions and Contracts are binding (as its Amendments change them) and its Requ
 ## End-to-end verification
 
 - Every work item is verified end to end on real open models: official Hugging Face sources
-  (Mapika/decider-2b-GGUF Q4_K_M, ggml-org/Qwen3.5-0.8B-GGUF, ggml-org/SmolLM3-3B-GGUF, ggml-org/gemma-4-E2B-it-GGUF) or the local Ollama store
+  (Mapika/decider-2b-GGUF Q4_K_M, ggml-org/Qwen3.5-0.8B-GGUF, ggml-org/SmolLM3-3B-GGUF, ggml-org/gemma-4-E2B-it-GGUF,
+  and for Candle Qwen/Qwen3-1.7B against Qwen/Qwen3-1.7B-GGUF Q8_0) or the local Ollama store
   (`llama3.2`), fetched into `tmp/hf` by `cargo xtask fetch`. Never replace a real model with an invented fixture, never
   assert against a mock for an end-to-end requirement, never report a check you did not run.
 
@@ -281,6 +288,7 @@ pinned version, library, pattern or rule), update the matching guideline in the 
 
 - [Rust, cargo workspace, errors, testing, xtask](docs/guidelines/rust.md)
 - [llama-cpp-2 and llama.cpp](docs/guidelines/llama-cpp.md)
+- [Candle: safetensors causal LMs, architectures, Metal](docs/guidelines/candle.md)
 - [Hugging Face tokenizers, hf-hub, cache layout, chat templates](docs/guidelines/huggingface.md)
 - [axum and tower-http](docs/guidelines/axum.md)
 - [Leptos CSR, trunk, wasm, CSS](docs/guidelines/leptos.md)

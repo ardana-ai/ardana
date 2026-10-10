@@ -52,7 +52,8 @@ pub struct ResolvedModel {
     pub name: String,
     /// The reference it was pulled from (a local path is recorded absolute).
     pub source: String,
-    /// The weights, read in place: a hub cache snapshot path, an Ollama blob or a local file.
+    /// The weights, read in place: a hub cache snapshot path, an Ollama blob or a local file, or the hub cache
+    /// snapshot directory of a safetensors checkpoint.
     pub weights: PathBuf,
     /// The Hugging Face `tokenizer.json`; the chat template is read next to it.
     pub tokenizer: PathBuf,
@@ -108,6 +109,16 @@ pub enum RegistryError {
         reference: String,
         path: PathBuf,
     },
+    /// A checkpoint whose `config.json#architectures` no runtime implements (Q7).
+    #[error(
+        "{reference}: no runtime implements {} ({}#architectures)",
+        named_architectures(.architectures),
+        ardana_core::snapshot::CONFIG
+    )]
+    Architecture {
+        reference: String,
+        architectures: Vec<String>,
+    },
     #[error("no runtime can load {} ({reference}){}", .weights.display(), hint(.reference))]
     NoRuntime { reference: String, weights: PathBuf },
     #[error("loading model {name} ({reference}): {err:#}{}", hint(.reference))]
@@ -130,6 +141,15 @@ fn unknown_model(name: &str, available: &[String]) -> String {
     )
 }
 
+/// The architectures a `config.json` names, for [`RegistryError::Architecture`].
+fn named_architectures(architectures: &[String]) -> String {
+    if architectures.is_empty() {
+        "a checkpoint that names no architecture".to_string()
+    } else {
+        architectures.join(", ")
+    }
+}
+
 /// What to do instead when weights from `source` do not load: Ollama converts some models its own way, and upstream
 /// llama.cpp cannot load those GGUFs.
 fn hint(source: &str) -> String {
@@ -147,6 +167,25 @@ fn hint(source: &str) -> String {
 }
 
 impl ResolvedModel {
+    /// The weight files: the weights file itself, or the safetensors files a snapshot directory's index names (else
+    /// its `model.safetensors`, [`ardana_core::snapshot::weight_files`]).
+    pub fn weight_files(&self) -> Result<Vec<PathBuf>, String> {
+        if self.weights.is_dir() {
+            ardana_core::snapshot::weight_files(&self.weights)
+        } else {
+            Ok(vec![self.weights.clone()])
+        }
+    }
+
+    /// The bytes of the [`ResolvedModel::weight_files`] together.
+    pub fn weights_bytes(&self) -> std::io::Result<u64> {
+        let files = self.weight_files().map_err(std::io::Error::other)?;
+        files
+            .iter()
+            .map(|file| std::fs::metadata(file).map(|meta| meta.len()))
+            .sum()
+    }
+
     /// Loads the weights with the first runtime that supports them ([`Runtimes::for_weights`]).
     pub fn load(
         &self,
@@ -290,19 +329,20 @@ impl Registry {
             .ok()
     }
 
-    /// The entry named `name`, with its weights and tokenizer still in place.
+    /// The entry named `name`, with its weight files and tokenizer still in place.
     pub fn resolve(&self, name: &str) -> Result<ResolvedModel, RegistryError> {
         let model = self.entry(name)?;
-        for path in [&model.weights, &model.tokenizer] {
-            if !path.is_file() {
-                return Err(RegistryError::Missing {
-                    name: model.name.clone(),
-                    reference: model.source.clone(),
-                    path: path.clone(),
-                });
-            }
+        let missing = |path: &Path| RegistryError::Missing {
+            name: model.name.clone(),
+            reference: model.source.clone(),
+            path: path.to_path_buf(),
+        };
+        let mut files = model.weight_files().map_err(|_| missing(&model.weights))?;
+        files.push(model.tokenizer.clone());
+        match files.iter().find(|path| !path.is_file()) {
+            Some(path) => Err(missing(path)),
+            None => Ok(model.clone()),
         }
-        Ok(model.clone())
     }
 
     /// Adds `model`, replacing an entry of the same name in place.
@@ -460,8 +500,12 @@ async fn pull_ref(
     let (weights, config, own_tokenizer) = match &parsed {
         Ref::Hf { org, repo, file } => {
             let snapshot = hub.snapshot(org, repo, revisions.weights).await?;
-            let gguf = pick_gguf(&snapshot, file.as_ref())?;
-            let weights = hub.file(&snapshot, &gguf).await?;
+            let weights = if file.is_none() && is_checkpoint(&snapshot) {
+                snapshot_weights(&hub, &snapshot, runtimes).await?
+            } else {
+                let gguf = pick_gguf(&snapshot, file.as_ref())?;
+                hub.file(&snapshot, &gguf).await?
+            };
             let config = if snapshot.has(DECIDER_CONFIG) {
                 Some(hub.file(&snapshot, DECIDER_CONFIG).await?)
             } else {
@@ -736,19 +780,87 @@ impl BrowserCache {
     }
 }
 
+/// Whether `snapshot` is a safetensors checkpoint rather than a GGUF repository: it holds no GGUF and has a
+/// `config.json` (Q6).
+fn is_checkpoint(snapshot: &Snapshot) -> bool {
+    snapshot.has(ardana_core::snapshot::CONFIG) && !snapshot.files.iter().any(|f| is_gguf(f))
+}
+
+fn is_gguf(file: &str) -> bool {
+    file.to_ascii_lowercase().ends_with(".gguf")
+}
+
+/// The snapshot directory of the checkpoint `snapshot`, which carries its commit as a GGUF's path does (Q4): its
+/// `config.json`, then, once a runtime implements an architecture it names (Q7), the safetensors files its index
+/// names (else its one `model.safetensors`).
+async fn snapshot_weights(
+    hub: &Hub,
+    snapshot: &Snapshot,
+    runtimes: &Runtimes,
+) -> Result<PathBuf, RegistryError> {
+    use ardana_core::snapshot::{CONFIG, INDEX, SINGLE, architectures};
+    let config = hub.file(snapshot, CONFIG).await?;
+    let dir = config
+        .parent()
+        .ok_or_else(|| RegistryError::Invalid {
+            what: config.display().to_string(),
+            msg: "a cache file outside a snapshot directory".into(),
+        })?
+        .to_path_buf();
+    if runtimes.for_weights(&dir).is_none() {
+        return Err(RegistryError::Architecture {
+            reference: snapshot.id(),
+            architectures: architectures(&read_json(&config)?),
+        });
+    }
+    let files = if snapshot.has(INDEX) {
+        let index = hub.file(snapshot, INDEX).await?;
+        ardana_core::snapshot::shards(&read_json(&index)?).map_err(|msg| {
+            RegistryError::Invalid {
+                what: format!("{} file {INDEX}", snapshot.id()),
+                msg,
+            }
+        })?
+    } else if snapshot.has(SINGLE) {
+        vec![SINGLE.to_string()]
+    } else {
+        return Err(RegistryError::Invalid {
+            what: snapshot.id(),
+            msg: format!("it has {CONFIG} but neither {INDEX} nor {SINGLE}"),
+        });
+    };
+    for file in files {
+        hub.file(snapshot, &file).await?;
+    }
+    Ok(dir)
+}
+
+/// The JSON document at `path`.
+fn read_json(path: &Path) -> Result<serde_json::Value, RegistryError> {
+    let text = std::fs::read_to_string(path).map_err(|err| RegistryError::Io {
+        path: path.to_path_buf(),
+        err,
+    })?;
+    serde_json::from_str(&text).map_err(|err| RegistryError::Invalid {
+        what: path.display().to_string(),
+        msg: err.to_string(),
+    })
+}
+
 /// The GGUF of `snapshot` that `file` names; without `file`, the [`DEFAULT_QUANT`] one.
 fn pick_gguf(snapshot: &Snapshot, file: Option<&HfFile>) -> Result<String, RegistryError> {
-    let ggufs: Vec<&String> = snapshot
-        .files
-        .iter()
-        .filter(|f| f.to_ascii_lowercase().ends_with(".gguf"))
-        .collect();
+    let ggufs: Vec<&String> = snapshot.files.iter().filter(|f| is_gguf(f)).collect();
     let invalid = |msg: String| RegistryError::Invalid {
         what: snapshot.id(),
         msg,
     };
     let listing = || {
-        if ggufs.is_empty() {
+        if ggufs.is_empty() && file.is_none() {
+            format!(
+                "it has no GGUF files and no {}",
+                ardana_core::snapshot::CONFIG
+            )
+        } else if ggufs.is_empty() {
             "it has no GGUF files".to_string()
         } else {
             let names: Vec<&str> = ggufs.iter().map(|f| f.as_str()).collect();

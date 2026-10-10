@@ -8,10 +8,11 @@ use serde_json::Value;
 
 use crate::sandbox::cargo;
 
-/// The Q22 workspace members, and the playground's engine module.
+/// The Q22 workspace members, the playground's engine module and the Candle runtime.
 pub const MEMBERS: &[&str] = &[
     "ardana",
     "ardana-api",
+    "ardana-candle",
     "ardana-core",
     "ardana-llama",
     "ardana-registry",
@@ -26,8 +27,9 @@ fn allowed(from: &str, to: &str) -> bool {
     match from {
         "ardana-api" => false,
         "ardana-core" => to == "ardana-api",
-        "ardana-llama" | "ardana-registry" => to == "ardana-core",
-        "ardana-server" => to != "ardana-llama",
+        "ardana-llama" | "ardana-candle" | "ardana-registry" => to == "ardana-core",
+        // The server reaches runtimes through `ardana-core`'s traits alone; the binary wires the concrete ones in.
+        "ardana-server" => !matches!(to, "ardana-llama" | "ardana-candle"),
         // The page's own wasm carries the API's types alone: the core's tokenizer, planner and readout reach the tab in
         // the engine module, which the page imports on an "In browser" pick.
         "ardana-playground" => to == "ardana-api",

@@ -2,9 +2,9 @@
 
 Covers the Rust language, the cargo workspace, error handling, tests, lints, formatting and the `cargo xtask` task
 runner for every Ardana crate: `crates/ardana` (binary), `crates/ardana-api`, `crates/ardana-core`,
-`crates/ardana-llama`, `crates/ardana-registry`, `crates/ardana-server`, `crates/ardana-playground`,
-`crates/ardana-engine` and `xtask`.
-Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in their own guideline files.
+`crates/ardana-llama`, `crates/ardana-candle`, `crates/ardana-registry`, `crates/ardana-server`,
+`crates/ardana-playground`, `crates/ardana-engine` and `xtask`.
+Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) live in their own guideline files.
 
 ## Versions
 - `rustc` 1.97.1 — pinned by `rust-toolchain.toml` (with `clippy`, `rustfmt` and the `wasm32-unknown-unknown` target)
@@ -27,12 +27,12 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Reference workspace crates by path in `[workspace.dependencies]` too (`ardana-core = { path = "crates/ardana-core" }`)
   so the dependency graph lives in one file that `cargo xtask check-deps` can read.
 - Respect the dependency direction enforced by `cargo xtask check-deps`: `ardana-api` depends on no workspace crate,
-  `ardana-core` only on `ardana-api`, `ardana-llama` and `ardana-registry` on `ardana-core`, `ardana-server` never on
-  `ardana-llama`, `ardana-playground` on `ardana-api` alone (the page's own wasm carries no core), and `ardana-engine`,
-  the in-tab engine's reader that the page imports as a second wasm module, on `ardana-api` and `ardana-core` (it plans
-  and reads out with the core, Q9). Only the `ardana` binary wires `ardana-llama` into `Runtimes`. A new runtime is a
-  new crate plus one registration line, never a server or playground change; the playground's onnxruntime-web is no
-  `Runtime`.
+  `ardana-core` only on `ardana-api`, `ardana-llama`, `ardana-candle` and `ardana-registry` on `ardana-core`,
+  `ardana-server` never on `ardana-llama` or `ardana-candle`, `ardana-playground` on `ardana-api` alone (the page's own
+  wasm carries no core), and `ardana-engine`, the in-tab engine's reader that the page imports as a second wasm module,
+  on `ardana-api` and `ardana-core` (it plans and reads out with the core, Q9). Only the `ardana` binary wires
+  `ardana-llama` and `ardana-candle` into `Runtimes`. A new runtime is a new crate plus one registration line, never a
+  server or playground change; the playground's onnxruntime-web is no `Runtime`.
 - Keep `ardana-api`, `ardana-core`, `ardana-playground` and `ardana-engine` free of native-only dependencies on wasm32:
   a dependency that is native only on one side gets a `[target.'cfg(...)'.dependencies]` table (the tokenizer's regex
   backend, `huggingface.md`); `cargo check -p ardana-api -p ardana-playground -p ardana-engine --target
@@ -55,6 +55,9 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
   onnxruntime-web's 41 MB of WASM among them, and release builds compile a build script's dependencies unoptimised.
   Optimised they take about two and a half minutes of a release build instead of more than four. A package override
   only changes those crates where the release profile would not optimise them, as build dependencies.
+- `[profile.dev.package.<crate>]` sets `opt-level = 3` for Candle's compute crates (`candle-core`, `candle-nn`,
+  `candle-transformers`, `gemm`, `gemm-common`, `gemm-f32`, `gemm-f16`, `half`), which `cargo test` would otherwise
+  build unoptimised for the real-model tests (`candle.md`, "Build"); the workspace's own crates stay debug.
 - Commit `Cargo.lock`: Ardana ships a binary, and the lockfile is also the source of the wasm-bindgen version that
   `xtask/fetch.toml` reads via `cargo-lock:wasm-bindgen`. Pass `--locked` in xtask steps that must not re-resolve.
 
@@ -81,7 +84,8 @@ Library-specific rules (llama-cpp-2, tokenizers, hf-hub, axum, leptos) live in t
 - Bad client input must never panic: validate and return an error (the server maps errors to 4xx, never 5xx).
 - Derive `Debug` on public types; derive `Clone`, `PartialEq`, `Eq`, `Default` where they make sense, because
   downstream crates cannot add them later.
-- Keep `unsafe` confined to `ardana-llama` FFI edges (if any) with a `// SAFETY:` comment per block.
+- Keep `unsafe` confined to `ardana-llama` FFI edges (if any) and `ardana-candle`'s memory map of the hub cache's
+  safetensors blobs (`candle.md`, "Loading"), with a `// SAFETY:` comment per block.
 - `thiserror` treats a field named `source` as the error's source; name a field holding a model reference
   `reference` in error variants (`RegistryError`), even where the data type calls it `source` (`ResolvedModel`).
 

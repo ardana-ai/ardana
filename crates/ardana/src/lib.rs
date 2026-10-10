@@ -227,9 +227,12 @@ impl From<LayoutArg> for LayoutKind {
 /// The name a model without `decider_config.json` reports (decider `serve.py#apply_config({})`).
 const STOCK_NAME: &str = "decider-dev";
 
-/// The runtimes this binary is built with.
+/// The runtimes this binary is built with: llama.cpp for GGUF files, Candle for safetensors snapshots.
 pub fn runtimes() -> Runtimes {
-    Runtimes(vec![Box::new(ardana_llama::LlamaRuntime)])
+    Runtimes(vec![
+        Box::new(ardana_llama::LlamaRuntime),
+        Box::new(ardana_candle::CandleRuntime),
+    ])
 }
 
 /// Runs the command; `matches` are the ones `cli` was read from.
@@ -354,10 +357,11 @@ fn named<'a>(registry: &'a Registry, name: &str) -> Result<Named<'a>> {
     Ok(registry.named(name, &library)?)
 }
 
-/// The weights' size, or `missing` when the file is gone.
+/// The weights' size (a snapshot's safetensors files together), or `missing` when they are gone.
 fn size(model: &ResolvedModel) -> String {
-    std::fs::metadata(&model.weights)
-        .map_or_else(|_| "missing".to_string(), |m| human_size(m.len()))
+    model
+        .weights_bytes()
+        .map_or_else(|_| "missing".to_string(), human_size)
 }
 
 /// `ardana list`: the pulled models, in pull order.

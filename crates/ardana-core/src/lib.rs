@@ -3,7 +3,8 @@
 //! The readout reproduces decider 1.6.0 (`Mapika/decider@23579f7`): [`prompt`] builds its token rows, [`systemone`]
 //! validates Jev questions and turns probabilities into answers, [`engine::Decider`] ties them to a
 //! [`runtime::LoadedModel`], and [`py`] holds the Python semantics (JSON text, rounding, summation) the output
-//! depends on. [`chat`] derives the chat layout of stock instruct models from their chat template.
+//! depends on. [`chat`] derives the chat layout of stock instruct models from their chat template, and [`snapshot`]
+//! names the files of a safetensors checkpoint.
 
 pub mod chat;
 pub mod engine;
@@ -11,6 +12,7 @@ pub mod profile;
 pub mod prompt;
 pub mod py;
 pub mod runtime;
+pub mod snapshot;
 pub mod systemone;
 
 /// For the crates that may depend on the core only (`ardana-registry`): the size format and the library document's
