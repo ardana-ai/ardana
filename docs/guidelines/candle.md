@@ -62,6 +62,13 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   it (tensors are shared, the key-value cache starts empty), at offset 0. Never reuse a cache between prompts.
 - On the CPU the attention is Candle's fused causal kernel and no mask is built; on Metal `forward` builds the causal
   mask itself.
+- Off the CPU 0.11.0 falls back to matmul attention over `[heads, len, len]` scores, so Metal memory grows with the
+  square of the prompt: Qwen3-1.7B on an M1 Max (release build) peaks at 6.0 GB for one row of 2.2k tokens, 8.9 GB
+  for 4.3k and 18.4 GB for 8.7k, in 2.2 s, 6.7 s and 23 s, where its Q8_0 GGUF through llama.cpp stays near 5 GB in
+  1.0 s, 2.1 s and 6.0 s. Nothing caps a prompt on Metal below `n_ctx`: for a long state use `--gpu-layers 0` or the
+  model's GGUF.
+- The CPU is slow on Apple silicon: the same checkpoint in F32 takes 26 s for that 2.2k-token row and 3.5 s for four
+  rows of 180 tokens, which Metal answers in 0.3 s. The dev profile is about four times slower again.
 
 ### Logits
 - Return label logits only: index the hidden states at the slots and the head's rows at the label ids
