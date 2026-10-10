@@ -230,6 +230,15 @@ change them) and its Requirements are the definition of done.
   server.
   `models.toml` is reread when it changes, so a model `ardana pull` adds while `serve` runs is servable at once;
   models load on their first request and unload after `--keep-alive` idle.
+- `ardana update` installs the latest GitHub Release over an ardana the installers placed, through axoupdater: it
+  reads dist's install receipt (`ardana-receipt.json` in `$XDG_CONFIG_HOME/ardana`, then `~/.config/ardana`;
+  `%LOCALAPPDATA%\ardana` on Windows), looks ardana-ai/ardana's `releases/latest` up once and prints `ardana is up to
+  date (<version>)`, or runs that release's `ardana-installer.sh` (`.ps1`) into the receipt's directory and prints
+  `updated ardana from <old> to <new>`. A copy with no receipt for it (a source build, `target/release/ardana`) exits
+  1 with the install line, and a failed lookup exits 1 with `the update check failed` within 30 s.
+  `crates/ardana/tests/update.rs` runs it against a loopback stand-in of GitHub's API
+  (`ARDANA_INSTALLER_GHE_BASE_URL`, the receipt's directory in `AXOUPDATER_CONFIG_PATH`); the real download and
+  install is its `#[ignore]`d network test, into a scratch directory.
 - Running Ardana by hand: under `cargo run` (and `cargo test`), `.cargo/config.toml` puts `ARDANA_HOME` in
   `tmp/ardana`, `HF_HOME` in `tmp/hf` and `ARDANA_LIBRARY` at the library snapshot, so `cargo xtask build` then
   `cargo run --release -p ardana -- serve` serves the sandbox: its playground opens on decider:0.8b's "In browser" row while nothing is pulled, and an API request

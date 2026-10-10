@@ -1,9 +1,10 @@
-//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`. `main.rs` only
-//! parses arguments and reports errors.
+//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`, and `update`.
+//! `main.rs` only parses arguments and reports errors.
 
 mod ask;
 mod help;
 mod render;
+pub mod update;
 
 use std::io::{IsTerminal, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
@@ -65,6 +66,9 @@ pub enum Command {
     /// Remove models
     #[command(after_help = help::rm())]
     Rm(RmArgs),
+    /// Update ardana to the latest release
+    #[command(after_help = help::update())]
+    Update,
 }
 
 #[derive(Debug, Args)]
@@ -251,6 +255,7 @@ pub fn run(cli: Cli, matches: &ArgMatches) -> Result<()> {
         Command::Show(args) => show(&args),
         Command::Ps(args) => ps(&args),
         Command::Rm(args) => rm(&args),
+        Command::Update => update::update(),
     }
 }
 

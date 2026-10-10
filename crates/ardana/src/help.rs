@@ -95,6 +95,15 @@ cache, the Ollama store or where they were."
         .to_string()
 }
 
+pub fn update() -> String {
+    "Examples:
+  ardana update
+
+Installs the latest release from GitHub over this copy, in the directory the install script put it in. A copy that
+came another way (a source build) has no install receipt and is told the install line instead."
+        .to_string()
+}
+
 pub fn serve() -> String {
     format!(
         "Examples:
