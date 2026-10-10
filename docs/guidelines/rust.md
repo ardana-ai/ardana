@@ -58,6 +58,11 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   async API (`query_new_version`, `is_update_needed`, `run`) through the binary's `block_on`, on a plain thread: a
   runtime started inside another runtime's context panics, which is also why the `blocking` feature (`*_sync`) stays
   off. `update::check` is the one lookup; `Check::Unmanaged` (no receipt for this executable) sends nothing.
+  `update::notice` is the daily check of `run` and `serve`: it reads `$ARDANA_HOME/update-check.json` on the caller's
+  thread (the notice of a version seen within the day is there at once) and does everything that builds a client or
+  sends a request on a `std::thread` of its own, handing the notice back over an `mpsc` channel: `run` takes what is
+  there at exit (`try_recv`), `serve` waits for it on one more thread. No command waits on the lookup, and a new
+  caller must not either.
 - `[profile.release.package.brotli]` and `[profile.release.package.sha2]` set `opt-level = 3`: `ardana-server`'s build
   script embeds the playground through memory-serve, which brotli-compresses (quality 11) and hashes every asset,
   onnxruntime-web's 41 MB of WASM among them, and release builds compile a build script's dependencies unoptimised.
@@ -137,10 +142,11 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   and does its work in the child, which it tells by a variable naming that test's own scratch directory
   (`library.rs` "library_pulls_read_the_pinned_commit"); a test that pulls online points `HF_ENDPOINT` at a loopback
   stand-in of the Hub serving `tmp/hf` (`e2e_library.rs` "pull_reads_the_pinned_commit").
-- A test of `ardana update` gives its child a receipt directory of its own in `AXOUPDATER_CONFIG_PATH` (the receipt
-  naming the directory of `CARGO_BIN_EXE_ardana` as `install_prefix`) and a loopback stand-in of GitHub's API in
-  `ARDANA_INSTALLER_GHE_BASE_URL`, which records every request (`crates/ardana/tests/update.rs`); the real download
-  and install is `#[ignore = "e2e: network, GitHub Releases"]` and installs into `$ARDANA_TMP`.
+- A test of `ardana update` or the daily check gives its child a receipt directory of its own in
+  `AXOUPDATER_CONFIG_PATH` (the receipt naming the directory of `CARGO_BIN_EXE_ardana` as `install_prefix`) and a
+  loopback stand-in of GitHub's API in `ARDANA_INSTALLER_GHE_BASE_URL`, which records every request
+  (`crates/ardana/tests/update.rs`); the real download and install is `#[ignore = "e2e: network, GitHub Releases"]`
+  and installs into `$ARDANA_TMP`. Every other test's `ardana` has no receipt, so it checks nothing.
 - Prefer tests returning `anyhow::Result<()>` with `?` over chains of `unwrap()`.
 - Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice. The decider goldens in
   `crates/ardana-core/tests/data/decider/` are regenerated only by `cargo xtask export-decider`.

@@ -236,9 +236,17 @@ change them) and its Requirements are the definition of done.
   date (<version>)`, or runs that release's `ardana-installer.sh` (`.ps1`) into the receipt's directory and prints
   `updated ardana from <old> to <new>`. A copy with no receipt for it (a source build, `target/release/ardana`) exits
   1 with the install line, and a failed lookup exits 1 with `the update check failed` within 30 s.
-  `crates/ardana/tests/update.rs` runs it against a loopback stand-in of GitHub's API
-  (`ARDANA_INSTALLER_GHE_BASE_URL`, the receipt's directory in `AXOUPDATER_CONFIG_PATH`); the real download and
-  install is its `#[ignore]`d network test, into a scratch directory.
+  `ardana run` and `ardana serve` (once, at start) make the same lookup at most once a day per `ARDANA_HOME`, on a
+  thread of its own, so no answer, bind or model load waits on it: `$ARDANA_HOME/update-check.json` records the time
+  when a lookup starts (`checked_at`, Unix seconds) and the newest version seen once it answers (`version`), a failed
+  lookup standing for the day like an answered one. While that version is above the binary's, `run` prints `a newer
+  ardana is available: <latest> (this is <version>); run `ardana update`` as its last stderr line, after its answers
+  and without waiting for a lookup still in flight, and `serve` logs it once after `ardana serve: `, from the file
+  alone within the day. The check says nothing when its lookup fails, sends and writes nothing for a copy without a
+  receipt (every cargo-built `ardana`), and `ARDANA_NO_UPDATE_CHECK=1` turns it off (`ardana update` ignores that);
+  `pull`, `list`, `show`, `ps` and `rm` never check. `crates/ardana/tests/update.rs` runs both against a loopback
+  stand-in of GitHub's API (`ARDANA_INSTALLER_GHE_BASE_URL`, the receipt's directory in `AXOUPDATER_CONFIG_PATH`);
+  the real download and install is its `#[ignore]`d network test, into a scratch directory.
 - Running Ardana by hand: under `cargo run` (and `cargo test`), `.cargo/config.toml` puts `ARDANA_HOME` in
   `tmp/ardana`, `HF_HOME` in `tmp/hf` and `ARDANA_LIBRARY` at the library snapshot, so `cargo xtask build` then
   `cargo run --release -p ardana -- serve` serves the sandbox: its playground opens on decider:0.8b's "In browser" row while nothing is pulled, and an API request

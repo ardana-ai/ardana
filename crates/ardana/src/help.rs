@@ -5,6 +5,8 @@
 use ardana_registry::library::{DEFAULT_MODEL, LIBRARY_OFF, LIBRARY_URL, LIBRARY_VAR, MODELS_PAGE};
 use ardana_server::LIBRARY_REFRESH_VAR;
 
+use crate::update::NO_CHECK_VAR;
+
 pub fn main() -> String {
     format!(
         "Examples:
@@ -16,11 +18,12 @@ Models: the library at {MODELS_PAGE} ({DEFAULT_MODEL} is the default), or any GG
 (hf.co/<org>/<repo>).
 
 Environment:
-  ARDANA_HOME     Where the list of pulled models and the library cache live (default ~/.ardana)
-  {LIBRARY_VAR}  Where the library is read from (default {LIBRARY_URL}; a file path, or off)
-  HF_HOME         The Hugging Face cache weights download to (default ~/.cache/huggingface)
-  HF_HUB_OFFLINE  Set to 1 to use only models already in that cache
-  OLLAMA_MODELS   The Ollama store ollama: models are read from (default ~/.ollama/models)"
+  ARDANA_HOME             Where the list of pulled models and the library cache live (default ~/.ardana)
+  {LIBRARY_VAR}          Where the library is read from (default {LIBRARY_URL}; a file path, or off)
+  {NO_CHECK_VAR}  Set to 1 to stop run and serve from looking for a newer release (once a day)
+  HF_HOME                 The Hugging Face cache weights download to (default ~/.cache/huggingface)
+  HF_HUB_OFFLINE          Set to 1 to use only models already in that cache
+  OLLAMA_MODELS           The Ollama store ollama: models are read from (default ~/.ollama/models)"
     )
 }
 
@@ -96,12 +99,16 @@ cache, the Ollama store or where they were."
 }
 
 pub fn update() -> String {
-    "Examples:
+    format!(
+        "Examples:
   ardana update
 
 Installs the latest release from GitHub over this copy, in the directory the install script put it in. A copy that
-came another way (a source build) has no install receipt and is told the install line instead."
-        .to_string()
+came another way (a source build) has no install receipt and is told the install line instead.
+
+`ardana run` and `ardana serve` look for a newer release once a day and say so on stderr; {NO_CHECK_VAR}=1
+turns that off."
+    )
 }
 
 pub fn serve() -> String {

@@ -1,5 +1,5 @@
-//! `ardana update` over dist's install receipt, against a loopback stand-in of GitHub's API; the real download and
-//! install is the one `#[ignore]`d network test (Q7).
+//! `ardana update` over dist's install receipt and the daily check of `run` and `serve`, against a loopback stand-in
+//! of GitHub's API; the real download and install is the one `#[ignore]`d network test (Q7).
 
 mod common;
 
@@ -8,17 +8,23 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use common::Ardana;
-use serde_json::json;
+use common::{Ardana, Served, eventually};
+use serde_json::{Value, json};
 
 /// The version of the `ardana` under test.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The one lookup an answered check sends.
 const LATEST: &str = "/api/v3/repos/ardana-ai/ardana/releases/latest";
+
+/// The release list axoupdater asks for when `releases/latest` gave it no release.
+const RELEASES: &str = "/api/v3/repos/ardana-ai/ardana/releases";
+
+/// Long enough for a check that must not happen to have sent its request and logged its line.
+const QUIET: Duration = Duration::from_secs(1);
 
 /// What a [`GitHub`] answers every request with.
 #[derive(Clone)]
@@ -169,8 +175,71 @@ fn own_receipt(ardana: &Ardana) -> Result<PathBuf> {
 fn command(ardana: &Ardana, args: &[&str], receipts: &Path, github: &str) -> Command {
     let mut cmd = ardana.command(args);
     cmd.env("AXOUPDATER_CONFIG_PATH", receipts)
-        .env("ARDANA_INSTALLER_GHE_BASE_URL", github);
+        .env("ARDANA_INSTALLER_GHE_BASE_URL", github)
+        .env("ARDANA_NO_UPDATE_CHECK", "0");
     cmd
+}
+
+/// `ardana serve` reading its receipt from `receipts` and GitHub's API at `github`, with the daily check on unless
+/// `off`.
+fn serve(ardana: &Ardana, receipts: &Path, github: &str, off: bool) -> Result<Served> {
+    let receipts = receipts.to_str().context("a UTF-8 path")?;
+    Served::start(
+        ardana,
+        &[],
+        &[
+            ("AXOUPDATER_CONFIG_PATH", receipts),
+            ("ARDANA_INSTALLER_GHE_BASE_URL", github),
+            ("ARDANA_NO_UPDATE_CHECK", if off { "1" } else { "0" }),
+        ],
+    )
+}
+
+/// The line `ardana run` prints, and `ardana serve` logs after `ardana serve: `, for the release `version`.
+fn notice(version: &str) -> String {
+    format!("a newer ardana is available: {version} (this is {VERSION}); run `ardana update`")
+}
+
+/// How often `served` logged the notice of `version`.
+fn logged(served: &Served, version: &str) -> usize {
+    let line = format!("ardana serve: {}", notice(version));
+    served
+        .log_text()
+        .lines()
+        .filter(|logged| *logged == line)
+        .count()
+}
+
+/// Seconds since the Unix epoch, as the daily check's file dates a check.
+fn now() -> Result<u64> {
+    Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs())
+}
+
+/// The daily check's file in `ardana`'s home.
+fn check_file(ardana: &Ardana) -> PathBuf {
+    ardana.home.join("update-check.json")
+}
+
+/// Leaves the daily check's file as a check at `checked_at` that saw `version` would.
+fn write_check(ardana: &Ardana, checked_at: u64, version: &str) -> Result<()> {
+    std::fs::create_dir_all(&ardana.home)?;
+    let check = json!({"checked_at": checked_at, "version": version});
+    std::fs::write(check_file(ardana), check.to_string())?;
+    Ok(())
+}
+
+/// The daily check's file, parsed.
+fn read_check(ardana: &Ardana) -> Result<Value> {
+    let path = check_file(ardana);
+    let text =
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    Ok(serde_json::from_str(&text)?)
+}
+
+/// `check` is dated between `from` and now.
+fn dated_since(check: &Value, from: u64) -> Result<bool> {
+    let checked_at = check["checked_at"].as_u64().context("checked_at")?;
+    Ok((from..=now()?).contains(&checked_at))
 }
 
 /// Runs `cmd`, printing what it wrote; its exit code, stdout and stderr.
@@ -246,10 +315,7 @@ fn a_failed_lookup_is_an_error() -> Result<()> {
         assert!(took < Duration::from_secs(30), "{github}: took {took:?}");
     }
     // A failed lookup is two requests: `releases/latest`, then the release list axoupdater falls back to.
-    assert_eq!(
-        broken.requests(),
-        [LATEST, "/api/v3/repos/ardana-ai/ardana/releases"]
-    );
+    assert_eq!(broken.requests(), [LATEST, RELEASES]);
     Ok(())
 }
 
@@ -313,5 +379,209 @@ fn help_names_the_command() -> Result<()> {
     );
     let help = ardana.ok(["update", "--help"])?;
     assert!(help.contains("Examples:\n  ardana update\n"), "{help}");
+    Ok(())
+}
+
+/// R2.1: `serve` is up before the lookup answers, logs the newer release once and records the check.
+#[test]
+fn serve_logs_a_newer_release() -> Result<()> {
+    let ardana = Ardana::new("update-serve-newer")?;
+    let receipts = own_receipt(&ardana)?;
+    let github = GitHub::start(Answer::Release {
+        version: "9.9.9".to_string(),
+        after: Duration::from_secs(2),
+    })?;
+    let started = now()?;
+    let served = serve(&ardana, &receipts, &github.url, false)?;
+    // `/health` has answered, and the stand-in has not: nothing is logged and no version is recorded yet.
+    assert_eq!(logged(&served, "9.9.9"), 0, "{}", served.log_text());
+    assert!(
+        read_check(&ardana).is_ok_and(|check| check.get("version").is_none())
+            || !check_file(&ardana).exists()
+    );
+
+    eventually("the notice is logged", Duration::from_secs(10), || {
+        Ok(logged(&served, "9.9.9") == 1)
+    })?;
+    std::thread::sleep(QUIET);
+    assert_eq!(logged(&served, "9.9.9"), 1, "{}", served.log_text());
+    assert_eq!(github.requests(), [LATEST]);
+    let check = read_check(&ardana)?;
+    assert_eq!(check["version"], "9.9.9", "{check}");
+    assert!(dated_since(&check, started)?, "{check}");
+    Ok(())
+}
+
+/// R2.2: within a day of a check the notice comes from the file, without a request; after a day one lookup is sent.
+#[test]
+fn a_day_passes_between_requests() -> Result<()> {
+    let ardana = Ardana::new("update-daily")?;
+    let receipts = own_receipt(&ardana)?;
+    let github = GitHub::start(Answer::release("9.9.9"))?;
+
+    write_check(&ardana, now()?, "9.9.9")?;
+    {
+        let served = serve(&ardana, &receipts, &github.url, false)?;
+        eventually("the notice is logged", Duration::from_secs(10), || {
+            Ok(logged(&served, "9.9.9") == 1)
+        })?;
+        std::thread::sleep(QUIET);
+        assert_eq!(github.requests(), [] as [&str; 0]);
+    }
+
+    let started = now()?;
+    write_check(&ardana, started - 25 * 60 * 60, "9.9.9")?;
+    let served = serve(&ardana, &receipts, &github.url, false)?;
+    eventually("the notice is logged", Duration::from_secs(10), || {
+        Ok(logged(&served, "9.9.9") == 1)
+    })?;
+    std::thread::sleep(QUIET);
+    assert_eq!(github.requests(), [LATEST]);
+    assert!(dated_since(&read_check(&ardana)?, started)?);
+    Ok(())
+}
+
+/// R2.3: under `ARDANA_NO_UPDATE_CHECK=1`, and for a copy without a receipt, nothing is sent, said or written.
+#[test]
+fn the_check_is_off() -> Result<()> {
+    let github = GitHub::start(Answer::release("9.9.9"))?;
+
+    let switched_off = Ardana::new("update-check-off")?;
+    let receipts = own_receipt(&switched_off)?;
+    let unmanaged = Ardana::new("update-check-unmanaged")?;
+    let empty = unmanaged.home.with_file_name("empty");
+    std::fs::create_dir_all(&empty)?;
+
+    for (ardana, receipts, off) in [
+        (&switched_off, &receipts, true),
+        (&unmanaged, &empty, false),
+    ] {
+        let served = serve(ardana, receipts, &github.url, off)?;
+        std::thread::sleep(QUIET);
+        assert_eq!(github.requests(), [] as [&str; 0]);
+        assert!(
+            !served.log_text().contains("a newer ardana"),
+            "{}",
+            served.log_text()
+        );
+        assert!(!check_file(ardana).exists());
+    }
+    Ok(())
+}
+
+/// R2.4: a check that fails says nothing, leaves the server serving, and still stands for a day.
+#[test]
+fn a_failed_check_is_silent() -> Result<()> {
+    let broken = GitHub::start(Answer::Broken)?;
+    for (test, github) in [
+        ("update-check-broken", broken.url.clone()),
+        ("update-check-unreachable", GitHub::unreachable()?),
+    ] {
+        let ardana = Ardana::new(test)?;
+        let receipts = own_receipt(&ardana)?;
+        let started = now()?;
+        {
+            let served = serve(&ardana, &receipts, &github, false)?;
+            eventually("the check is recorded", Duration::from_secs(10), || {
+                Ok(check_file(&ardana).exists())
+            })?;
+            std::thread::sleep(QUIET);
+            assert!(
+                !served.log_text().contains("a newer ardana"),
+                "{}",
+                served.log_text()
+            );
+            assert_eq!(served.get("/health", "")?.0, 200);
+            let check = read_check(&ardana)?;
+            assert!(check.get("version").is_none(), "{check}");
+            assert!(dated_since(&check, started)?, "{check}");
+        }
+
+        // The failed check stands: a second server asks no one, not even a GitHub that would answer.
+        let recovered = GitHub::start(Answer::release("9.9.9"))?;
+        let served = serve(&ardana, &receipts, &recovered.url, false)?;
+        std::thread::sleep(QUIET);
+        assert_eq!(recovered.requests(), [] as [&str; 0]);
+        assert_eq!(logged(&served, "9.9.9"), 0, "{}", served.log_text());
+    }
+    assert_eq!(broken.requests(), [LATEST, RELEASES]);
+    Ok(())
+}
+
+/// R2.5: the file naming the version this binary is holds no news.
+#[test]
+fn an_installed_version_is_no_news() -> Result<()> {
+    let ardana = Ardana::new("update-no-news")?;
+    let receipts = own_receipt(&ardana)?;
+    let github = GitHub::start(Answer::release("9.9.9"))?;
+    write_check(&ardana, now()?, VERSION)?;
+    let served = serve(&ardana, &receipts, &github.url, false)?;
+    std::thread::sleep(QUIET);
+    assert!(
+        !served.log_text().contains("a newer ardana"),
+        "{}",
+        served.log_text()
+    );
+    assert_eq!(github.requests(), [] as [&str; 0]);
+    Ok(())
+}
+
+/// R2.6: `run` prints the notice from the file after its answers, as its last stderr line; a lookup that does not
+/// answer is not waited for.
+#[test]
+#[ignore = "e2e: decider-2b Q4_K_M GGUF and files in tmp/hf (cargo xtask fetch)"]
+fn run_says_a_newer_release() -> Result<()> {
+    let ardana = Ardana::new("update-run-newer")?;
+    let receipts = own_receipt(&ardana)?;
+    let ask = [
+        "run",
+        "decider:2b",
+        "My card was charged twice for order A-104. Please refund the duplicate.",
+        "--noul",
+        "Does the customer ask for a refund?",
+    ];
+
+    let github = GitHub::start(Answer::release("9.9.9"))?;
+    write_check(&ardana, now()?, "9.9.9")?;
+    let (code, stdout, stderr) = run(&mut command(&ardana, &ask, &receipts, &github.url))?;
+    assert_eq!(code, Some(0));
+    assert!(
+        stdout.starts_with("Does the customer ask for a refund?\n")
+            && stdout.contains("probability of yes"),
+        "{stdout}"
+    );
+    assert_eq!(stderr.lines().last(), Some(notice("9.9.9").as_str()));
+    assert_eq!(github.requests(), [] as [&str; 0]);
+
+    std::fs::remove_file(check_file(&ardana))?;
+    let silent = GitHub::start(Answer::Silence)?;
+    let started = (now()?, Instant::now());
+    let (code, stdout, stderr) = run(&mut command(&ardana, &ask, &receipts, &silent.url))?;
+    let took = started.1.elapsed();
+    assert_eq!(code, Some(0));
+    assert!(stdout.contains("probability of yes"), "{stdout}");
+    assert!(!stderr.contains("a newer ardana"), "{stderr}");
+    assert!(took < Duration::from_secs(60), "took {took:?}");
+    assert_eq!(silent.requests(), [LATEST]);
+    let check = read_check(&ardana)?;
+    assert!(check.get("version").is_none(), "{check}");
+    assert!(dated_since(&check, started.0)?, "{check}");
+    Ok(())
+}
+
+/// R2.7: the switch is listed with the other variables.
+#[test]
+fn help_names_the_switch() -> Result<()> {
+    let help = Ardana::new("update-help-switch")?.ok(["--help"])?;
+    let environment = help
+        .split_once("Environment:\n")
+        .context("an Environment: block")?
+        .1;
+    assert!(
+        environment
+            .lines()
+            .any(|line| line.starts_with("  ARDANA_NO_UPDATE_CHECK ")),
+        "{help}"
+    );
     Ok(())
 }

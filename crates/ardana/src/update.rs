@@ -1,10 +1,15 @@
 //! `ardana update` (Q1) and the check behind it: the install receipt dist's installers write, the latest GitHub
-//! Release and that release's installer, all through axoupdater.
+//! Release and that release's installer, all through axoupdater. `run` and `serve` make that check once a day and
+//! say when a newer release exists (Q4, Q5).
 
-use std::time::Duration;
+use std::path::Path;
+use std::sync::mpsc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
-use axoupdater::{AxoUpdater, AxoupdateError};
+use ardana_registry::Registry;
+use axoupdater::{AxoUpdater, AxoupdateError, Version};
+use serde_json::{Value, json};
 
 use crate::block_on;
 
@@ -24,6 +29,16 @@ const INSTALL: &str = if cfg!(windows) {
 } else {
     "curl -fsSL https://ardana.ai/install.sh | sh"
 };
+
+/// Set to `1`, it stops `run` and `serve` from checking for a newer release (Q3); `ardana update` ignores it.
+pub const NO_CHECK_VAR: &str = "ARDANA_NO_UPDATE_CHECK";
+
+/// The daily check's file in the Ardana home: `checked_at`, when the last lookup started (Unix seconds), and
+/// `version`, the newest release seen, once a lookup answered.
+const CHECK_FILE: &str = "update-check.json";
+
+/// How long a lookup, answered or failed, stands before the next one.
+const DAY: u64 = 24 * 60 * 60;
 
 /// What the latest release is to this copy of ardana.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,4 +124,104 @@ fn latest(updater: &mut AxoUpdater) -> Result<Check> {
         Some(version) if newer => Check::Newer(version),
         _ => Check::UpToDate,
     })
+}
+
+/// The daily check of `run` and `serve`: where the notice of a newer release arrives, when there is one. Within a
+/// day of the last lookup the notice comes from the check's file and is there at once (Q5); otherwise a thread of
+/// its own looks the release up, so the caller never waits on the network, and nothing arrives when the lookup
+/// fails, when the installers did not place this copy or under [`NO_CHECK_VAR`].
+pub fn notice() -> mpsc::Receiver<String> {
+    let (tell, told) = mpsc::channel();
+    if std::env::var_os(NO_CHECK_VAR).is_some_and(|value| value == "1") {
+        return told;
+    }
+    let Ok(home) = Registry::home() else {
+        return told;
+    };
+    let path = home.join(CHECK_FILE);
+    let seen = Seen::read(&path);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs());
+    if now
+        .checked_sub(seen.checked_at)
+        .is_some_and(|age| age < DAY)
+    {
+        if let Some(notice) = seen.version.as_deref().and_then(news) {
+            let _ = tell.send(notice);
+        }
+        return told;
+    }
+    std::thread::spawn(move || {
+        // A check that cannot be made or recorded says nothing.
+        if let Ok(Some(notice)) = look(&path, seen, now) {
+            let _ = tell.send(notice);
+        }
+    });
+    told
+}
+
+/// One lookup for the daily check: `path` records `now` before the lookup starts and the version once it answers,
+/// keeping the version `seen` until then. The notice, when that version is news.
+fn look(path: &Path, seen: Seen, now: u64) -> Result<Option<String>> {
+    // A copy the installers did not place checks nothing and leaves no file.
+    if installed()?.is_none() {
+        return Ok(None);
+    }
+    let mut seen = Seen {
+        checked_at: now,
+        ..seen
+    };
+    seen.write(path)?;
+    let version = match check()? {
+        Check::Newer(version) => version,
+        Check::UpToDate => VERSION.to_string(),
+        Check::Unmanaged => return Ok(None),
+    };
+    let notice = news(&version);
+    seen.version = Some(version);
+    seen.write(path)?;
+    Ok(notice)
+}
+
+/// The notice for the release `version`, when it is above this binary's.
+fn news(version: &str) -> Option<String> {
+    let newer = Version::parse(version).ok()? > Version::parse(VERSION).ok()?;
+    newer.then(|| {
+        format!("a newer ardana is available: {version} (this is {VERSION}); run `ardana update`")
+    })
+}
+
+/// What [`CHECK_FILE`] holds; a file that is missing or does not read is no check yet.
+#[derive(Default)]
+struct Seen {
+    checked_at: u64,
+    version: Option<String>,
+}
+
+impl Seen {
+    fn read(path: &Path) -> Seen {
+        let Some(value) = std::fs::read(path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        else {
+            return Seen::default();
+        };
+        Seen {
+            checked_at: value["checked_at"].as_u64().unwrap_or_default(),
+            version: value["version"].as_str().map(str::to_string),
+        }
+    }
+
+    fn write(&self, path: &Path) -> Result<()> {
+        let mut value = json!({"checked_at": self.checked_at});
+        if let Some(version) = &self.version {
+            value["version"] = json!(version);
+        }
+        if let Some(home) = path.parent() {
+            std::fs::create_dir_all(home)?;
+        }
+        std::fs::write(path, value.to_string())
+            .with_context(|| format!("writing {}", path.display()))
+    }
 }
