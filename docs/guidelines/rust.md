@@ -57,7 +57,8 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   timeout (10 s a request; the client `new_for` builds has none, and a failed lookup is two requests). Call its
   async API (`query_new_version`, `is_update_needed`, `run`) through the binary's `block_on`, on a plain thread: a
   runtime started inside another runtime's context panics, which is also why the `blocking` feature (`*_sync`) stays
-  off. `update::check` is the one lookup; `Check::Unmanaged` (no receipt for this executable) sends nothing.
+  off. One `block_on` covers a lookup and the install after it, since the client's connections belong to the runtime
+  that opened them. `update::check` is the one lookup; `Check::Unmanaged` (no receipt for this executable) sends nothing.
   `update::notice` is the daily check of `run` and `serve`: it reads `$ARDANA_HOME/update-check.json` on the caller's
   thread (the notice of a version seen within the day is there at once) and does everything that builds a client or
   sends a request on a `std::thread` of its own, handing the notice back over an `mpsc` channel: `run` takes what is
@@ -146,7 +147,8 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   `AXOUPDATER_CONFIG_PATH` (the receipt naming the directory of `CARGO_BIN_EXE_ardana` as `install_prefix`) and a
   loopback stand-in of GitHub's API in `ARDANA_INSTALLER_GHE_BASE_URL`, which records every request
   (`crates/ardana/tests/update.rs`); the real download and install is `#[ignore = "e2e: network, GitHub Releases"]`
-  and installs into `$ARDANA_TMP`. Every other test's `ardana` has no receipt, so it checks nothing.
+  and installs into `$ARDANA_TMP`. No other test's `ardana` has a receipt for it (a developer's own install receipt
+  names another directory), so it checks nothing.
 - Prefer tests returning `anyhow::Result<()>` with `?` over chains of `unwrap()`.
 - Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice. The decider goldens in
   `crates/ardana-core/tests/data/decider/` are regenerated only by `cargo xtask export-decider`.

@@ -562,7 +562,8 @@ fn run_says_a_newer_release() -> Result<()> {
     assert!(stdout.contains("probability of yes"), "{stdout}");
     assert!(!stderr.contains("a newer ardana"), "{stderr}");
     assert!(took < Duration::from_secs(60), "took {took:?}");
-    assert_eq!(silent.requests(), [LATEST]);
+    // The lookup started, and may have given up on `releases/latest` while the model answered.
+    assert_eq!(silent.requests().first().map(String::as_str), Some(LATEST));
     let check = read_check(&ardana)?;
     assert!(check.get("version").is_none(), "{check}");
     assert!(dated_since(&check, started.0)?, "{check}");

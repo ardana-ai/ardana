@@ -56,7 +56,7 @@ pub enum Check {
 /// sent.
 pub fn check() -> Result<Check> {
     match installed()? {
-        Some(mut updater) => latest(&mut updater),
+        Some(mut updater) => block_on(latest(&mut updater))?,
         None => Ok(Check::Unmanaged),
     }
 }
@@ -70,19 +70,25 @@ pub fn update() -> Result<()> {
              install the latest release with:\n  {INSTALL}"
         );
     };
-    if let Check::Newer(version) = latest(&mut updater)? {
-        // The lookup's release is the one installed: `run` asks for no other.
-        let updated = block_on(updater.run())?
-            .with_context(|| format!("installing ardana {version}"))?
-            .with_context(|| format!("ardana {version} was not installed"))?;
-        let from = updated
-            .old_version
-            .map_or_else(|| VERSION.to_string(), |old| old.to_string());
-        println!("updated ardana from {from} to {}", updated.new_version);
-    } else {
-        println!("ardana is up to date ({VERSION})");
-    }
-    Ok(())
+    // One runtime under the lookup and the install: the client's connections do not outlive the runtime they
+    // were opened on.
+    block_on(async {
+        if let Check::Newer(version) = latest(&mut updater).await? {
+            // The lookup's release is the one installed: `run` asks for no other.
+            let updated = updater
+                .run()
+                .await
+                .with_context(|| format!("installing ardana {version}"))?
+                .with_context(|| format!("ardana {version} was not installed"))?;
+            let from = updated
+                .old_version
+                .map_or_else(|| VERSION.to_string(), |old| old.to_string());
+            println!("updated ardana from {from} to {}", updated.new_version);
+        } else {
+            println!("ardana is up to date ({VERSION})");
+        }
+        Ok(())
+    })?
 }
 
 /// An updater holding the receipt of this executable, or `None` when the installers did not place it: no receipt,
@@ -112,13 +118,14 @@ fn installed() -> Result<Option<AxoUpdater>> {
 
 /// Looks the latest stable release up (one `releases/latest` GET, and the release list when that fails) and compares
 /// it with the receipt's version.
-fn latest(updater: &mut AxoUpdater) -> Result<Check> {
-    let (version, newer) = block_on(async {
+async fn latest(updater: &mut AxoUpdater) -> Result<Check> {
+    let (version, newer) = async {
         let version = updater.query_new_version().await?.map(ToString::to_string);
         // The release is at hand now, so this sends nothing.
         let newer = updater.is_update_needed().await?;
         Ok::<_, AxoupdateError>((version, newer))
-    })?
+    }
+    .await
     .context("the update check failed")?;
     Ok(match version {
         Some(version) if newer => Check::Newer(version),
