@@ -26,7 +26,8 @@ impl Default for LoadOptions {
 pub trait Runtime: Send + Sync {
     /// A stable identifier, e.g. `llama.cpp`.
     fn id(&self) -> &'static str;
-    /// Whether this runtime can load the weights at `weights` (by format, not by trying).
+    /// Whether this runtime can load the weights at `weights`, a weights file or a [`crate::snapshot`] directory (by
+    /// format or by `config.json#architectures`, not by trying).
     fn supports(&self, weights: &Path) -> bool;
     fn load(&self, weights: &Path, opts: &LoadOptions) -> anyhow::Result<Box<dyn LoadedModel>>;
 }

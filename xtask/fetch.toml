@@ -26,8 +26,8 @@
 #   revision  the full commit id the files come from; also written to `refs/main`
 #   files     files downloaded into tmp/hf/hub/models--<org>--<name> in the Hub cache
 #            layout (blobs/, snapshots/<revision>/, refs/main), each verified against
-#            its LFS sha256 or git blob id; `fetch --tests` leaves out .gguf, .onnx and
-#            .onnx.data files
+#            its LFS sha256 or git blob id; `fetch --tests` leaves out .gguf, .onnx,
+#            .onnx.data and .safetensors files
 #   `cargo xtask onnx publish <name>` pins the ardana-ai repositories it uploads here.
 #
 # [[hf_local]] fields: as [[hf]], but the files are copied read-only from the
@@ -173,6 +173,25 @@ files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
 repo = "Qwen/Qwen3.8-27B"
 revision = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
 files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
+
+# The Candle runtime's acceptance checkpoints (safetensors and the GGUF it is compared with), used by the local
+# real-model tests only; neither is a library model.
+[[hf]]
+repo = "Qwen/Qwen3-1.7B"
+revision = "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+files = [
+    "config.json",
+    "model.safetensors.index.json",
+    "model-00001-of-00002.safetensors",
+    "model-00002-of-00002.safetensors",
+    "tokenizer.json",
+    "tokenizer_config.json",
+]
+
+[[hf]]
+repo = "Qwen/Qwen3-1.7B-GGUF"
+revision = "90862c4b9d2787eaed51d12237eafdfe7c5f6077"
+files = ["Qwen3-1.7B-Q8_0.gguf"]
 
 [[hf]]
 repo = "ardana-ai/decider-0.8b-ONNX"

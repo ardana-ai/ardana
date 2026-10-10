@@ -831,3 +831,125 @@ enum Pin {
     Weights,
     Tokenizer,
 }
+
+/// A runtime that implements one architecture, as `ardana-candle` reads it: a snapshot directory whose `config.json`
+/// names `Qwen3ForCausalLM`.
+struct Qwen3Only;
+
+impl Runtime for Qwen3Only {
+    fn id(&self) -> &'static str {
+        "qwen3-only"
+    }
+
+    fn supports(&self, weights: &Path) -> bool {
+        std::fs::read_to_string(weights.join(ardana_core::snapshot::CONFIG))
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .is_some_and(|config| {
+                ardana_core::snapshot::architectures(&config) == ["Qwen3ForCausalLM"]
+            })
+    }
+
+    fn load(&self, _weights: &Path, _opts: &LoadOptions) -> Result<Box<dyn LoadedModel>> {
+        anyhow::bail!("this runtime loads nothing")
+    }
+}
+
+/// R1.3 (Q6, Q7): a repository without a GGUF and with a `config.json` is a safetensors checkpoint, and one whose
+/// `config.json#architectures` no runtime implements fails at the pull naming them, after `config.json` and before any
+/// weight file: offline, over fixture snapshots holding `config.json` and the tokenizer files and no weights, the
+/// unimplemented architecture is that error, while an implemented one gets as far as the weights the snapshot lacks,
+/// and a repository without `config.json` (and without a GGUF) fails naming both.
+/// As [`library_pulls_read_the_pinned_commit`] does, the test builds the cache in
+/// `$ARDANA_TMP/registry-architecture/hub` and pulls in a child of itself that has `HF_HUB_CACHE` there and
+/// `HF_HUB_OFFLINE=1`.
+#[test]
+fn refuses_an_unimplemented_architecture() -> Result<()> {
+    let tmp = PathBuf::from(std::env::var_os("ARDANA_TMP").context("ARDANA_TMP is not set")?);
+    let cache = tmp.join("registry-architecture").join("hub");
+    if std::env::var_os("HF_HUB_CACHE").as_deref() == Some(cache.as_os_str()) {
+        return architecture_pulls();
+    }
+    home("registry-architecture")?;
+    // Qwen3-1.7B's text files as `cargo xtask fetch` put them into `tmp/hf`, under another architecture for one repo.
+    let qwen3 = PathBuf::from(std::env::var_os("HF_HOME").context("HF_HOME is not set")?)
+        .join("hub/models--Qwen--Qwen3-1.7B");
+    let commit = std::fs::read_to_string(qwen3.join("refs/main"))
+        .with_context(|| format!("{}: run `cargo xtask fetch`", qwen3.display()))?;
+    let fetched = qwen3.join("snapshots").join(commit.trim());
+    let config: Value =
+        serde_json::from_str(&std::fs::read_to_string(fetched.join("config.json"))?)?;
+    for (repo, architecture) in [
+        ("models--test--mamba-checkpoint", Some("MambaForCausalLM")),
+        ("models--test--qwen3-checkpoint", Some("Qwen3ForCausalLM")),
+        ("models--test--tokenizer-only", None),
+    ] {
+        let repo = cache.join(repo);
+        let snapshot = repo.join("snapshots").join(MAIN);
+        std::fs::create_dir_all(&snapshot)?;
+        if let Some(architecture) = architecture {
+            let mut config = config.clone();
+            config["architectures"] = json!([architecture]);
+            std::fs::write(
+                snapshot.join("config.json"),
+                serde_json::to_vec_pretty(&config)?,
+            )?;
+        }
+        for file in ["tokenizer.json", "tokenizer_config.json"] {
+            std::fs::copy(fetched.join(file), snapshot.join(file))?;
+        }
+        std::fs::create_dir_all(repo.join("refs"))?;
+        std::fs::write(repo.join("refs/main"), MAIN)?;
+    }
+
+    let test = "refuses_an_unimplemented_architecture";
+    let out = Command::new(std::env::current_exe()?)
+        .args([test, "--exact", "--nocapture"])
+        .env("HF_HUB_CACHE", &cache)
+        .env("HF_HUB_OFFLINE", "1")
+        .env("HF_ENDPOINT", "http://127.0.0.1:9")
+        .output()?;
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    println!("{stdout}{}", String::from_utf8_lossy(&out.stderr));
+    ensure!(out.status.success(), "the child failed: {}", out.status);
+    ensure!(stdout.contains("1 passed"), "the child ran {test}");
+    Ok(())
+}
+
+/// The child's half of [`refuses_an_unimplemented_architecture`]: pulls the two fixture checkpoints, offline.
+fn architecture_pulls() -> Result<()> {
+    let runtimes = Runtimes(vec![Box::new(Qwen3Only)]);
+    let pull = |reference: &str| {
+        block_on(ardana_registry::pull(
+            reference,
+            &PullOptions::default(),
+            &runtimes,
+            &Library::empty(),
+        ))
+    };
+    let err = pull("hf.co/test/mamba-checkpoint").unwrap_err();
+    assert!(
+        matches!(&err, RegistryError::Architecture { reference, architectures }
+            if reference == "hf.co/test/mamba-checkpoint" && architectures == &["MambaForCausalLM"]),
+        "{err:?}"
+    );
+    assert_eq!(
+        err.to_string(),
+        "hf.co/test/mamba-checkpoint: no runtime implements MambaForCausalLM (config.json#architectures)"
+    );
+
+    // An implemented architecture passes that check and stops at the weights, which the snapshot does not hold.
+    let err = pull("hf.co/test/qwen3-checkpoint").unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "hf.co/test/qwen3-checkpoint: it has config.json but neither model.safetensors.index.json nor model.safetensors"
+    );
+
+    // A repository with neither a GGUF nor a `config.json` is neither pull, and the error names both.
+    let err = pull("hf.co/test/tokenizer-only").unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "hf.co/test/tokenizer-only: no GGUF for the quant Q4_K_M; it has no GGUF files and no config.json"
+    );
+    Ok(())
+}

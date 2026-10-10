@@ -1,13 +1,14 @@
 //! R4.1 to R4.3 and R4.7: `ardana pull` records `hf.co/` and `ollama:` models in `$ARDANA_HOME/models.toml` from
 //! the files `cargo xtask fetch` put into `tmp/hf` (offline) and the local Ollama store, and `ardana run <name>`
-//! answers with each of them.
+//! answers with each of them. A safetensors checkpoint is pulled through a stand-in of the Hub and answers through
+//! Candle as its GGUF answers through llama.cpp.
 
 mod common;
 
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
-use common::Ardana;
+use anyhow::{Context, Result, ensure};
+use common::{Ardana, HubStandIn, Served};
 use toml::Value;
 
 const DECIDER_2B: &str = "Mapika/decider-2b-GGUF";
@@ -299,5 +300,204 @@ fn pull_local() -> Result<()> {
     );
     assert_eq!(str_of(profile(&entry)?, "name")?, "decider-2b-v11");
     assert_eq!(layout_kind(&entry)?, "plain");
+    Ok(())
+}
+
+/// The safetensors checkpoint the Candle runtime is accepted on, and the GGUF it is compared with.
+const QWEN3: &str = "Qwen/Qwen3-1.7B";
+const QWEN3_GGUF_PULL: [&str; 6] = [
+    "pull",
+    "hf.co/Qwen/Qwen3-1.7B-GGUF:Qwen3-1.7B-Q8_0.gguf",
+    "--tokenizer",
+    "hf.co/Qwen/Qwen3-1.7B",
+    "--name",
+    "q3-gguf",
+];
+/// The files of Qwen/Qwen3-1.7B at the pinned commit, as the Hub lists them.
+const QWEN3_LISTING: [&str; 12] = [
+    ".gitattributes",
+    "LICENSE",
+    "README.md",
+    "config.json",
+    "generation_config.json",
+    "merges.txt",
+    "model-00001-of-00002.safetensors",
+    "model-00002-of-00002.safetensors",
+    "model.safetensors.index.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json",
+];
+/// The safetensors files among them.
+const QWEN3_SHARDS: [&str; 2] = [
+    "model-00001-of-00002.safetensors",
+    "model-00002-of-00002.safetensors",
+];
+
+/// `ardana pull hf.co/Qwen/Qwen3-1.7B --name q3-st` online, against a [`HubStandIn`] listing the repository's files,
+/// through a hub cache of the test's own (`<home>/../hub`) that holds the pinned blobs; returns the stand-in and the
+/// cache.
+fn pull_qwen3(ardana: &Ardana) -> Result<(HubStandIn, PathBuf)> {
+    let hub = HubStandIn::start(QWEN3, &QWEN3_LISTING)?;
+    let cache = ardana
+        .home
+        .parent()
+        .context("the home has a parent")?
+        .join("hub");
+    HubStandIn::cache_with_blobs(&cache, QWEN3)?;
+    let mut cmd = ardana.command(["pull", "hf.co/Qwen/Qwen3-1.7B", "--name", "q3-st"]);
+    cmd.env_remove("HF_HUB_OFFLINE")
+        .env("HF_HUB_CACHE", &cache)
+        .env("HF_ENDPOINT", &hub.endpoint);
+    let output = cmd.output()?;
+    println!(
+        "{cmd:?}:\n{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        output.status.success(),
+        "{cmd:?} failed: {:?}",
+        hub.requests()
+    );
+    Ok((hub, cache))
+}
+
+/// R1.1: a GGUF-less repository with a `config.json` is a snapshot pull. It asks the Hub for `config.json`, then the
+/// index and the two shards it names, then the tokenizer files, and for no other file the repository lists; the entry
+/// records runtime `candle`, the snapshot directory as its weights and the source as typed, `ardana show` prints the
+/// runtime and `ardana list` the shards' bytes as the size.
+#[test]
+#[ignore = "e2e: Qwen3-1.7B safetensors and tokenizer in tmp/hf (cargo xtask fetch)"]
+fn pull_safetensors() -> Result<()> {
+    let ardana = Ardana::new("e2e-registry-pull-safetensors")?;
+    let (hub, cache) = pull_qwen3(&ardana)?;
+    let commit = common::hf_snapshot(QWEN3)?
+        .file_name()
+        .context("a commit")?
+        .to_owned();
+    assert_eq!(
+        hub.requests().first().map(String::as_str),
+        Some("GET /api/models/Qwen/Qwen3-1.7B")
+    );
+    assert_eq!(
+        hub.files(),
+        [
+            "config.json",
+            "model.safetensors.index.json",
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors",
+            "tokenizer_config.json",
+            "tokenizer.json",
+        ],
+        "{:?}",
+        hub.requests()
+    );
+
+    let entry = ardana.entry("q3-st")?;
+    let snapshot = cache
+        .join("models--Qwen--Qwen3-1.7B/snapshots")
+        .join(commit);
+    assert_eq!(str_of(&entry, "source")?, "hf.co/Qwen/Qwen3-1.7B");
+    assert_eq!(str_of(&entry, "runtime")?, "candle");
+    assert_eq!(path_of(&entry, "weights")?, snapshot);
+    assert_eq!(
+        path_of(&entry, "tokenizer")?,
+        snapshot.join("tokenizer.json")
+    );
+    check_stock_chat(&entry, "q3-st")?;
+
+    let show = ardana.ok(["show", "q3-st"])?;
+    assert!(
+        show.lines()
+            .any(|line| line.split_whitespace().eq(["runtime", "candle"])),
+        "{show}"
+    );
+    let mut bytes = 0;
+    for shard in QWEN3_SHARDS {
+        bytes += std::fs::metadata(snapshot.join(shard))?.len();
+    }
+    let list = ardana.ok(["list"])?;
+    let row = list
+        .lines()
+        .find(|line| line.starts_with("q3-st "))
+        .with_context(|| format!("no q3-st row in {list}"))?;
+    let size = ardana_api::human_size(bytes);
+    assert!(
+        row.split("  ").map(str::trim).any(|cell| cell == size),
+        "{row} has no size {size}"
+    );
+    Ok(())
+}
+
+/// R1.2: Candle answers the ticket and sentiment fixtures with the top choice and the noul side the GGUF of the same
+/// model gives through llama.cpp, every probability within 0.1, through `ardana run` (also at `--gpu-layers 0`) and
+/// through `ardana serve`.
+#[test]
+#[ignore = "e2e: Qwen3-1.7B safetensors and Q8_0 GGUF in tmp/hf, loaded through Candle and llama.cpp"]
+fn candle_answers_like_the_gguf() -> Result<()> {
+    let ardana = Ardana::new("e2e-registry-candle-like-gguf")?;
+    pull_qwen3(&ardana)?;
+    ardana.ok(QWEN3_GGUF_PULL)?;
+    let served = Served::start(&ardana, &[], &[])?;
+    for fixture in ["ticket.json", "sentiment.json"] {
+        let request = common::request(fixture);
+        let gguf = ardana.run_named("q3-gguf", &request, &[])?;
+        let candle = ardana.run_named("q3-st", &request, &[])?;
+        same_answers(&candle, &gguf, 0.1).with_context(|| format!("{fixture}: {candle}"))?;
+        let cpu = ardana.run_named("q3-st", &request, &["--gpu-layers", "0"])?;
+        same_answers(&cpu, &gguf, 0.1).with_context(|| format!("{fixture} on the CPU: {cpu}"))?;
+
+        let mut body: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&request)?)?;
+        body["model"] = "q3-st".into();
+        let (status, answered) = served.decide(&body)?;
+        assert_eq!(status, 200, "{answered}");
+        same_answers(&answered, &gguf, 0.1)
+            .with_context(|| format!("{fixture} from the server: {answered}"))?;
+    }
+    Ok(())
+}
+
+/// `got` answers every question of `want` with the same choice (and the same side of 0.5 for a noul), each
+/// probability within `tolerance` of `want`'s.
+fn same_answers(got: &serde_json::Value, want: &serde_json::Value, tolerance: f64) -> Result<()> {
+    let answers = want["answers"].as_object().context("answers")?;
+    ensure!(!answers.is_empty(), "no answers in {want}");
+    for (key, want) in answers {
+        let got = &got["answers"][key];
+        let near = |a: &serde_json::Value, b: &serde_json::Value| -> Result<()> {
+            let (a, b) = (
+                a.as_f64().context("a probability")?,
+                b.as_f64().context("a probability")?,
+            );
+            ensure!(
+                (a - b).abs() <= tolerance,
+                "{key}: {a} and {b} differ by more than {tolerance}"
+            );
+            Ok(())
+        };
+        match want["type"].as_str() {
+            Some("noul") => {
+                let (g, w) = (&got["noul"], &want["noul"]);
+                ensure!(
+                    g.as_f64().map(|p| p > 0.5) == w.as_f64().map(|p| p > 0.5),
+                    "{key}: noul {g}, not on the side of {w}"
+                );
+                near(g, w)?;
+            }
+            Some("choice") => {
+                ensure!(
+                    got["choice"] == want["choice"],
+                    "{key}: {got} chose otherwise than {want}"
+                );
+                let probabilities = want["probabilities"].as_object().context("probabilities")?;
+                for (option, p) in probabilities {
+                    near(&got["probabilities"][option], p)?;
+                }
+            }
+            other => anyhow::bail!("{key}: an answer of type {other:?}"),
+        }
+    }
     Ok(())
 }

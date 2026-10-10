@@ -37,6 +37,22 @@ pub const GUIDELINES: &[Guideline] = &[
         ],
     },
     Guideline {
+        file: "candle.md",
+        pins: &[
+            ("candle-core", "0.11.0"),
+            ("candle-nn", "0.11.0"),
+            ("candle-transformers", "0.11.0"),
+        ],
+        official: &[
+            "https://docs.rs/candle-core",
+            "https://docs.rs/candle-nn",
+            "https://docs.rs/candle-transformers",
+            "https://github.com/huggingface/candle",
+            "https://huggingface.co/docs/",
+            "https://crates.io/crates/candle-",
+        ],
+    },
+    Guideline {
         file: "huggingface.md",
         pins: &[("tokenizers", "0.23.2"), ("hf-hub", "1.0.0")],
         official: &[

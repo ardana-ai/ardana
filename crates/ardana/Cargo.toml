@@ -18,6 +18,7 @@ vulkan = ["ardana-llama/vulkan"]
 [dependencies]
 anyhow.workspace = true
 ardana-api.workspace = true
+ardana-candle.workspace = true
 ardana-core.workspace = true
 ardana-llama.workspace = true
 ardana-registry.workspace = true

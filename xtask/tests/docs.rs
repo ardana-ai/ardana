@@ -64,6 +64,19 @@ fn rejects_missing_guideline_link() {
     );
     assert!(err.contains("docs/guidelines/playwright.md:"), "{err}");
 
+    // The Candle guideline: its pins, and the file itself.
+    let copy = docs_copy("candle");
+    let candle = copy.join("docs/guidelines/candle.md");
+    edit(&candle, "0.11.0", "0.10.2");
+    let err = check_docs(&copy).unwrap_err().to_string();
+    assert!(
+        err.contains("candle.md: missing pinned version `candle-nn` 0.11.0"),
+        "{err}"
+    );
+    fs::rename(&candle, copy.join("docs/guidelines/candle-notes.md")).unwrap();
+    let err = check_docs(&copy).unwrap_err().to_string();
+    assert!(err.contains("docs/guidelines/candle.md:"), "{err}");
+
     let copy = docs_copy("agents");
     fs::write(
         copy.join("AGENTS.md"),

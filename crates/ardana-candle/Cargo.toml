@@ -1,0 +1,21 @@
+[package]
+name = "ardana-candle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+ardana-core.workspace = true
+candle-core.workspace = true
+candle-nn.workspace = true
+candle-transformers.workspace = true
+serde_json.workspace = true
+
+# Candle's Metal backend on Apple silicon builds alone (Q5): every other target computes on the CPU.
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+candle-core = { workspace = true, features = ["metal"] }
+candle-nn = { workspace = true, features = ["metal"] }
+candle-transformers = { workspace = true, features = ["metal"] }
