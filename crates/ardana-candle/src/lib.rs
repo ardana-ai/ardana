@@ -6,6 +6,12 @@
 //! architecture is its configuration ([`Architecture`]) and its decoder ([`Decoder`]), which returns the hidden states
 //! at every position; the readout is shared ([`CausalLm`]): the label logits are the head's rows for the label ids
 //! applied to the hidden states at the slots, in F32, so a prompt never computes a whole vocabulary row.
+//!
+//! candle-transformers' Llama and Phi-3 narrow to the last position inside the model, so [`llama`] and [`phi3`] are
+//! its 0.11.0 files, copied and changed as each one's header lists.
+
+mod llama;
+mod phi3;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -21,7 +27,13 @@ use candle_transformers::models::{qwen2, qwen3};
 use serde_json::Value;
 
 /// The `config.json#architectures` names this runtime implements.
-pub const ARCHITECTURES: [&str; 3] = ["Qwen3ForCausalLM", "Qwen2ForCausalLM", "SmolLM3ForCausalLM"];
+pub const ARCHITECTURES: [&str; 5] = [
+    "Qwen3ForCausalLM",
+    "Qwen2ForCausalLM",
+    "SmolLM3ForCausalLM",
+    "LlamaForCausalLM",
+    "Phi3ForCausalLM",
+];
 
 /// Candle for safetensors snapshots, on Metal by default on Apple silicon.
 #[derive(Debug, Default, Clone, Copy)]
@@ -146,6 +158,8 @@ fn configuration(architecture: &str, config: &Value) -> Result<Box<dyn Architect
         "SmolLM3ForCausalLM" => {
             Box::new(serde_json::from_value::<smollm3::Config>(config.clone())?)
         }
+        "LlamaForCausalLM" => Box::new(llama_config(config)?),
+        "Phi3ForCausalLM" => Box::new(serde_json::from_value::<phi3::Config>(config.clone())?),
         other => bail!("no implementation of {other}"),
     })
 }
@@ -224,6 +238,65 @@ impl Architecture for smollm3::Config {
 }
 
 impl Decoder for smollm3::Model {
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
+        self.clone().forward(input, 0)
+    }
+}
+
+/// `config` as the vendored Llama configuration: candle's own fields, and the `head_dim` a checkpoint writes out
+/// (MiniCPM5's is not `hidden_size / num_attention_heads`).
+fn llama_config(config: &Value) -> Result<llama::Config> {
+    let head_dim = serde_json::from_value(config["head_dim"].clone()).context("head_dim")?;
+    let config = serde_json::from_value(config.clone())?;
+    Ok(llama::Config::new(config, head_dim))
+}
+
+impl Architecture for llama::Config {
+    fn shape(&self) -> Shape {
+        Shape {
+            vocab: self.vocab_size,
+            hidden: self.hidden_size,
+            max_positions: self.max_position_embeddings,
+            tied: self.tie_word_embeddings,
+        }
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        let cache = llama::Cache::new(false, vb.dtype(), self, vb.device())?;
+        let model = llama::Llama::load(vb, self)?;
+        Ok(Box::new(Llama { model, cache }))
+    }
+}
+
+/// Llama with the cache that holds its rotary tables, built once at load.
+struct Llama {
+    model: llama::Llama,
+    cache: llama::Cache,
+}
+
+/// Each prompt runs on a clone of the loaded cache, which stores no keys or values.
+impl Decoder for Llama {
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
+        self.model.forward(input, 0, &mut self.cache.clone())
+    }
+}
+
+impl Architecture for phi3::Config {
+    fn shape(&self) -> Shape {
+        Shape {
+            vocab: self.vocab_size,
+            hidden: self.hidden_size,
+            max_positions: self.max_position_embeddings,
+            tied: self.tie_word_embeddings,
+        }
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        Ok(Box::new(phi3::Model::new(self, vb)?))
+    }
+}
+
+impl Decoder for phi3::Model {
     fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
         self.clone().forward(input, 0)
     }
@@ -388,7 +461,12 @@ mod tests {
         let runtime = CandleRuntime;
         assert!(runtime.supports(&write("mamba-named-qwen3", json!(["Qwen3ForCausalLM"]))));
         assert!(runtime.supports(&write("two", json!(["Other", "Qwen3ForCausalLM"]))));
-        for architecture in ["Qwen2ForCausalLM", "SmolLM3ForCausalLM"] {
+        for architecture in [
+            "Qwen2ForCausalLM",
+            "SmolLM3ForCausalLM",
+            "LlamaForCausalLM",
+            "Phi3ForCausalLM",
+        ] {
             assert!(ARCHITECTURES.contains(&architecture));
             assert!(runtime.supports(&write(architecture, json!([architecture]))));
         }
@@ -405,7 +483,8 @@ mod tests {
         };
         assert!(
             err.to_string().contains(
-                "[\"MambaForCausalLM\"]; candle implements Qwen3ForCausalLM, Qwen2ForCausalLM, SmolLM3ForCausalLM"
+                "[\"MambaForCausalLM\"]; candle implements Qwen3ForCausalLM, Qwen2ForCausalLM, SmolLM3ForCausalLM, \
+                 LlamaForCausalLM, Phi3ForCausalLM"
             ),
             "{err:#}"
         );
@@ -440,6 +519,139 @@ mod tests {
         }
         let err = qwen2_config(&config(json!(4096), true)).unwrap_err();
         assert!(err.to_string().contains("use_sliding_window"), "{err:#}");
+    }
+
+    /// The decoder of `architecture` for `config` over random weights, and those weights by name.
+    fn random_decoder(
+        architecture: &str,
+        config: &Value,
+    ) -> (Box<dyn Decoder>, HashMap<String, Tensor>) {
+        let weights = candle_nn::VarMap::new();
+        let vb = VarBuilder::from_varmap(&weights, DType::F32, &Device::Cpu);
+        let decoder = configuration(architecture, config)
+            .unwrap()
+            .build(vb)
+            .unwrap();
+        let weights = weights.data().lock().unwrap();
+        let weights = weights
+            .iter()
+            .map(|(name, var)| (name.clone(), var.as_tensor().clone()))
+            .collect();
+        (decoder, weights)
+    }
+
+    /// The hidden states of the prompt `ids`, one row per position.
+    fn hidden(decoder: &dyn Decoder, ids: &[u32]) -> Vec<Vec<f32>> {
+        let input = Tensor::new(ids, &Device::Cpu).unwrap().unsqueeze(0);
+        let states = decoder.hidden_states(&input.unwrap()).unwrap();
+        states.squeeze(0).unwrap().to_vec2().unwrap()
+    }
+
+    /// What the readout asks of a vendored decoder: a state of `width` at every position of `ids`, each the one the
+    /// prompt without its last token has there, and the same states from a second call.
+    fn assert_every_position(decoder: &dyn Decoder, ids: &[u32], width: usize) {
+        let states = hidden(decoder, ids);
+        assert_eq!((states.len(), states[0].len()), (ids.len(), width));
+        let shorter = hidden(decoder, &ids[..ids.len() - 1]);
+        for (position, (whole, cut)) in states.iter().zip(&shorter).enumerate() {
+            for (a, b) in whole.iter().zip(cut) {
+                assert!((a - b).abs() < 1e-4, "position {position}: {a} and {b}");
+            }
+        }
+        assert_eq!(hidden(decoder, ids), states);
+    }
+
+    /// The vendored Llama over random weights: `head_dim` is the one `config.json` writes out (MiniCPM5: 128, with
+    /// 1536 hidden and 16 heads) and sizes the projections, else `hidden_size / num_attention_heads`; every position
+    /// has its state; a layer tensor the checkpoint lacks is an error.
+    #[test]
+    fn llama_reads_a_written_head_dim() {
+        let mut config = json!({
+            "hidden_size": 12,
+            "intermediate_size": 16,
+            "vocab_size": 20,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "head_dim": 8,
+            "rms_norm_eps": 1e-6,
+            "rope_theta": 5_000_000,
+            "rope_scaling": null,
+            "max_position_embeddings": 32,
+            "tie_word_embeddings": false,
+            "eos_token_id": [1, 2],
+        });
+        assert_eq!(llama_config(&config).unwrap().head_dim, 8);
+        let (decoder, weights) = random_decoder("LlamaForCausalLM", &config);
+        let dims = |name: &str| weights[&format!("model.layers.1.self_attn.{name}.weight")].dims();
+        assert_eq!(dims("q_proj"), [32, 12]);
+        assert_eq!(dims("k_proj"), [16, 12]);
+        assert_eq!(dims("o_proj"), [12, 32]);
+        assert_every_position(decoder.as_ref(), &[3, 1, 4, 1, 5], 12);
+
+        let lacking = "model.layers.1.mlp.up_proj.weight";
+        let mut tensors = weights.clone();
+        tensors.remove(lacking).unwrap();
+        let vb = VarBuilder::from_tensors(tensors, DType::F32, &Device::Cpu);
+        let Err(err) = llama_config(&config).unwrap().build(vb) else {
+            panic!("a checkpoint without {lacking} loaded");
+        };
+        assert!(err.to_string().contains(lacking), "{err}");
+
+        config.as_object_mut().unwrap().remove("head_dim");
+        assert_eq!(llama_config(&config).unwrap().head_dim, 3);
+    }
+
+    /// The vendored Phi-3 over random weights, with Phi-4-mini's `longrope` as transformers computes it: a frequency
+    /// is divided by its factor, a prompt longer than `original_max_position_embeddings` reads the long factors at
+    /// every position and any other the short ones, and sin and cos carry the attention factor
+    /// `sqrt(1 + ln(max / original) / ln(original))`; the dimensions past `partial_rotary_factor` do not rotate.
+    #[test]
+    fn phi3_scales_longrope_by_the_prompt_length() {
+        let config = json!({
+            "vocab_size": 20,
+            "hidden_act": "silu",
+            "hidden_size": 16,
+            "intermediate_size": 16,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "rms_norm_eps": 1e-5,
+            "rope_theta": 10000.0,
+            "bos_token_id": 1,
+            "eos_token_id": 2,
+            "rope_scaling": {"type": "longrope", "short_factor": [1.0, 1.0], "long_factor": [1, 4.0]},
+            "max_position_embeddings": 16,
+            "original_max_position_embeddings": 4,
+            "partial_rotary_factor": 0.5,
+            "tie_word_embeddings": true,
+        });
+        let read: phi3::Config = serde_json::from_value(config.clone()).unwrap();
+        let rotary = phi3::RotaryEmbedding::new(DType::F32, &read, &Device::Cpu).unwrap();
+        // A head is 8 wide and its first 4 dimensions rotate, as the pairs (0, 2) and (1, 3): a pair that starts as
+        // (1, 0) comes back as its frequency's (cos, sin) at the position.
+        let rotated = |len: usize| -> Vec<Vec<f32>> {
+            let head = Tensor::new(&[[1f32, 1., 0., 0., 7., 7., 7., 7.]], &Device::Cpu).unwrap();
+            let heads = head.repeat((len, 1)).unwrap().reshape((1, 1, len, 8));
+            let heads = heads.unwrap();
+            let (rotated, _) = rotary.apply_rotary_emb_qkv(&heads, &heads, 0).unwrap();
+            rotated.reshape((len, 8)).unwrap().to_vec2().unwrap()
+        };
+        // The frequencies are 1 and 10000^(-2/4); the attention factor is sqrt(1 + ln(16 / 4) / ln 4).
+        let scale = 2f32.sqrt();
+        for (len, factor) in [(4, 1f32), (5, 4.)] {
+            let (first, second) = (3f32, 3. * 0.01 / factor);
+            let want = [first.cos(), second.cos(), first.sin(), second.sin()].map(|x| scale * x);
+            let got = &rotated(len)[3];
+            for (got, want) in got.iter().zip(want.iter().chain(&[7.; 4])) {
+                assert!((got - want).abs() < 1e-5, "{len} tokens: {got}, not {want}");
+            }
+        }
+
+        // Four tokens and their prefix read the short factors, six and theirs the long ones.
+        let (decoder, _) = random_decoder("Phi3ForCausalLM", &config);
+        assert_every_position(decoder.as_ref(), &[3, 1, 4, 1], 16);
+        assert_every_position(decoder.as_ref(), &[3, 1, 4, 1, 5, 9], 16);
     }
 
     /// Q5: `gpu_layers` 0 is the CPU in F32 and below -1 an error; -1 is the CPU too on a build without Metal (an Apple

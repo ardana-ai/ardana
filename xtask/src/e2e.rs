@@ -77,6 +77,51 @@ pub const CANDLE_FIXTURES: &[CandleFixture] = &[
         )),
         long_state: false,
     },
+    CandleFixture {
+        name: "llama-3.2-1b",
+        checkpoint: Pin {
+            repo: "unsloth/Llama-3.2-1B-Instruct",
+            commit: "5a8abab4a5d6f164389b1079fb721cfab8d7126c",
+        },
+        gguf: Some((
+            Pin {
+                repo: "bartowski/Llama-3.2-1B-Instruct-GGUF",
+                commit: "067b946cf014b7c697f3654f621d577a3e3afd1c",
+            },
+            "Llama-3.2-1B-Instruct-Q8_0.gguf",
+        )),
+        long_state: false,
+    },
+    CandleFixture {
+        name: "minicpm5-1b",
+        checkpoint: Pin {
+            repo: "openbmb/MiniCPM5-1B",
+            commit: "87179e5c1f455ef22e6223592d2d61351b525bfc",
+        },
+        gguf: Some((
+            Pin {
+                repo: "openbmb/MiniCPM5-1B-GGUF",
+                commit: "3d55fac80935ae6456986ad2384b5cbcc4d6c948",
+            },
+            "MiniCPM5-1B-Q8_0.gguf",
+        )),
+        long_state: false,
+    },
+    CandleFixture {
+        name: "phi-4-mini",
+        checkpoint: Pin {
+            repo: "microsoft/Phi-4-mini-instruct",
+            commit: "cfbefacb99257ffa30c83adab238a50856ac3083",
+        },
+        gguf: Some((
+            Pin {
+                repo: "unsloth/Phi-4-mini-instruct-GGUF",
+                commit: "78eb92a46fc37e6b524df991ed9aca9bc6aa7b80",
+            },
+            "Phi-4-mini-instruct.Q8_0.gguf",
+        )),
+        long_state: true,
+    },
 ];
 
 /// The request fixture the SDK suite sends.
