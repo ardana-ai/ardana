@@ -36,21 +36,25 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   (`Registry::resolve`, `ardana list`'s size) read a pulled directory with `snapshot::weight_files`.
 - The implementation comes from `config.json#architectures` (`snapshot::architectures`), never from a model name or a
   per-model value in code (Q3). `ardana_candle::ARCHITECTURES` lists the names it implements, one implementation each
-  (Q2): `Qwen3ForCausalLM`, `Qwen2ForCausalLM`, `SmolLM3ForCausalLM`, `LlamaForCausalLM` and `Phi3ForCausalLM`.
-  `CandleRuntime::supports` is true for a directory whose `config.json` names one of them, so
-  `Runtimes::for_weights` hands a GGUF file to llama.cpp and a snapshot directory to Candle.
+  (Q2): `Qwen3ForCausalLM`, `Qwen2ForCausalLM`, `SmolLM3ForCausalLM`, `LlamaForCausalLM`, `Phi3ForCausalLM`,
+  `GraniteForCausalLM` and `Lfm2ForCausalLM`. `CandleRuntime::supports` is true for a directory whose `config.json`
+  names one of them, so `Runtimes::for_weights` hands a GGUF file to llama.cpp and a snapshot directory to Candle.
 - One architecture is four things in `crates/ardana-candle/src/lib.rs` and nothing else: its name in `ARCHITECTURES`,
   its arm in `configuration`, `impl Architecture` for its configuration type (`shape`: the vocabulary, the hidden
   size, the positions and whether the head is tied; `build`: the decoder from the root `VarBuilder`) and
   `impl Decoder` for its model (`hidden_states`: the final-normed states at every position of one prompt). The
   readout is `CausalLm`'s, shared: no architecture reads a head, checks a prompt or multiplies label rows itself.
+  What an architecture asks of the readout it says through `Architecture`, never in a readout of its own:
+  `logits_scaling` (1 unless overridden; Granite's) is what `CausalLm` divides the label logits by.
   An architecture whose candle-transformers model cannot return those states adds its vendored module file
   ("Vendored modules").
 - Read the architecture's own configuration from the same `config.json` with `serde_json::from_value` into the
   `candle-transformers` type (`models::qwen3::Config`, `models::qwen2::Config`, `models::smol::smollm3::Config`,
-  `models::llama::LlamaConfig`, `models::phi3::Config`); its unknown fields are ignored, and it is read before any
-  tensor, so a configuration that does not read costs no load. `ardana-candle` depends on neither `serde` nor
-  `tracing`: a field the candle type lacks is read from the same value beside it (`llama_config` reads `head_dim`).
+  `models::llama::LlamaConfig`, `models::phi3::Config`, `models::granite::GraniteConfig`,
+  `models::lfm2::Lfm2Config`); its unknown fields are ignored, and it is read before any tensor, so a configuration
+  that does not read costs no load. `ardana-candle` depends on neither `serde` nor `tracing`: a field the candle
+  type lacks is read from the same value beside it (`llama_config` reads `head_dim`, `granite_config` the four
+  scalars and `tie_word_embeddings`, `lfm2_config` `intermediate_size`, `block_auto_adjust_ff_dim` and the tying).
 
 ### Vendored modules
 - Where a candle-transformers 0.11.0 model narrows to the last position inside the model and keeps its layers
@@ -71,6 +75,14 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   - `phi3.rs` (`src/models/phi3.rs`, `Phi3ForCausalLM`): `Model::forward` returns the final-normed hidden states at
     every position instead of the last position's logits, and `Model` holds no `lm_head`. Also `longrope` scaled as
     transformers scales it.
+  - `granite.rs` (`src/models/granite.rs`, `GraniteForCausalLM`): `Granite::forward` returns the final-normed hidden
+    states at every position instead of the last position's logits, and `Granite` holds no `lm_head`. Also
+    `Config::multipliers`, the four scalars of a Granite `config.json` that upstream's `granite` does not read
+    (`embedding_multiplier`, `attention_multiplier`, `residual_multiplier`, `logits_scaling`),
+    `Config::tie_word_embeddings`, and a layer's missing tensor as an error where upstream panics.
+  - `lfm2.rs` (`src/models/lfm2.rs`, `Lfm2ForCausalLM`): `Model::forward` returns the final-normed hidden states at
+    every position instead of the last position's logits, and `Model` holds no `lm_head`. Also the feed-forward
+    width as transformers computes it from `intermediate_size`, and the tying handed in by the caller.
 
 ### Loading
 - Map the files with `candle_core::safetensors::MmapedSafetensors::multi(&files)` (an `unsafe` call: the hub cache's
@@ -159,9 +171,58 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   in the model's dtype as upstream does, so in BF16 its positions past 256 are not exact, and its attention runs in
   the model's dtype; measure a long prompt against the GGUF before relying on Phi-3 on Metal.
 
+### Granite and LFM2 in the vendored modules
+- `GraniteForCausalLM`: `granite::Granite::forward(input, 0, &mut cache)` returns the final-normed hidden states at
+  every position. Like Llama it keeps its rotary tables in the `Cache` it is handed: `build` computes one at load
+  (`use_kv_cache: false`) and each prompt runs on a clone. `rope_scaling` reads `rope_type` `granite` or `default`,
+  or `null` (Granite 4.2).
+- A Granite `config.json` carries four scalars, applied as transformers applies them, each 1 when left out: the
+  embeddings are multiplied by `embedding_multiplier`, the attention scores by `attention_multiplier` (not divided
+  by the square root of the head's width), what a block's attention and its MLP add to the residual by
+  `residual_multiplier`, and the logits are divided by `logits_scaling`, which the shared readout does
+  (`Architecture::logits_scaling`). candle-transformers 0.11.0's `granite` reads none of the four and scales by
+  `1/sqrt(head_dim)`; its `granitemoehybrid` applies all four. granite-4.2-3b writes `attention_multiplier`
+  0.015625 over heads 64 wide, where upstream's scale is 0.125, and 1.0 for the other three.
+- `GraniteConfig` has no `tie_word_embeddings`: `granite_config` reads it, false when absent as in transformers
+  (granite-4.2-3b has its own `lm_head.weight`).
+- `Lfm2ForCausalLM`: `lfm2::Model::forward(input, 0, &mut cache)` returns the final-normed (`embedding_norm`) hidden
+  states at every position. A layer is a short convolution or an attention by `layer_types` (`conv`,
+  `full_attention`); the `Cache` holds the rotary tables, built once at load and cloned per prompt, and stores no
+  keys, values or convolution states. A convolution layer pads the one whole prompt with `conv_L_cache - 1` zeros on
+  its left and reads no state, which is exact for a prompt decoded alone at position 0; never decode an LFM2 prompt
+  in pieces without `use_kv_cache`.
+- The feed-forward width is transformers' (`Lfm2MLP`): `intermediate_size` as it is when `block_auto_adjust_ff_dim`
+  is false, else two thirds of it times `block_ffn_dim_multiplier`, rounded up to `block_multiple_of`.
+  candle-transformers 0.11.0 takes `hidden_size * 4` instead, which is LFM2.5-1.2B's 8192 but not LFM2.5-350M's
+  4608 (from 6656), LFM2.5-230M's 2560 or LFM2.5-2.6B's 10752 (both as they are).
+- The head is tied by `tie_embedding`, else by `tie_word_embeddings` (LFM2.5-2.6B writes that one alone), else
+  tied, as in transformers; `Lfm2Config` reads `tie_embedding` alone. A tied head is `model.embed_tokens.weight`.
+- `lfm2_config` refuses `conv_bias: true`: neither upstream nor the copy reads a bias of the convolution or its
+  projections, and the LFM2.5 checkpoints write false. A `config.json` without `layer_types` and
+  `intermediate_size` does not read: LFM2-350M and LFM2-700M, of the first generation, write `full_attn_idxs` and
+  `block_ff_dim` instead. `Lfm2MoeForCausalLM` (LFM2.5-8B-A1B) has no implementation in candle and is refused at
+  pull. LFM2.5-2.6B was not run (its `w1` is 10752 wide in the safetensors header, as the rule above gives).
+- Checked against transformers 5.19.0 in F32 on the CPU (2026-10-11, by hand): the label logits through Candle are
+  within 0.0001 of it for granite-4.2-3b at 28 and at 4.4k tokens, LFM2.5-1.2B-Instruct at 29 and at 4.4k tokens,
+  and LFM2.5-350M and LFM2.5-230M (the two other feed-forward rules) at 29 and at 1.2k tokens.
+- Both compute attention by matmul over `[heads, len, len]` scores cast to F32 on every device, so memory and time
+  grow with the square of the prompt. In F32 on a 16-core x86 CPU granite-4.2-3b (40 layers of 40 heads, 7.3 GB of
+  BF16 weights read as F32) answers the ticket in 24 s, its Q8_0 GGUF in 6 s, and holds 21.5 GB for a 28-token
+  prompt; a load and two passes of 4.4k tokens took 30 minutes at a 29.9 GB peak (dev profile, Candle's crates
+  optimised), so use the GGUF for a long state. LFM2.5-1.2B-Instruct answers the ticket's two rows over a
+  4.9k-token state in 194 s, where its GGUF takes 83 s.
+- candle-core 0.11.0 runs a grouped `conv1d` as one convolution per group, and LFM2's is depthwise: 2048 of them in
+  each of LFM2.5-1.2B's 10 convolution layers. On a tensor of that shape one layer's convolution took 1.4 s at 80
+  tokens and 1.9 s at 4.8k (2026-10-11, by hand), and the same sum as three shifted products 2 ms and 160 ms.
+  LFM2.5-1.2B-Instruct answers the ticket (80 tokens) in 23 s, where its GGUF takes 1.6 s and Llama-3.2-1B through
+  Candle 7.6 s. The copy keeps upstream's convolution.
+- Not measured on Metal (no Apple machine, 2026-10-11): both keep the BF16 rule. Both compute their rotary tables
+  and their attention in F32; LFM2's convolution runs in the model's dtype.
+
 ### Logits
 - Return label logits only: index the hidden states at the slots and the head's rows at the label ids
-  (`index_select`), cast both to F32 and multiply, so a prompt never computes a whole vocabulary row. Check, as the
+  (`index_select`), cast both to F32, multiply and divide by the architecture's `logits_scaling`, so a prompt never
+  computes a whole vocabulary row. Check, as the
   llama.cpp runtime does, that the prompt is non-empty and within `n_ctx`, every slot inside it and every label id
   below `config.json#vocab_size`.
 - The answers equal the GGUF of the same model through llama.cpp up to quantization: Qwen3-1.7B BF16 safetensors
@@ -169,7 +230,9 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   probability within 0.1 (R1.2). `cargo xtask e2e candle` holds every other architecture to the same on the ticket,
   sentiment and score fixtures, in F32 on the CPU against the Q8_0 GGUF: Qwen2.5-1.5B-Instruct stays within 0.001
   (0.008 over a 5.4k-token state), SmolLM3-3B within 0.003, Llama-3.2-1B within 0.014, MiniCPM5-1B within 0.037 (a
-  noul near 0.6) and Phi-4-mini within 0.001 (0.0002 over a 4.9k-token state).
+  noul near 0.6), Phi-4-mini within 0.001 (0.0002 over a 4.9k-token state), granite-4.2-3b within 0.0001 (its
+  answers to the three sit at 0 and 1) and LFM2.5-1.2B-Instruct within 0.022 (a score level; 0.008 over a
+  4.9k-token state).
 
 ## Testing
 - `cargo test -p ardana-candle` reads only Qwen3-1.7B's `config.json` from `tmp/hf` (`cargo xtask fetch --tests`
@@ -180,8 +243,12 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - A change a vendored module carries gets a plain unit test over random weights (`candle_nn::VarMap`, a model a few
   values wide built through `configuration` and `Architecture::build`), which pins the change and nothing about a
   real model's answers: "llama_reads_a_written_head_dim" (the projections' shapes, a state at every position, each
-  the one the prompt cut there has, a missing tensor as an error) and "phi3_scales_longrope_by_the_prompt_length"
-  (the rotary table read back through `apply_rotary_emb_qkv`). The real checkpoints stay the suite's.
+  the one the prompt cut there has, a missing tensor as an error), "phi3_scales_longrope_by_the_prompt_length"
+  (the rotary table read back through `apply_rotary_emb_qkv`), "granite_applies_its_multipliers" (the slot logits
+  of a `CausalLm` built in memory move with each of the three multipliers and are divided by `logits_scaling`) and
+  "lfm2_sizes_its_feed_forward_as_transformers" (the width, the tying, a state at every position through
+  convolution and attention layers). A `VarMap` starts a tensor read with `vb.get` at zero (LFM2's convolution
+  kernel): give it random values before a test relies on it. The real checkpoints stay the suite's.
 - `crates/ardana/tests/e2e_registry.rs` pulls the checkpoint online from a loopback stand-in of the Hub
   (`common::HubStandIn`) that records each file asked for, over a hub cache holding links to the fetched blobs, so the
   pull is checked file by file without copying weights.
@@ -202,7 +269,11 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   `87179e5c1f455ef22e6223592d2d61351b525bfc` against openbmb/MiniCPM5-1B-GGUF `MiniCPM5-1B-Q8_0.gguf` at
   `3d55fac80935ae6456986ad2384b5cbcc4d6c948`, and microsoft/Phi-4-mini-instruct at
   `cfbefacb99257ffa30c83adab238a50856ac3083` against unsloth/Phi-4-mini-instruct-GGUF
-  `Phi-4-mini-instruct.Q8_0.gguf` at `78eb92a46fc37e6b524df991ed9aca9bc6aa7b80` (`long_state`).
+  `Phi-4-mini-instruct.Q8_0.gguf` at `78eb92a46fc37e6b524df991ed9aca9bc6aa7b80` (`long_state`),
+  ibm-granite/granite-4.2-3b at `e459acceac81e5fe67c07d9cfc72329a332e7eb1` against ibm-granite/granite-4.2-3b-GGUF
+  `granite-4.2-3b-Q8_0.gguf` at `c40945d71cd90f249a56985e8155551a9188dc30`, and LiquidAI/LFM2.5-1.2B-Instruct at
+  `0f604ada3f766f9f257460c4c9f0b5d6f69d431b` against LiquidAI/LFM2.5-1.2B-Instruct-GGUF
+  `LFM2.5-1.2B-Instruct-Q8_0.gguf` at `8ed288026e23958ad9dfa92d53ed773a8eee7125` (`long_state`).
 
 ## Sources
 - https://github.com/huggingface/candle — README: pure-Rust ML framework, backends, feature flags
@@ -213,10 +284,15 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/smol/smollm3.rs — `Config::should_skip_rope`, `Model::forward`, `KvCache`
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/llama.rs — the file `llama.rs` is copied from: `LlamaConfig`, `Cache`, `Llama::forward` and its last-position narrowing, the `unwrap()` in `Llama::load`
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/phi3.rs — the file `phi3.rs` is copied from: `Config`, `RotaryEmbedding::new` and its `longrope` branch, `Model::forward`
+- https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/granite.rs — the file `granite.rs` is copied from: `GraniteConfig`, `Cache`, `Granite::forward` and its last-position narrowing, the `1/sqrt(head_dim)` scale, the `unwrap()` in `Granite::load`
+- https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/granitemoehybrid.rs — the four Granite scalars as candle applies them elsewhere: `attention_multiplier`, `embedding_multiplier`, `residual_multiplier`, `logits_scaling`
+- https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/lfm2.rs — the file `lfm2.rs` is copied from: `Lfm2Config`, `compute_intermediate_size`, `ShortConv`, `Model::forward` and its last-position narrowing
 - https://github.com/huggingface/candle/blob/0.11.0/LICENSE-APACHE — the license the vendored files are taken under
 - https://huggingface.co/docs/transformers/internal/rope_utils — `longrope` and `llama3` rope scaling: `short_factor`, `long_factor`, `original_max_position_embeddings`, `attention_factor`
 - https://huggingface.co/docs/transformers/model_doc/phi3 — `Phi3Config`: `rope_parameters` (a `config.json`'s `rope_scaling`), `original_max_position_embeddings`
 - https://huggingface.co/docs/transformers/model_doc/llama — `LlamaConfig`: `head_dim`, `rope_parameters` (a `config.json`'s `rope_scaling`), `tie_word_embeddings`
+- https://huggingface.co/docs/transformers/model_doc/granite — `GraniteConfig`: `embedding_multiplier`, `attention_multiplier`, `residual_multiplier`, `logits_scaling`, each 1.0 by default
+- https://huggingface.co/docs/transformers/model_doc/lfm2 — `Lfm2Config`: `intermediate_size`, `block_auto_adjust_ff_dim`, `block_ffn_dim_multiplier`, `block_multiple_of`, `layer_types`, `conv_L_cache`, `tie_word_embeddings`
 - https://docs.rs/candle-core/0.11.0/candle_core/enum.Device.html — `Device::Cpu`, `new_metal`, `is_metal`
 - https://docs.rs/candle-core/0.11.0/candle_core/safetensors/struct.MmapedSafetensors.html — `multi`, `tensors`, `load`
 - https://docs.rs/candle-nn/0.11.0/candle_nn/var_builder/type.VarBuilder.html — `from_tensors`, `from_mmaped_safetensors`, `get`

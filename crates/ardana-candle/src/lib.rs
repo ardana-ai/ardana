@@ -7,9 +7,11 @@
 //! at every position; the readout is shared ([`CausalLm`]): the label logits are the head's rows for the label ids
 //! applied to the hidden states at the slots, in F32, so a prompt never computes a whole vocabulary row.
 //!
-//! candle-transformers' Llama and Phi-3 narrow to the last position inside the model, so [`llama`] and [`phi3`] are
-//! its 0.11.0 files, copied and changed as each one's header lists.
+//! candle-transformers' Llama, Phi-3, Granite and LFM2 narrow to the last position inside the model, so [`llama`],
+//! [`phi3`], [`granite`] and [`lfm2`] are its 0.11.0 files, copied and changed as each one's header lists.
 
+mod granite;
+mod lfm2;
 mod llama;
 mod phi3;
 
@@ -27,12 +29,14 @@ use candle_transformers::models::{qwen2, qwen3};
 use serde_json::Value;
 
 /// The `config.json#architectures` names this runtime implements.
-pub const ARCHITECTURES: [&str; 5] = [
+pub const ARCHITECTURES: [&str; 7] = [
     "Qwen3ForCausalLM",
     "Qwen2ForCausalLM",
     "SmolLM3ForCausalLM",
     "LlamaForCausalLM",
     "Phi3ForCausalLM",
+    "GraniteForCausalLM",
+    "Lfm2ForCausalLM",
 ];
 
 /// Candle for safetensors snapshots, on Metal by default on Apple silicon.
@@ -139,6 +143,10 @@ struct Shape {
 /// One architecture's own configuration, read from `config.json` before any tensor.
 trait Architecture {
     fn shape(&self) -> Shape;
+    /// What the readout divides the logits by: 1, but for Granite's `logits_scaling`.
+    fn logits_scaling(&self) -> f64 {
+        1.0
+    }
     /// The decoder over the checkpoint's tensors, rooted where `config.json` sits.
     fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>>;
 }
@@ -160,6 +168,8 @@ fn configuration(architecture: &str, config: &Value) -> Result<Box<dyn Architect
         }
         "LlamaForCausalLM" => Box::new(llama_config(config)?),
         "Phi3ForCausalLM" => Box::new(serde_json::from_value::<phi3::Config>(config.clone())?),
+        "GraniteForCausalLM" => Box::new(granite_config(config)?),
+        "Lfm2ForCausalLM" => Box::new(lfm2_config(config)?),
         other => bail!("no implementation of {other}"),
     })
 }
@@ -302,12 +312,131 @@ impl Decoder for phi3::Model {
     }
 }
 
+/// `config` as the vendored Granite configuration: candle's own fields, the four scalars transformers applies, each
+/// 1 where `config.json` leaves it out, and `tie_word_embeddings`, false without one (Granite 4.2 has its own
+/// `lm_head.weight`).
+fn granite_config(config: &Value) -> Result<granite::Config> {
+    let scalar = |name: &'static str| -> Result<f64> {
+        let scalar: Option<f64> = serde_json::from_value(config[name].clone()).context(name)?;
+        Ok(scalar.unwrap_or(1.0))
+    };
+    let multipliers = granite::Multipliers {
+        embedding: scalar("embedding_multiplier")?,
+        attention: scalar("attention_multiplier")?,
+        residual: scalar("residual_multiplier")?,
+        logits_scaling: scalar("logits_scaling")?,
+    };
+    let tied: Option<bool> = serde_json::from_value(config["tie_word_embeddings"].clone())
+        .context("tie_word_embeddings")?;
+    let config = serde_json::from_value(config.clone())?;
+    Ok(granite::Config::new(
+        config,
+        multipliers,
+        tied.unwrap_or(false),
+    ))
+}
+
+impl Architecture for granite::Config {
+    fn shape(&self) -> Shape {
+        Shape {
+            vocab: self.vocab_size,
+            hidden: self.hidden_size,
+            max_positions: self.max_position_embeddings,
+            tied: self.tie_word_embeddings,
+        }
+    }
+
+    fn logits_scaling(&self) -> f64 {
+        self.multipliers.logits_scaling
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        let cache = granite::Cache::new(false, vb.dtype(), self, vb.device())?;
+        let model = granite::Granite::load(vb, self)?;
+        Ok(Box::new(Granite { model, cache }))
+    }
+}
+
+/// Granite with the cache that holds its rotary tables, built once at load.
+struct Granite {
+    model: granite::Granite,
+    cache: granite::Cache,
+}
+
+/// Each prompt runs on a clone of the loaded cache, which stores no keys or values.
+impl Decoder for Granite {
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
+        self.model.forward(input, 0, &mut self.cache.clone())
+    }
+}
+
+/// `config` as the vendored LFM2 configuration: candle's own fields, the `intermediate_size` and
+/// `block_auto_adjust_ff_dim` (true without one) the feed-forward width comes from, and the tying, which
+/// transformers reads from `tie_embedding`, else from `tie_word_embeddings` (LFM2.5-2.6B writes that one alone),
+/// else as true. `conv_bias: true` is refused: candle reads no bias of the convolution or its projections.
+fn lfm2_config(config: &Value) -> Result<lfm2::Config> {
+    ensure!(
+        config["conv_bias"] != Value::Bool(true),
+        "conv_bias is true, and the convolution's biases are not implemented"
+    );
+    let flag = |name: &'static str| -> Result<Option<bool>> {
+        serde_json::from_value(config[name].clone()).context(name)
+    };
+    let tied = match flag("tie_embedding")? {
+        Some(tied) => tied,
+        None => flag("tie_word_embeddings")?.unwrap_or(true),
+    };
+    let auto_adjust_ff_dim = flag("block_auto_adjust_ff_dim")?.unwrap_or(true);
+    let intermediate_size =
+        serde_json::from_value(config["intermediate_size"].clone()).context("intermediate_size")?;
+    let config = serde_json::from_value(config.clone())?;
+    Ok(lfm2::Config::new(
+        config,
+        intermediate_size,
+        auto_adjust_ff_dim,
+        tied,
+    ))
+}
+
+impl Architecture for lfm2::Config {
+    fn shape(&self) -> Shape {
+        Shape {
+            vocab: self.vocab_size,
+            hidden: self.hidden_size,
+            max_positions: self.max_position_embeddings,
+            tied: self.tie_embedding,
+        }
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        let cache = lfm2::Cache::new(false, vb.dtype(), self, vb.device())?;
+        let model = lfm2::Model::new(self, vb)?;
+        Ok(Box::new(Lfm2 { model, cache }))
+    }
+}
+
+/// LFM2 with the cache that holds its rotary tables, built once at load.
+struct Lfm2 {
+    model: lfm2::Model,
+    cache: lfm2::Cache,
+}
+
+/// Each prompt runs on a clone of the loaded cache, which stores no keys, values or convolution states: a
+/// convolution layer pads the one whole prompt with zeros on its left, as it does at a sequence's start.
+impl Decoder for Lfm2 {
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
+        self.model.forward(input, 0, &mut self.cache.clone())
+    }
+}
+
 /// A loaded causal LM of any architecture: its decoder and the readout every architecture shares.
 pub struct CausalLm {
     architecture: &'static str,
     decoder: Box<dyn Decoder>,
     /// The output projection, `[vocab, hidden]`: `lm_head.weight`, or the embedding it is tied to.
     head: Tensor,
+    /// What the head's logits are divided by ([`Architecture::logits_scaling`]).
+    logits_scaling: f64,
     vocab: usize,
     n_ctx: usize,
     dir: PathBuf,
@@ -358,6 +487,7 @@ impl CausalLm {
             architecture,
             decoder,
             head,
+            logits_scaling: configuration.logits_scaling(),
             vocab: shape.vocab,
             n_ctx,
             dir: dir.to_path_buf(),
@@ -410,7 +540,7 @@ impl LoadedModel for CausalLm {
             .head
             .index_select(&Tensor::new(label_ids, device)?, 0)?
             .to_dtype(DType::F32)?;
-        let logits = at_slots.matmul(&labels.t()?)?;
+        let logits = (at_slots.matmul(&labels.t()?)? / self.logits_scaling)?;
         Ok(logits.to_vec2::<f32>()?)
     }
 }
@@ -466,6 +596,8 @@ mod tests {
             "SmolLM3ForCausalLM",
             "LlamaForCausalLM",
             "Phi3ForCausalLM",
+            "GraniteForCausalLM",
+            "Lfm2ForCausalLM",
         ] {
             assert!(ARCHITECTURES.contains(&architecture));
             assert!(runtime.supports(&write(architecture, json!([architecture]))));
@@ -484,7 +616,7 @@ mod tests {
         assert!(
             err.to_string().contains(
                 "[\"MambaForCausalLM\"]; candle implements Qwen3ForCausalLM, Qwen2ForCausalLM, SmolLM3ForCausalLM, \
-                 LlamaForCausalLM, Phi3ForCausalLM"
+                 LlamaForCausalLM, Phi3ForCausalLM, GraniteForCausalLM, Lfm2ForCausalLM"
             ),
             "{err:#}"
         );
@@ -652,6 +784,147 @@ mod tests {
         let (decoder, _) = random_decoder("Phi3ForCausalLM", &config);
         assert_every_position(decoder.as_ref(), &[3, 1, 4, 1], 16);
         assert_every_position(decoder.as_ref(), &[3, 1, 4, 1, 5, 9], 16);
+    }
+
+    /// R5.3, the vendored Granite over random weights: two layers with heads 64 wide, whose attention scores
+    /// candle-transformers 0.11.0 multiplies by 1/sqrt(64) = 0.125 whatever `config.json` says. The slot logits
+    /// follow `attention_multiplier` (Granite 4.2 writes 0.015625), `embedding_multiplier` and
+    /// `residual_multiplier`, and are divided by `logits_scaling`; a scalar `config.json` leaves out is 1; every
+    /// position has its state; a layer tensor the checkpoint lacks is an error.
+    #[test]
+    fn granite_applies_its_multipliers() {
+        let config = |scalars: Value| {
+            let mut config = json!({
+                "hidden_size": 128,
+                "intermediate_size": 16,
+                "vocab_size": 20,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 2,
+                "num_key_value_heads": 1,
+                "rms_norm_eps": 1e-5,
+                "rope_theta": 10_000_000,
+                "rope_scaling": null,
+                "max_position_embeddings": 32,
+                "tie_word_embeddings": false,
+                "eos_token_id": 1,
+            });
+            let scalars = scalars.as_object().unwrap().clone();
+            config.as_object_mut().unwrap().extend(scalars);
+            config
+        };
+        let upstream = config(json!({"attention_multiplier": 0.125}));
+        let (decoder, weights) = random_decoder("GraniteForCausalLM", &upstream);
+        assert_every_position(decoder.as_ref(), &[3, 1, 4, 1, 5], 128);
+
+        let head = Tensor::randn(0f32, 1., (20, 128), &Device::Cpu).unwrap();
+        let logits = |scalars: Value| -> Vec<f32> {
+            let configuration = granite_config(&config(scalars)).unwrap();
+            let vb = VarBuilder::from_tensors(weights.clone(), DType::F32, &Device::Cpu);
+            let mut model = CausalLm {
+                architecture: "GraniteForCausalLM",
+                decoder: configuration.build(vb).unwrap(),
+                head: head.clone(),
+                logits_scaling: configuration.logits_scaling(),
+                vocab: 20,
+                n_ctx: 32,
+                dir: PathBuf::new(),
+            };
+            let logits = model.slot_logits(&[3, 1, 4, 1, 5], &[2, 4], &[0, 7, 19]);
+            logits.unwrap().concat()
+        };
+        let widest_gap = |a: &[f32], b: &[f32]| {
+            let gaps = a.iter().zip(b).map(|(a, b)| (a - b).abs());
+            gaps.fold(0f32, f32::max)
+        };
+        let wide = logits(json!({"attention_multiplier": 0.125}));
+        for scalars in [
+            json!({"attention_multiplier": 0.015625}),
+            json!({"attention_multiplier": 0.125, "embedding_multiplier": 12.0}),
+            json!({"attention_multiplier": 0.125, "residual_multiplier": 0.22}),
+        ] {
+            let gap = widest_gap(&wide, &logits(scalars.clone()));
+            assert!(gap > 0.01, "{scalars}: the logits moved by {gap}");
+        }
+        let scaled = logits(json!({"attention_multiplier": 0.125, "logits_scaling": 8.0}));
+        assert_eq!(scaled, wide.iter().map(|x| x / 8.).collect::<Vec<_>>());
+        let ones = json!({
+            "attention_multiplier": 1,
+            "embedding_multiplier": 1.0,
+            "residual_multiplier": 1.0,
+            "logits_scaling": 1.0,
+        });
+        assert_eq!(logits(json!({})), logits(ones));
+
+        let lacking = "model.layers.1.mlp.up_proj.weight";
+        let mut tensors = weights.clone();
+        tensors.remove(lacking).unwrap();
+        let vb = VarBuilder::from_tensors(tensors, DType::F32, &Device::Cpu);
+        let Err(err) = granite_config(&upstream).unwrap().build(vb) else {
+            panic!("a checkpoint without {lacking} loaded");
+        };
+        assert!(err.to_string().contains(lacking), "{err}");
+    }
+
+    /// The vendored LFM2 over random weights: the feed-forward width is the one transformers computes from
+    /// `intermediate_size` (two thirds of it, rounded up to `block_multiple_of`, or the size as it is when
+    /// `block_auto_adjust_ff_dim` is false), where candle-transformers 0.11.0 takes four times the hidden size; the
+    /// head is tied by `tie_embedding`, else by `tie_word_embeddings`, else tied; every position has its state
+    /// through convolution and attention layers, a one-token prompt's included; `conv_bias` is refused.
+    #[test]
+    fn lfm2_sizes_its_feed_forward_as_transformers() {
+        let mut config = json!({
+            "vocab_size": 20,
+            "hidden_size": 16,
+            "intermediate_size": 100,
+            "block_auto_adjust_ff_dim": true,
+            "block_ffn_dim_multiplier": 1.0,
+            "block_multiple_of": 8,
+            "num_hidden_layers": 3,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "norm_eps": 1e-5,
+            "max_position_embeddings": 32,
+            "conv_L_cache": 3,
+            "conv_bias": false,
+            "layer_types": ["conv", "full_attention", "conv"],
+            "tie_embedding": true,
+            "eos_token_id": 7,
+        });
+        assert_eq!(lfm2_config(&config).unwrap().intermediate_size, 72);
+        let (_, mut weights) = random_decoder("Lfm2ForCausalLM", &config);
+        let width = weights["model.layers.0.feed_forward.w1.weight"].dims()[0];
+        assert_eq!(width, 72);
+        // A `VarMap` starts a convolution's kernel at zero: both layers get one that convolves.
+        for layer in [0, 2] {
+            let name = format!("model.layers.{layer}.conv.conv.weight");
+            let kernel = Tensor::randn(0f32, 1., (16, 1, 3), &Device::Cpu).unwrap();
+            let zeros = weights.insert(name, kernel).unwrap();
+            assert_eq!(
+                zeros.flatten_all().unwrap().to_vec1::<f32>().unwrap(),
+                [0.; 48]
+            );
+        }
+        let vb = VarBuilder::from_tensors(weights, DType::F32, &Device::Cpu);
+        let decoder = lfm2_config(&config).unwrap().build(vb).unwrap();
+        assert_every_position(decoder.as_ref(), &[3, 1, 4, 1, 5], 16);
+        assert_every_position(decoder.as_ref(), &[3, 1], 16);
+
+        config["block_auto_adjust_ff_dim"] = json!(false);
+        assert_eq!(lfm2_config(&config).unwrap().intermediate_size, 100);
+        let fields = config.as_object_mut().unwrap();
+        fields.insert("tie_word_embeddings".into(), json!(false));
+        assert!(lfm2_config(&config).unwrap().tie_embedding);
+        config.as_object_mut().unwrap().remove("tie_embedding");
+        assert!(!lfm2_config(&config).unwrap().tie_embedding);
+        config
+            .as_object_mut()
+            .unwrap()
+            .remove("tie_word_embeddings");
+        assert!(lfm2_config(&config).unwrap().tie_embedding);
+
+        config["conv_bias"] = json!(true);
+        let err = lfm2_config(&config).unwrap_err();
+        assert!(err.to_string().contains("conv_bias"), "{err:#}");
     }
 
     /// Q5: `gpu_layers` 0 is the CPU in F32 and below -1 an error; -1 is the CPU too on a build without Metal (an Apple

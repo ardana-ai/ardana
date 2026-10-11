@@ -122,6 +122,36 @@ pub const CANDLE_FIXTURES: &[CandleFixture] = &[
         )),
         long_state: true,
     },
+    CandleFixture {
+        name: "granite-4.2-3b",
+        checkpoint: Pin {
+            repo: "ibm-granite/granite-4.2-3b",
+            commit: "e459acceac81e5fe67c07d9cfc72329a332e7eb1",
+        },
+        gguf: Some((
+            Pin {
+                repo: "ibm-granite/granite-4.2-3b-GGUF",
+                commit: "c40945d71cd90f249a56985e8155551a9188dc30",
+            },
+            "granite-4.2-3b-Q8_0.gguf",
+        )),
+        long_state: false,
+    },
+    CandleFixture {
+        name: "lfm2.5-1.2b",
+        checkpoint: Pin {
+            repo: "LiquidAI/LFM2.5-1.2B-Instruct",
+            commit: "0f604ada3f766f9f257460c4c9f0b5d6f69d431b",
+        },
+        gguf: Some((
+            Pin {
+                repo: "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+                commit: "8ed288026e23958ad9dfa92d53ed773a8eee7125",
+            },
+            "LFM2.5-1.2B-Instruct-Q8_0.gguf",
+        )),
+        long_state: true,
+    },
 ];
 
 /// The request fixture the SDK suite sends.
