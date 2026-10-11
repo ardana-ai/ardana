@@ -44,10 +44,11 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts) and
   `float_roundtrip` (floats parse to the exact `f64` Python's `json.loads` gives, which prompts re-render), `clap` 4
   with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
-  `tokio` 1 (the `ardana` binary runs `pull` on a current-thread runtime and `serve` on a multi-thread one;
+  `tokio` 1 (the `ardana` binary runs `pull` and `update` on a current-thread runtime and `serve` on a multi-thread one;
   `ardana-server` adds `sync`, `signal`, `macros`, `fs` and `io-util`; `ardana-registry` takes `rt` for its unit
   tests only, and xtask for `build-playground`: a current-thread runtime under its async Hub lookups), `reqwest`
-  0.13.5 (the library document's GETs in `ardana-registry`, at the version hf-hub resolves, `huggingface.md`), `axum`
+  0.13.5 (the library document's GETs in `ardana-registry` and the update lookup's client in `ardana`, at the version
+  hf-hub resolves, `huggingface.md`), `axum`
   0.8, `tower-http` 0.7, `http-body` 1 and `tower` 0.5 (dev) as `axum.md` pins them, plus the library pins in their
   own guidelines.
 - `axoupdater` 0.10.2 (pinned `=`, its default features) is `ardana update` and the check behind it, used in
@@ -58,7 +59,9 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   async API (`query_new_version`, `is_update_needed`, `run`) through the binary's `block_on`, on a plain thread: a
   runtime started inside another runtime's context panics, which is also why the `blocking` feature (`*_sync`) stays
   off. One `block_on` covers a lookup and the install after it, since the client's connections belong to the runtime
-  that opened them. `update::check` is the one lookup; `Check::Unmanaged` (no receipt for this executable) sends nothing.
+  that opened them. `update::check` is the one lookup; `Check::Unmanaged` (no receipt for this executable, or one whose JSON or versions
+  do not read) sends nothing. `AxoUpdater::new_for` builds a client of its own (about 30 ms in a debug build), so even
+  reading the receipt stays off a command's own thread.
   `update::notice` is the daily check of `run` and `serve`: it reads `$ARDANA_HOME/update-check.json` on the caller's
   thread (the notice of a version seen within the day is there at once) and does everything that builds a client or
   sends a request on a `std::thread` of its own, handing the notice back over an `mpsc` channel: `run` takes what is
@@ -131,7 +134,8 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   also reads an `ARDANA_<FLAG>` variable, its value hidden in `--help`.
 - Mark every test that needs a real model, network, the Ollama store or more than a few seconds with
   `#[ignore = "e2e: <what it needs>"]`. Plain `cargo test` stays fast and offline; `cargo xtask e2e rust` runs
-  `cargo test --workspace -- --include-ignored` under the home guard.
+  `cargo test --workspace -- --include-ignored` under the home guard. The one plain test above that is `update.rs`
+  "a_failed_lookup_is_an_error", which waits out the two 10 s request timeouts of a GitHub that never answers.
 - End-to-end tests use the official models from `xtask/fetch.toml` (decider:2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B, Gemma 4 E2B,
   Ollama `llama3.2`), resolved from `tmp/hf`; never replace a real model with an invented fixture.
 - Put test temp files under `$ARDANA_TMP` (or `std::env::temp_dir()`, which `[env]` points at `tmp/sys`); never under

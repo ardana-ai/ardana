@@ -251,21 +251,25 @@ fn run(cmd: &mut Command) -> Result<(Option<i32>, String, String)> {
     Ok((output.status.code(), stdout, stderr))
 }
 
-/// R1.1: at the latest release, `ardana update` says so after one GET of `releases/latest`.
+/// R1.1: at the latest release, `ardana update` says so after one GET of `releases/latest`, the daily check's switch
+/// set or not.
 #[test]
 fn up_to_date_sends_one_get() -> Result<()> {
     let ardana = Ardana::new("update-up-to-date")?;
     let receipts = own_receipt(&ardana)?;
     let github = GitHub::start(Answer::release(VERSION))?;
-    let (code, stdout, _) = run(&mut command(&ardana, &["update"], &receipts, &github.url))?;
+    // The switch of the daily check is not `ardana update`'s (Q3).
+    let mut update = command(&ardana, &["update"], &receipts, &github.url);
+    update.env("ARDANA_NO_UPDATE_CHECK", "1");
+    let (code, stdout, _) = run(&mut update)?;
     assert_eq!(code, Some(0));
     assert_eq!(stdout, format!("ardana is up to date ({VERSION})\n"));
     assert_eq!(github.requests(), [LATEST]);
     Ok(())
 }
 
-/// R1.2: no receipt, a receipt for another copy and a receipt that does not parse all end in the install line, and
-/// nothing is sent.
+/// R1.2: no receipt, a receipt for another copy and a receipt that does not parse (as JSON, or its version) all end
+/// in the install line, and nothing is sent.
 #[test]
 fn a_source_build_is_unmanaged() -> Result<()> {
     let ardana = Ardana::new("update-unmanaged")?;
@@ -279,8 +283,10 @@ fn a_source_build_is_unmanaged() -> Result<()> {
     let garbled = scratch.join("garbled");
     std::fs::create_dir_all(&garbled)?;
     std::fs::write(garbled.join("ardana-receipt.json"), "{\"binaries\": [")?;
+    let unversioned = scratch.join("unversioned");
+    write_receipt(&unversioned, "latest", &bin_dir()?, true)?;
 
-    for receipts in [&empty, &elsewhere, &garbled] {
+    for receipts in [&empty, &elsewhere, &garbled, &unversioned] {
         let (code, stdout, stderr) =
             run(&mut command(&ardana, &["update"], receipts, &github.url))?;
         assert_eq!((code, stdout.as_str()), (Some(1), ""), "{receipts:?}");
@@ -438,6 +444,20 @@ fn a_day_passes_between_requests() -> Result<()> {
     std::thread::sleep(QUIET);
     assert_eq!(github.requests(), [LATEST]);
     assert!(dated_since(&read_check(&ardana)?, started)?);
+    drop(served);
+
+    // A lookup that fails after a day leaves the version seen before as the news (Q5).
+    let started = now()?;
+    write_check(&ardana, started - 25 * 60 * 60, "9.9.9")?;
+    let broken = GitHub::start(Answer::Broken)?;
+    let served = serve(&ardana, &receipts, &broken.url, false)?;
+    eventually("the notice is logged", Duration::from_secs(10), || {
+        Ok(logged(&served, "9.9.9") == 1)
+    })?;
+    assert_eq!(broken.requests(), [LATEST, RELEASES]);
+    let check = read_check(&ardana)?;
+    assert_eq!(check["version"], "9.9.9", "{check}");
+    assert!(dated_since(&check, started)?, "{check}");
     Ok(())
 }
 

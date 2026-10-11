@@ -94,14 +94,16 @@ pub fn update() -> Result<()> {
 }
 
 /// An updater holding the receipt of this executable, or `None` when the installers did not place it: no receipt,
-/// one that does not read, or one whose `install_prefix` is another directory.
+/// one that does not read (its versions included), or one whose `install_prefix` is another directory.
 fn installed() -> Result<Option<AxoUpdater>> {
     let mut updater = AxoUpdater::new_for(APP);
     match updater.load_receipt() {
         Ok(_) => {}
-        Err(AxoupdateError::NoReceipt { .. } | AxoupdateError::ReceiptLoadFailed { .. }) => {
-            return Ok(None);
-        }
+        Err(
+            AxoupdateError::NoReceipt { .. }
+            | AxoupdateError::ReceiptLoadFailed { .. }
+            | AxoupdateError::Version(_),
+        ) => return Ok(None),
         Err(err) => return Err(err).context("reading the install receipt"),
     }
     if !updater
@@ -110,17 +112,17 @@ fn installed() -> Result<Option<AxoUpdater>> {
     {
         return Ok(None);
     }
-    let client = reqwest::Client::builder()
-        .timeout(TIMEOUT)
-        .build()
-        .context("building the HTTP client")?;
-    updater.set_client(client);
     Ok(Some(updater))
 }
 
 /// Looks the latest stable release up (one `releases/latest` GET, and the release list when that fails) and compares
 /// it with the receipt's version.
 async fn latest(updater: &mut AxoUpdater) -> Result<Check> {
+    let client = reqwest::Client::builder()
+        .timeout(TIMEOUT)
+        .build()
+        .context("building the HTTP client")?;
+    updater.set_client(client);
     let (version, newer) = async {
         let version = updater.query_new_version().await?.map(ToString::to_string);
         // The release is at hand now, so this sends nothing.
@@ -180,10 +182,12 @@ fn look(path: &Path, now: u64) -> Result<Option<String>> {
     if !ours {
         return Ok(seen.news());
     }
-    let version = match check()? {
-        Check::Newer(version) => version,
-        Check::UpToDate => VERSION.to_string(),
-        Check::Unmanaged => return Ok(None),
+    let version = match check() {
+        Ok(Check::Newer(version)) => version,
+        Ok(Check::UpToDate) => VERSION.to_string(),
+        Ok(Check::Unmanaged) => return Ok(None),
+        // The lookup failed: the file keeps the version an earlier one saw, and that is still the news (Q5).
+        Err(_) => return Ok(seen.news()),
     };
     seen.version = Some(version);
     seen.put(&mut locked(path)?)?;

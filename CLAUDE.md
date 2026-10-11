@@ -238,13 +238,14 @@ change them) and its Requirements are the definition of done.
   1 with the install line, and a failed lookup exits 1 with `the update check failed` within 30 s.
   `ardana run` and `ardana serve` (once, at start) make the same lookup at most once a day per `ARDANA_HOME`, on a
   thread of its own, so no answer, bind or model load waits on it: `$ARDANA_HOME/update-check.json` records the time
-  when a lookup starts (`checked_at`, Unix seconds) and the newest version seen once it answers (`version`), a failed
-  lookup standing for the day like an answered one (the file is dated under its own lock, so ardanas started together
+  when a lookup starts (`checked_at`, Unix seconds) and the version once it answers (`version`: the latest release
+  when it is newer, else the binary's own), a failed lookup standing for the day like an answered one and keeping
+  the version seen before (the file is dated under its own lock, so ardanas started together
   send one lookup). While that version is above the binary's, `run` prints `a newer
   ardana is available: <latest> (this is <version>); run `ardana update`` as its last stderr line, after its answers
   and without waiting for a lookup still in flight, and `serve` logs it once after `ardana serve: `, from the file
-  alone within the day. The check says nothing when its lookup fails, sends and writes nothing for a copy without a
-  receipt (every cargo-built `ardana`), and `ARDANA_NO_UPDATE_CHECK=1` turns it off (`ardana update` ignores that);
+  alone within the day. The check adds nothing when its lookup fails, sends and writes nothing for a copy without a
+  receipt (every cargo-built `ardana`, which still prints what a file an installed copy dated today says), and `ARDANA_NO_UPDATE_CHECK=1` turns it off (`ardana update` ignores that);
   `pull`, `list`, `show`, `ps` and `rm` never check. `crates/ardana/tests/update.rs` runs both against a loopback
   stand-in of GitHub's API (`ARDANA_INSTALLER_GHE_BASE_URL`, the receipt's directory in `AXOUPDATER_CONFIG_PATH`);
   the real download and install is its `#[ignore]`d network test, into a scratch directory.
