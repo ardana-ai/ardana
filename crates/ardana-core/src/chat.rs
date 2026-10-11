@@ -9,6 +9,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use minijinja::value::ValueKind;
 use minijinja::{Environment, ErrorKind, Value};
 use serde_json::Value as Json;
 use tokenizers::Tokenizer;
@@ -108,12 +109,20 @@ pub fn read_template(dir: &Path) -> Result<(String, TemplateSpecials), ChatTempl
             }
         };
     let config = config.as_ref();
+    // A special token is a string, or the `{"__type": "AddedToken", "content": ...}` object older tokenizers
+    // (Spark X2.5's) save it as, which transformers reads by its `content`.
     let token = |key: &str| match config.and_then(|c| c.get(key)) {
         None | Some(Json::Null) => Ok(None),
         Some(Json::String(s)) => Ok(Some(s.clone())),
+        Some(Json::Object(added))
+            if added.get("__type").and_then(Json::as_str) == Some("AddedToken")
+                && added.get("content").is_some_and(Json::is_string) =>
+        {
+            Ok(added["content"].as_str().map(str::to_owned))
+        }
         Some(other) => Err(ChatTemplateError::Config {
             path: config_path.clone(),
-            msg: format!("\"{key}\" must be a string, got {other}"),
+            msg: format!("\"{key}\" must be a string or an AddedToken object, got {other}"),
         }),
     };
     let specials = TemplateSpecials {
@@ -210,6 +219,26 @@ fn render(template: &str, specials: &TemplateSpecials) -> Result<String, ChatTem
     );
 
     env.add_function("strftime_now", |format: String| strftime(&format));
+    // Jinja2's semantics for the `none` and undefined values HF templates probe: Python's `None` is not iterable
+    // (minijinja iterates it as empty, so Granite 4.2's `tools is iterable and tools | length > 0` would then take
+    // the length of none), and an undefined value has length 0 (Jinja2's `Undefined` iterates as empty).
+    env.add_test("iterable", |value: &Value| {
+        !matches!(value.kind(), ValueKind::None | ValueKind::Undefined) && value.try_iter().is_ok()
+    });
+    env.add_filter(
+        "length",
+        |value: &Value| -> Result<usize, minijinja::Error> {
+            match value.kind() {
+                ValueKind::Undefined => Ok(0),
+                _ => value.len().ok_or_else(|| {
+                    minijinja::Error::new(
+                        ErrorKind::InvalidOperation,
+                        format!("cannot calculate length of value of type {}", value.kind()),
+                    )
+                }),
+            }
+        },
+    );
 
     let user = BTreeMap::from([("role", "user"), ("content", SENTINEL)]);
     let mut ctx = BTreeMap::from([
@@ -233,8 +262,8 @@ fn render(template: &str, specials: &TemplateSpecials) -> Result<String, ChatTem
         .map_err(ChatTemplateError::Render)
 }
 
-/// Python's `strftime` on [`TEMPLATE_DATE`] for the directives chat templates use: `%d`, `%b`, `%B`, `%Y`, `%%`.
-/// Any other directive is an error naming it.
+/// Python's `strftime` on [`TEMPLATE_DATE`] for the directives chat templates use: `%d`, `%m`, `%b`, `%B`, `%Y`,
+/// `%%`. Any other directive is an error naming it.
 fn strftime(format: &str) -> Result<String, minijinja::Error> {
     let (year, month, day) = TEMPLATE_DATE;
     let name = MONTHS[month as usize - 1];
@@ -247,6 +276,7 @@ fn strftime(format: &str) -> Result<String, minijinja::Error> {
         }
         match chars.next() {
             Some('d') => out.push_str(&format!("{day:02}")),
+            Some('m') => out.push_str(&format!("{month:02}")),
             Some('b') => out.push_str(&name[..3]),
             Some('B') => out.push_str(name),
             Some('Y') => out.push_str(&year.to_string()),
@@ -305,9 +335,55 @@ mod tests {
     fn strftime_formats_the_template_date() {
         assert_eq!(strftime("%d %b %Y").unwrap(), "26 Jul 2024");
         assert_eq!(strftime("%d %B %Y").unwrap(), "26 July 2024");
+        assert_eq!(strftime("%Y-%m-%d").unwrap(), "2024-07-26");
         assert_eq!(strftime("100%%").unwrap(), "100%");
         let err = strftime("%H:%M").unwrap_err().to_string();
         assert!(err.contains("\"%H\""), "{err}");
+    }
+
+    /// Granite 4.2's template guards its tools block with `tools is iterable and tools | length > 0`: `tools` is
+    /// `none`, which Python does not iterate, so the block is skipped; an undefined value has length 0 as in Jinja2.
+    #[test]
+    fn none_is_not_iterable_and_undefined_has_length_zero() {
+        let specials = TemplateSpecials::default();
+        let template = "{% if tools is iterable and tools | length > 0 %}tools{% endif %}\
+                        {{ documents is iterable }} {{ messages is iterable }} {{ nothing | length }}";
+        assert_eq!(render(template, &specials).unwrap(), "False True 0");
+        let err = render("{{ tools | length }}", &specials).unwrap_err();
+        assert!(
+            err.to_string().contains("length of value of type none"),
+            "{err}"
+        );
+    }
+
+    /// `tokenizer_config.json` may save a special token as an `AddedToken` object; the template sees its content.
+    #[test]
+    fn added_token_objects_are_special_tokens() -> std::io::Result<()> {
+        let dir =
+            std::env::temp_dir().join(format!("ardana-chat-added-token-{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(
+            dir.join(CONFIG_FILE),
+            r#"{"bos_token": {"__type": "AddedToken", "content": "<s>", "lstrip": false}, "eos_token": "</s>",
+                "chat_template": "{{ bos_token }}{% for m in messages %}{{ m.content }}{% endfor %}"}"#,
+        )?;
+        let (template, specials) = read_template(&dir).unwrap();
+        assert_eq!(specials.bos_token.as_deref(), Some("<s>"));
+        assert_eq!(specials.eos_token.as_deref(), Some("</s>"));
+        assert_eq!(
+            render(&template, &specials).unwrap(),
+            format!("<s>{SENTINEL}")
+        );
+        std::fs::write(
+            dir.join(CONFIG_FILE),
+            r#"{"bos_token": {"content": "<s>"}}"#,
+        )?;
+        let err = read_template(&dir).unwrap_err().to_string();
+        assert!(
+            err.contains("\"bos_token\" must be a string or an AddedToken object"),
+            "{err}"
+        );
+        std::fs::remove_dir_all(&dir)
     }
 
     #[test]

@@ -225,10 +225,18 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 - Prefer ungated sources for any new target (ggml-org GGUFs, Qwen/Qwen3.5-0.8B, HuggingFaceTB/SmolLM3-3B tokenizers).
 - A stock model joins the library only after its tokenizer and chat template pass `chat::chat_layout` and
   `LabelTable::new`, and its GGUF answers the ticket and sentiment fixtures through `ardana run <name>`. Screened on
-  2026-10-03 and left out: gpt-oss (its template calls `strftime_now("%Y-%m-%d")`, a directive the formatter lacks,
-  and opens a Harmony channel the answer prefix does not follow), NVIDIA Nemotron 3.5 (its template takes the length
-  of an undefined value) and Ministral 3 (its template puts a long default system prompt with unfilled `{today}`
-  placeholders before the state).
+  2026-10-11 (every default quant of the document's 45 sizes passed both fixtures on the release binary) and left
+  out: gpt-oss (its Harmony template opens an analysis channel the answer prefix does not follow: the choices come
+  out right but the yes/no probabilities sit near 0.5), Ministral 3 and Mistral Small 3.2 (their templates put a
+  ~500-token default system prompt with unfilled `{today}` placeholders before the state, and the 3B answers the
+  refund question wrong), Ternary Bonsai (prism-ml's `PQ2_0`/`PTQ1_0` quants need their llama.cpp fork), K2-Horizon
+  (an architecture the bundled llama.cpp predates), Qwen2.5 (official GGUFs above 3B are split files, which a pull
+  reads one of) and the small System One checkpoints whose readout is their own (OpenThai-SystemOne's separate
+  decision head, Jev-Style's `Answer:` letter prompt), which load but answer near chance under the decider layout.
+  Prefer the vendor's own GGUF repository (Qwen, ggml-org, LiquidAI, openbmb, ibm-granite, nvidia, XHToken,
+  ornith-ai, alibiserikbay); bartowski and unsloth stand in where the vendor publishes none (Llama 3.x, Qwen3.5
+  sizes, Phi-4-mini, Olmo 3, Apertus), and the unsloth mirrors give the tokenizer where the vendor's repository is
+  gated (Gemma 3, Llama).
 
 ### Tokenizers
 - Depend on `tokenizers` with `default-features = false` and one regex backend per target: `ardana-core` takes
@@ -269,13 +277,19 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 - Register `raise_exception(msg)` as a function that returns a minijinja error carrying `msg`.
 - Register `strftime_now(format)` on the fixed date 2024-07-26 (`ardana_core::chat::TEMPLATE_DATE`), never the
   clock, so every head is identical every day (R3.3): Llama 3.2 renders "26 Jul 2024" (its own fallback date), and
-  SmolLM3, whose template calls `strftime_now` unguarded, renders "26 July 2024". The formatter supports `%d`, `%b`,
-  `%B`, `%Y` and `%%`; any other directive is a render error naming it, so a new template using one needs a test.
+  SmolLM3, whose template calls `strftime_now` unguarded, renders "26 July 2024", and Apertus (`%Y-%m-%d`)
+  "2024-07-26". The formatter supports `%d`, `%m`, `%b`, `%B`, `%Y` and `%%`; any other directive is a render error
+  naming it, so a new template using one needs a test.
 - Keep the default `UndefinedBehavior::Lenient` (undefined prints empty and is falsy), which matches how HF templates
-  probe optional variables.
+  probe optional variables. Two of minijinja's built-ins diverge from Jinja2 on the values templates probe and are
+  overridden in `ardana_core::chat::render`: the `iterable` test is false for `none` (minijinja iterates `none` and
+  undefined as empty; Python's `None` is not iterable, so Granite 4.2's `tools is iterable and tools | length > 0`
+  guard failed on the length of none) and the `length` filter gives 0 for an undefined value (Jinja2's `Undefined`
+  iterates as empty; minijinja refuses it, which left Nemotron 3.5's template out).
 - Render one user message holding the sentinel with `add_generation_prompt=true`, `tools` and `documents` set to
   `none` (as `apply_chat_template` passes them), `bos_token`/`eos_token` only when set (a `null` token stays
-  undefined, as in transformers' `special_tokens_map`); pass `enable_thinking=false` only when the template text
+  undefined, as in transformers' `special_tokens_map`; a token saved as an `{"__type": "AddedToken", "content": ...}`
+  object, Spark X2.5's `tokenizer_config.json`, is read by its `content` as transformers reads it); pass `enable_thinking=false` only when the template text
   mentions it (decider `ChatTemplate`).
 - transformers' `{% generation %}` .. `{% endgeneration %}` tag (SmolLM3's template) only marks assistant text and
   renders its body; minijinja has no custom tags, so `ardana_core::chat` rewrites each into `{% if true %}` ..
