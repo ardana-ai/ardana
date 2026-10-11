@@ -18,7 +18,7 @@ variants").
   `transformers` 5.18.0, `tokenizers` 0.23.2, `safetensors` 0.8.0, `huggingface-hub` 1.33.0 (its `hf` CLI downloads
   checkpoints and uploads repositories), `numpy` 2.5.3, `ml-dtypes` 0.6.0, `protobuf` 7.36.2 (`xtask/src/onnx.rs`
   `PACKAGES`).
-- llama.cpp `b11074` (`26394b4e6749a41c3633db040e0987500a5f7013`) — the release `llama-cpp-sys-2` 0.1.157 bundles, a
+- llama.cpp `b11074` (`26394b4e6749a41c3633db040e0987500a5f7013`) — the release `llama-cpp-sys-2` 0.1.159 bundles, a
   research clone in `tmp/src/llama.cpp` (`xtask/fetch.toml`) for its `convert_hf_to_gguf.py`, `conversion/` package
   and `gguf-py`, which the crate's copy lacks.
 

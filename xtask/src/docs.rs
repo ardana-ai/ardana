@@ -28,7 +28,7 @@ pub const GUIDELINES: &[Guideline] = &[
     },
     Guideline {
         file: "llama-cpp.md",
-        pins: &[("llama-cpp-2", "0.1.157")],
+        pins: &[("llama-cpp-2", "0.1.159")],
         official: &[
             "https://docs.rs/llama-cpp-2",
             "https://github.com/utilityai/llama-cpp-rs",

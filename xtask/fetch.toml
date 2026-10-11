@@ -77,7 +77,7 @@ source = "git"
 url = "https://github.com/fstandhartinger/jevbench"
 rev = "fd54ea7dc02bbe29c6ac8f6e015a54cdcff26805"
 
-# The llama.cpp that `llama-cpp-sys-2` 0.1.157 vendors, for its `convert_hf_to_gguf.py` (`cargo xtask onnx
+# The llama.cpp that `llama-cpp-sys-2` 0.1.159 vendors (commit `26394b4`), for its `convert_hf_to_gguf.py` (`cargo xtask onnx
 # convert` writes the GGUFs ardana-ai hosts); the vendored copy lacks the `conversion/` package and gguf-py.
 [[tool]]
 name = "llama.cpp"

@@ -7,9 +7,9 @@ binary registers it in `Runtimes`. Tokenization, prompt building and readout sta
 llama.cpp.
 
 ## Versions
-- `llama-cpp-2` 0.1.157 — safe, near-raw bindings to llama.cpp; its `llama-cpp-sys-2` dependency bundles llama.cpp
+- `llama-cpp-2` 0.1.159 — safe, near-raw bindings to llama.cpp; its `llama-cpp-sys-2` dependency bundles llama.cpp
   at commit `26394b4` (`26394b4e6749a41c3633db040e0987500a5f7013`), which knows the `qwen35` architecture. Pin it
-  with `=0.1.157`: the crate tracks llama.cpp closely and does not follow semver meaningfully.
+  with `=0.1.159`: the crate tracks llama.cpp closely and does not follow semver meaningfully.
 
 ## Rules
 
@@ -64,20 +64,20 @@ llama.cpp.
   after the magic, absurd tensor and key counts, and Ollama's own `gemma3:12b` blob. With logs silenced the reason
   (`key not found ...`) is not in the error.
 
-> Plan note: `LlamaModelParams::with_n_gpu_layers` takes a `u32` in 0.1.157, so `LoadOptions { gpu_layers: -1 }`
+> Plan note: `LlamaModelParams::with_n_gpu_layers` takes a `u32` in 0.1.159, so `LoadOptions { gpu_layers: -1 }`
 > cannot be passed through as-is; use the mapping above.
 
 ### Contexts and threads
-- `LlamaModel` is `Send + Sync`; `LlamaContext<'a>` is `!Send` and `!Sync` and borrows its model for `'a`. A context
-  can never move between threads nor live in the same struct as the model it borrows.
+- `LlamaModel` is `Send + Sync`; `LlamaContext<'a>` is `Send` since 0.1.158, never `Sync`, and borrows its model for
+  `'a`. A context can never live in the same struct as the model it borrows.
 - Implement `LoadedModel: Send` by owning the model and its single context on one dedicated worker thread and handing
   the caller a `Send` handle (a channel sender plus reply channel); `slot_logits` sends one prompt and waits. Do not
   write `unsafe impl Send` around a context. `ardana-llama`'s `LlamaModelHandle` does this; dropping it closes the
   channel and joins the thread, which frees the context before the model.
 - `LlamaModelParams` holds raw pointers and is not `Send` either: build it on the worker thread from plain values.
 
-> Plan note: the Contract `LoadedModel: Send` cannot hold a `LlamaContext` directly because 0.1.157 marks it
-> `!Send`; the worker-thread handle above (or a fresh context per call) satisfies the trait.
+> Plan note: the Contract `LoadedModel: Send` cannot hold a `LlamaContext` beside the `LlamaModel` it borrows
+> (0.1.157 also marked it `!Send`); the worker-thread handle above (or a fresh context per call) satisfies the trait.
 
 - Build `LlamaContextParams` with `with_n_ctx(NonZeroU32::new(n_ctx))`, `with_n_batch(n_ctx)` and
   `with_n_ubatch(min(2048, n_ctx))`, as decider's `engine_gguf.py` does, so any prompt that fits the window goes to
@@ -97,8 +97,9 @@ llama.cpp.
   slot positions. `add` returns `BatchAddError` when the batch is full; propagate it.
 - Call `ctx.decode(&mut batch)` and map `DecodeError` into `anyhow`; a non-zero return (for example "no KV slot")
   is a runtime error, not a capacity check. `Decider::plan` enforces the context cap before any decode.
-- Read each slot with `ctx.get_logits_ith(i)`, where `i` is the batch index of a flagged token. It panics (asserts)
-  when `i` was not flagged in the last decode or `i >= n_ctx`, so only pass indices you flagged in this batch.
+- Read each slot with `ctx.get_logits_ith(i)`, where `i` is the batch index of a flagged token. It panics
+  (`invalid logit index`, llama.cpp returning no row) when `i` was not flagged in the last decode, so only pass
+  indices you flagged in this batch.
 - Copy the label logits out immediately: the slice borrows the context and is overwritten by the next decode.
 
 ### Logits width versus tokenizer vocabulary
@@ -114,7 +115,7 @@ llama.cpp.
   `systemone.assemble`) answer for answer, and its prompt ids equal decider's; checked on decider:2b Q4_K_M with
   decider's own code in a sandbox venv, on Metal and at `--gpu-layers 0`.
 - The logits themselves depend on the llama.cpp build. decider's `llama-cpp-python` 0.3.35 bundles ggml 0.20 with
-  Accelerate BLAS; `llama-cpp-2` 0.1.157 bundles `26394b4` (ggml 0.24) without BLAS. On the ticket fixture the two
+  Accelerate BLAS; `llama-cpp-2` 0.1.159 bundles `26394b4` (ggml 0.24) without BLAS. On the ticket fixture the two
   differ by up to 3e-4 in a probability on Metal and up to 1e-2 at `--gpu-layers 0`; argmaxes agree. Compare
   against decider through logits, not through final probabilities, and assert argmaxes and ranges end to end.
 
@@ -125,24 +126,24 @@ llama.cpp.
 - Run the decider:2b ticket check at default offload and at `--gpu-layers 0` and compare argmaxes (R2.7).
 
 ## Sources
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/index.html — crate overview, modules, logging redirection
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/llama_backend/struct.LlamaBackend.html — `init` once, `BackendAlreadyInitialized`, `void_logs`, Send/Sync
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/model/struct.LlamaModel.html — `load_from_file`, `new_context`, `n_vocab`, Send/Sync
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/model/params/struct.LlamaModelParams.html — `with_n_gpu_layers(u32)`, `use_mmap`, defaults
-- https://docs.rs/llama-cpp-2/0.1.157/src/llama_cpp_2/model/params.rs.html — `u32` to `i32` clamp in `with_n_gpu_layers`
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/context/params/struct.LlamaContextParams.html — `with_n_ctx`, `with_n_batch`, defaults
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/context/struct.LlamaContext.html — `decode`, `get_logits_ith`, `clear_kv_cache`, `!Send`/`!Sync`
-- https://docs.rs/llama-cpp-2/0.1.157/src/llama_cpp_2/context.rs.html — `get_logits_ith` assertions on unflagged indices
-- https://docs.rs/llama-cpp-2/0.1.157/src/llama_cpp_2/context/kv_cache.rs.html — `clear_kv_cache` wraps `llama_memory_clear`
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/llama_batch/struct.LlamaBatch.html — `new`, `add`, `BatchAddError`
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/token/struct.LlamaToken.html — `LlamaToken(i32)` wrapper
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/fn.send_logs_to_tracing.html — llama.cpp and ggml logs into `tracing`, callable before backend init
-- https://docs.rs/llama-cpp-2/0.1.157/llama_cpp_2/context/params/struct.LlamaContextParams.html#method.with_n_ubatch — `with_n_ubatch`
-- https://github.com/utilityai/llama-cpp-rs/blob/0.1.157/llama-cpp-2/Cargo.toml — default features `openmp`, `common`, `android-shared-stdcxx`
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/index.html — crate overview, modules, logging redirection
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/llama_backend/struct.LlamaBackend.html — `init` once, `BackendAlreadyInitialized`, `void_logs`, Send/Sync
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/model/struct.LlamaModel.html — `load_from_file`, `new_context`, `n_vocab`, Send/Sync
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/model/params/struct.LlamaModelParams.html — `with_n_gpu_layers(u32)`, `use_mmap`, defaults
+- https://docs.rs/llama-cpp-2/0.1.159/src/llama_cpp_2/model/params.rs.html — `u32` to `i32` clamp in `with_n_gpu_layers`
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/context/params/struct.LlamaContextParams.html — `with_n_ctx`, `with_n_batch`, defaults
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/context/struct.LlamaContext.html — `decode`, `get_logits_ith`, `clear_kv_cache`, `Send`, `!Sync`
+- https://docs.rs/llama-cpp-2/0.1.159/src/llama_cpp_2/context.rs.html — `get_logits_ith` panics on a null row (an unflagged index)
+- https://docs.rs/llama-cpp-2/0.1.159/src/llama_cpp_2/context/kv_cache.rs.html — `clear_kv_cache` wraps `llama_memory_clear`
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/llama_batch/struct.LlamaBatch.html — `new`, `add`, `BatchAddError`
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/token/struct.LlamaToken.html — `LlamaToken(i32)` wrapper
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/fn.send_logs_to_tracing.html — llama.cpp and ggml logs into `tracing`, callable before backend init
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/context/params/struct.LlamaContextParams.html#method.with_n_ubatch — `with_n_ubatch`
+- https://github.com/utilityai/llama-cpp-rs/blob/0.1.159/llama-cpp-2/Cargo.toml — default features `openmp`, `common`, `android-shared-stdcxx`
 - https://github.com/utilityai/llama-cpp-rs — README: build from source, semver policy, cuda feature
-- https://github.com/utilityai/llama-cpp-rs/tree/0.1.157/llama-cpp-sys-2 — llama.cpp submodule at `26394b4`
-- https://github.com/utilityai/llama-cpp-rs/blob/0.1.157/llama-cpp-sys-2/build.rs — cmake build, `CMAKE_`/`GGML_` env forwarding, cuda/vulkan, watchOS Metal off
-- https://github.com/utilityai/llama-cpp-rs/blob/0.1.157/examples/simple/src/main.rs — reference backend/model/batch/decode flow
+- https://github.com/utilityai/llama-cpp-rs/tree/0.1.159/llama-cpp-sys-2 — llama.cpp submodule at `26394b4`
+- https://github.com/utilityai/llama-cpp-rs/blob/0.1.159/llama-cpp-sys-2/build.rs — cmake build, `CMAKE_`/`GGML_` env forwarding, cuda/vulkan, watchOS Metal off
+- https://github.com/utilityai/llama-cpp-rs/blob/0.1.159/examples/simple/src/main.rs — reference backend/model/batch/decode flow
 - https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md — Metal on by default on macOS, `-ngl 0` caveat, CMake flags
 - https://github.com/ggml-org/llama.cpp/blob/26394b4e6749a41c3633db040e0987500a5f7013/include/llama.h — batch logits flag, decode return codes, negative `n_gpu_layers`, memory clear
 - https://github.com/ggml-org/llama.cpp/blob/26394b4e6749a41c3633db040e0987500a5f7013/src/llama-arch.cpp — `qwen35` architecture name

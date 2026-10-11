@@ -1,7 +1,7 @@
 //! The llama.cpp runtime behind `ardana-core`'s runtime traits.
 //!
 //! A loaded model lives on its own worker thread, which owns the `LlamaModel` and the one `LlamaContext` borrowing it
-//! (the context is `!Send`). [`LlamaModelHandle`] is the `Send` side: it sends one prompt per job over a channel and
+//! (the two cannot share a struct). [`LlamaModelHandle`] is the `Send` side: it sends one prompt per job over a channel and
 //! waits for the label logits, so no `unsafe` is needed to satisfy `LoadedModel: Send`.
 
 use std::num::NonZeroU32;

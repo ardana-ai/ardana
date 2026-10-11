@@ -21,7 +21,7 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - Declare `edition`, `rust-version`, `license` and `version` in `[workspace.package]`; members write
   `edition.workspace = true` (and the same for the other keys) instead of repeating values.
 - Declare every third-party dependency once in `[workspace.dependencies]` with its pinned Q28 version
-  (`llama-cpp-2 = "=0.1.157"`, `tokenizers = "0.23.2"`, `hf-hub = "1.0.0"`, `axum = "0.8"`, ...); members use
+  (`llama-cpp-2 = "=0.1.159"`, `tokenizers = "0.23.2"`, `hf-hub = "1.0.0"`, `axum = "0.8"`, ...); members use
   `dep = { workspace = true }`. Add member-specific features at the member; they are additive to the workspace ones.
 - Never mark a `[workspace.dependencies]` entry `optional`; make it optional in the member that needs it.
 - Reference workspace crates by path in `[workspace.dependencies]` too (`ardana-core = { path = "crates/ardana-core" }`)
