@@ -146,7 +146,18 @@ change them) and its Requirements are the definition of done.
   test freezes from a real run into `tmp/evals/design/<state>-<viewport>.html`, and of the standalone build's
   `library-unavailable` state (`/models.json` a 404 from `e2e/playground/standalone-hosts.mjs`, the page at
   `/playground/`), reports in `tmp/evals/design/`, then the finish: a `.impeccable/critique/` record,
-  `docs/design/audit.md` with `P0: 0 · P1: 0`, clean scans, the hook enabled).
+  `docs/design/audit.md` with `P0: 0 · P1: 0`, clean scans, the hook enabled); and the Candle suite `candle`
+  (`cargo xtask e2e candle`: each `xtask/src/e2e.rs#CANDLE_FIXTURES` row in turn, Qwen/Qwen2.5-1.5B-Instruct then
+  HuggingFaceTB/SmolLM3-3B, with the release binary on a home of the row's own. It pulls the safetensors checkpoint
+  and the Q8_0 GGUF of the same model (the checkpoint repository as `--tokenizer`, `--layout chat`) from the Hub into
+  `tmp/hf`, about 5 GB and 9.5 GB, and checks each against the commit the row pins and the checkpoint's runtime,
+  `candle`; `ardana run --json` answers `tests/fixtures/requests/ticket.json`, `sentiment.json` and `score.json`
+  through both, Candle's answers with the GGUF's choices and noul sides and every probability within 0.1; one
+  `ardana serve` answers the three through Candle and the first again with identical probabilities; a `long_state`
+  row (Qwen2.5) also answers the ticket's state repeated past 4,500 tokens through both. Then, also when a check
+  failed, the row's registry entries and every file it added under `tmp/hf/hub` are removed, the files that were
+  there before staying, and after the last row the suite runs `cargo clean`: no `target/` is left, and the next cargo
+  command builds from nothing. A failed row does not stop the others; the suite fails naming it).
 - `ardana pull <name|ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model
   in `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo), printing download progress on
   stderr. The library is a list of families with their sizes inside (`decider`: `0.8b`, `2b`, `4b`), each size one
@@ -174,7 +185,8 @@ change them) and its Requirements are the definition of done.
   (read in place from `$OLLAMA_MODELS`) and local GGUF paths. `hf.co/<org>/<repo>` of a repository with no GGUF and a
   `config.json` pulls that safetensors checkpoint at `main` (`config.json`, the shards its index names or its
   `model.safetensors`, the root tokenizer files), recorded with its snapshot directory as the weights and runtime
-  `candle` when `config.json#architectures` names one Candle implements (`Qwen3ForCausalLM`), and refused naming the
+  `candle` when `config.json#architectures` names one Candle implements (`Qwen3ForCausalLM`, `Qwen2ForCausalLM`,
+  `SmolLM3ForCausalLM`), and refused naming the
   architectures before any weight file when none does; `list` sizes it by its safetensors files. Downloads go to the
   standard HF cache (`$HF_HOME/hub`); `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list`
   (`ls`: name, size, pull date, source), `ardana show <name> [--json]` (Model, Calibration and Files sections; a
@@ -297,7 +309,8 @@ change them) and its Requirements are the definition of done.
 - Every work item is verified end to end on real open models: official Hugging Face sources
   (Mapika/decider-2b-GGUF Q4_K_M, ggml-org/Qwen3.5-0.8B-GGUF, ggml-org/SmolLM3-3B-GGUF, ggml-org/gemma-4-E2B-it-GGUF,
   and for Candle Qwen/Qwen3-1.7B against Qwen/Qwen3-1.7B-GGUF Q8_0) or the local Ollama store
-  (`llama3.2`), fetched into `tmp/hf` by `cargo xtask fetch`. Never replace a real model with an invented fixture, never
+  (`llama3.2`), fetched into `tmp/hf` by `cargo xtask fetch`; the `candle` suite pulls its own checkpoints and GGUFs
+  from the Hub and removes them. Never replace a real model with an invented fixture, never
   assert against a mock for an end-to-end requirement, never report a check you did not run.
 
 ## Guidelines

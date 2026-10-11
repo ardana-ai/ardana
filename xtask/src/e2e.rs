@@ -1,15 +1,16 @@
 //! `cargo xtask e2e <suite>`: end-to-end suites, each run under the home guard. The API suites (`jevcompat`, `sdk`,
 //! `jevbench`) run their harness from `tmp/` against a release `ardana serve` on decider:2b; the browser suites
-//! (`playground`, `standalone`, `design`) live in [`crate::browser`].
+//! (`playground`, `standalone`, `design`) live in [`crate::browser`], and the `candle` suite, which checks the rows
+//! of [`CANDLE_FIXTURES`], in [`crate::candle`].
 
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
-use crate::browser;
 use crate::sandbox::{Sandbox, cargo};
 use crate::serve::{Server, build_ardana};
+use crate::{browser, candle};
 
 pub const SUITES: &[&str] = &[
     "smoke",
@@ -20,6 +21,62 @@ pub const SUITES: &[&str] = &[
     "playground",
     "standalone",
     "design",
+    "candle",
+];
+
+/// A Hub repository `<org>/<name>` at one commit.
+#[derive(Debug)]
+pub struct Pin {
+    pub repo: &'static str,
+    pub commit: &'static str,
+}
+
+/// One checkpoint the `candle` suite verifies.
+#[derive(Debug)]
+pub struct CandleFixture {
+    /// The row's name in the suite's output, and the name its checkpoint is pulled under.
+    pub name: &'static str,
+    /// The safetensors repository Candle loads.
+    pub checkpoint: Pin,
+    /// The GGUF repository of the same model and the file in it llama.cpp loads, which the checkpoint's answers are
+    /// compared with.
+    pub gguf: Option<(Pin, &'static str)>,
+    /// Whether the row also answers a state of more than 4,500 tokens.
+    pub long_state: bool,
+}
+
+/// The checkpoints `cargo xtask e2e candle` pulls, checks and removes, in run order.
+pub const CANDLE_FIXTURES: &[CandleFixture] = &[
+    CandleFixture {
+        name: "qwen2.5-1.5b-instruct",
+        checkpoint: Pin {
+            repo: "Qwen/Qwen2.5-1.5B-Instruct",
+            commit: "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+        },
+        gguf: Some((
+            Pin {
+                repo: "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+                commit: "91cad51170dc346986eccefdc2dd33a9da36ead9",
+            },
+            "qwen2.5-1.5b-instruct-q8_0.gguf",
+        )),
+        long_state: true,
+    },
+    CandleFixture {
+        name: "smollm3-3b",
+        checkpoint: Pin {
+            repo: "HuggingFaceTB/SmolLM3-3B",
+            commit: "a07cc9a04f16550a088caea529712d1d335b0ac1",
+        },
+        gguf: Some((
+            Pin {
+                repo: "ggml-org/SmolLM3-3B-GGUF",
+                commit: "4965cb60b150737b68a0408c36aeefb65078f894",
+            },
+            "SmolLM3-Q8_0.gguf",
+        )),
+        long_state: false,
+    },
 ];
 
 /// The request fixture the SDK suite sends.
@@ -41,6 +98,7 @@ pub fn run(sandbox: &Sandbox, suite: &str) -> Result<()> {
         "playground" => browser::playground(sandbox),
         "standalone" => browser::standalone(sandbox),
         "design" => browser::design(sandbox),
+        "candle" => candle::candle(sandbox, CANDLE_FIXTURES),
         other => bail!("unknown e2e suite `{other}`; suites: {}", SUITES.join(", ")),
     }
 }

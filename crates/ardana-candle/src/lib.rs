@@ -2,9 +2,10 @@
 //! directory ([`ardana_core::snapshot`]), each architecture `config.json#architectures` names mapped to one
 //! implementation ([`ARCHITECTURES`]), never chosen by a model name.
 //!
-//! A model computes on the CPU in F32; an Apple silicon build puts it on Metal in BF16 unless `gpu_layers` is 0. The
-//! label logits are the head's rows for the label ids applied to the hidden states at the slots, in F32, so a prompt
-//! never computes a whole vocabulary row.
+//! A model computes on the CPU in F32; an Apple silicon build puts it on Metal in BF16 unless `gpu_layers` is 0. An
+//! architecture is its configuration ([`Architecture`]) and its decoder ([`Decoder`]), which returns the hidden states
+//! at every position; the readout is shared ([`CausalLm`]): the label logits are the head's rows for the label ids
+//! applied to the hidden states at the slots, in F32, so a prompt never computes a whole vocabulary row.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -15,11 +16,12 @@ use ardana_core::snapshot;
 use candle_core::safetensors::MmapedSafetensors;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use candle_transformers::models::qwen3;
+use candle_transformers::models::smol::smollm3;
+use candle_transformers::models::{qwen2, qwen3};
 use serde_json::Value;
 
 /// The `config.json#architectures` names this runtime implements.
-pub const ARCHITECTURES: [&str; 1] = ["Qwen3ForCausalLM"];
+pub const ARCHITECTURES: [&str; 3] = ["Qwen3ForCausalLM", "Qwen2ForCausalLM", "SmolLM3ForCausalLM"];
 
 /// Candle for safetensors snapshots, on Metal by default on Apple silicon.
 #[derive(Debug, Default, Clone, Copy)]
@@ -46,12 +48,8 @@ impl Runtime for CandleRuntime {
             );
         };
         let (device, dtype) = device(opts.gpu_layers)?;
-        match architecture {
-            "Qwen3ForCausalLM" => Ok(Box::new(Qwen3::load(
-                weights, &config, opts, &device, dtype,
-            )?)),
-            other => bail!("no implementation of {other}"),
-        }
+        let model = CausalLm::load(weights, architecture, &config, opts, &device, dtype)?;
+        Ok(Box::new(model))
     }
 }
 
@@ -114,11 +112,127 @@ fn display(files: &[PathBuf]) -> String {
     names.join(", ")
 }
 
-/// A loaded `Qwen3ForCausalLM`.
-pub struct Qwen3 {
-    /// The decoder, never run itself: each prompt runs a clone, whose key-value cache starts empty (0.11.0 keeps
-    /// `Model::clear_kv_cache` private).
-    model: qwen3::Model,
+/// What the readout reads of an architecture's configuration.
+struct Shape {
+    /// `vocab_size`: the output projection's rows.
+    vocab: usize,
+    /// `hidden_size`: its columns.
+    hidden: usize,
+    /// `max_position_embeddings`: where the rotary tables end.
+    max_positions: usize,
+    /// `tie_word_embeddings`: the output projection is the embedding.
+    tied: bool,
+}
+
+/// One architecture's own configuration, read from `config.json` before any tensor.
+trait Architecture {
+    fn shape(&self) -> Shape;
+    /// The decoder over the checkpoint's tensors, rooted where `config.json` sits.
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>>;
+}
+
+/// One architecture's decoder, without its output projection.
+trait Decoder: Send {
+    /// The final-normed hidden states `[1, len, hidden]` of the one prompt `input` (`[1, len]`), decoded alone: on a
+    /// key-value cache that starts empty and is dropped with the call.
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor>;
+}
+
+/// The configuration of `architecture`, a name of [`ARCHITECTURES`], from `config`.
+fn configuration(architecture: &str, config: &Value) -> Result<Box<dyn Architecture>> {
+    Ok(match architecture {
+        "Qwen3ForCausalLM" => Box::new(serde_json::from_value::<qwen3::Config>(config.clone())?),
+        "Qwen2ForCausalLM" => Box::new(qwen2_config(config)?),
+        "SmolLM3ForCausalLM" => {
+            Box::new(serde_json::from_value::<smollm3::Config>(config.clone())?)
+        }
+        other => bail!("no implementation of {other}"),
+    })
+}
+
+impl Architecture for qwen3::Config {
+    fn shape(&self) -> Shape {
+        Shape {
+            vocab: self.vocab_size,
+            hidden: self.hidden_size,
+            max_positions: self.max_position_embeddings,
+            tied: self.tie_word_embeddings,
+        }
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        Ok(Box::new(qwen3::Model::new(self, vb)?))
+    }
+}
+
+/// Each prompt runs a clone of the loaded decoder: 0.11.0 keeps `Model::clear_kv_cache` private.
+impl Decoder for qwen3::Model {
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
+        self.clone().forward(input, 0)
+    }
+}
+
+/// `config` as candle's Qwen2 configuration. 0.11.0 masks every layer by `sliding_window` whatever
+/// `use_sliding_window` says, and reads no `null` there: a checkpoint that turns the window off, as Qwen2.5's do,
+/// gets one as wide as its positions, which masks nothing; one that turns it on is refused, since transformers
+/// windows only the layers from `max_window_layers` on.
+fn qwen2_config(config: &Value) -> Result<qwen2::Config> {
+    ensure!(
+        config["use_sliding_window"] != Value::Bool(true),
+        "use_sliding_window is true, and sliding-window attention is not implemented"
+    );
+    let mut config = config.clone();
+    config["sliding_window"] = config["max_position_embeddings"].clone();
+    Ok(serde_json::from_value(config)?)
+}
+
+impl Architecture for qwen2::Config {
+    fn shape(&self) -> Shape {
+        Shape {
+            vocab: self.vocab_size,
+            hidden: self.hidden_size,
+            max_positions: self.max_position_embeddings,
+            tied: self.tie_word_embeddings,
+        }
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        Ok(Box::new(qwen2::Model::new(self, vb)?))
+    }
+}
+
+/// Without an attention mask of its own, `forward` builds the causal one.
+impl Decoder for qwen2::Model {
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
+        self.clone().forward(input, 0, None)
+    }
+}
+
+impl Architecture for smollm3::Config {
+    fn shape(&self) -> Shape {
+        Shape {
+            vocab: self.vocab_size,
+            hidden: self.hidden_size,
+            max_positions: self.max_position_embeddings,
+            tied: self.tie_word_embeddings,
+        }
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        Ok(Box::new(smollm3::Model::new(self, vb)?))
+    }
+}
+
+impl Decoder for smollm3::Model {
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
+        self.clone().forward(input, 0)
+    }
+}
+
+/// A loaded causal LM of any architecture: its decoder and the readout every architecture shares.
+pub struct CausalLm {
+    architecture: &'static str,
+    decoder: Box<dyn Decoder>,
     /// The output projection, `[vocab, hidden]`: `lm_head.weight`, or the embedding it is tied to.
     head: Tensor,
     vocab: usize,
@@ -126,54 +240,59 @@ pub struct Qwen3 {
     dir: PathBuf,
 }
 
-impl std::fmt::Debug for Qwen3 {
+impl std::fmt::Debug for CausalLm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Qwen3")
+        f.debug_struct("CausalLm")
+            .field("architecture", &self.architecture)
             .field("dir", &self.dir)
             .field("n_ctx", &self.n_ctx)
             .finish()
     }
 }
 
-impl Qwen3 {
+impl CausalLm {
     fn load(
         dir: &Path,
+        architecture: &'static str,
         config: &Value,
         opts: &LoadOptions,
         device: &Device,
         dtype: DType,
-    ) -> Result<Qwen3> {
-        let cfg: qwen3::Config = serde_json::from_value(config.clone()).with_context(|| {
+    ) -> Result<CausalLm> {
+        let configuration = configuration(architecture, config).with_context(|| {
             format!(
-                "{} is no Qwen3 configuration",
+                "{} is no {architecture} configuration",
                 dir.join(snapshot::CONFIG).display()
             )
         })?;
+        let shape = configuration.shape();
         let files = snapshot::weight_files(dir).map_err(anyhow::Error::msg)?;
         let vb = read_tensors(&files, device, dtype)?;
-        let model = qwen3::Model::new(&cfg, vb.clone())
-            .with_context(|| format!("building Qwen3 from {}", dir.display()))?;
-        let head = if cfg.tie_word_embeddings {
+        let decoder = configuration
+            .build(vb.clone())
+            .with_context(|| format!("building {architecture} from {}", dir.display()))?;
+        let head = if shape.tied {
             "model.embed_tokens.weight"
         } else {
             "lm_head.weight"
         };
         let head = vb
-            .get((cfg.vocab_size, cfg.hidden_size), head)
+            .get((shape.vocab, shape.hidden), head)
             .with_context(|| format!("reading the output projection {head}"))?;
-        let n_ctx = (opts.n_ctx as usize).min(cfg.max_position_embeddings);
+        let n_ctx = (opts.n_ctx as usize).min(shape.max_positions);
         ensure!(n_ctx > 0, "n_ctx must be greater than 0");
-        Ok(Qwen3 {
-            model,
+        Ok(CausalLm {
+            architecture,
+            decoder,
             head,
-            vocab: cfg.vocab_size,
+            vocab: shape.vocab,
             n_ctx,
             dir: dir.to_path_buf(),
         })
     }
 }
 
-impl LoadedModel for Qwen3 {
+impl LoadedModel for CausalLm {
     /// The smaller of the asked window and `config.json#max_position_embeddings` (Q11).
     fn n_ctx(&self) -> usize {
         self.n_ctx
@@ -210,7 +329,7 @@ impl LoadedModel for Qwen3 {
             .map(|&s| u32::try_from(s).context("a slot does not fit a u32"))
             .collect::<Result<Vec<u32>>>()?;
         let input = Tensor::new(ids, device)?.unsqueeze(0)?;
-        let hidden = self.model.clone().forward(&input, 0)?.squeeze(0)?;
+        let hidden = self.decoder.hidden_states(&input)?.squeeze(0)?;
         let at_slots = hidden
             .index_select(&Tensor::new(slots.as_slice(), device)?, 0)?
             .to_dtype(DType::F32)?;
@@ -269,6 +388,10 @@ mod tests {
         let runtime = CandleRuntime;
         assert!(runtime.supports(&write("mamba-named-qwen3", json!(["Qwen3ForCausalLM"]))));
         assert!(runtime.supports(&write("two", json!(["Other", "Qwen3ForCausalLM"]))));
+        for architecture in ["Qwen2ForCausalLM", "SmolLM3ForCausalLM"] {
+            assert!(ARCHITECTURES.contains(&architecture));
+            assert!(runtime.supports(&write(architecture, json!([architecture]))));
+        }
         assert!(!runtime.supports(&write("qwen3-named-mamba", json!(["MambaForCausalLM"]))));
         assert!(!runtime.supports(&write("none", Value::Null)));
         let empty = dir.join("empty");
@@ -281,10 +404,42 @@ mod tests {
             panic!("an unimplemented architecture loaded");
         };
         assert!(
-            err.to_string()
-                .contains("[\"MambaForCausalLM\"]; candle implements Qwen3ForCausalLM"),
+            err.to_string().contains(
+                "[\"MambaForCausalLM\"]; candle implements Qwen3ForCausalLM, Qwen2ForCausalLM, SmolLM3ForCausalLM"
+            ),
             "{err:#}"
         );
+    }
+
+    /// Qwen2's window: off, it is as wide as the positions whatever `sliding_window` says (a number below them, or
+    /// `null`), so candle's mask hides no earlier token; on, the configuration is refused.
+    #[test]
+    fn qwen2_reads_no_sliding_window() {
+        let config = |sliding_window: Value, use_sliding_window: bool| {
+            json!({
+                "vocab_size": 151_936,
+                "hidden_size": 1536,
+                "intermediate_size": 8960,
+                "num_hidden_layers": 28,
+                "num_attention_heads": 12,
+                "num_key_value_heads": 2,
+                "max_position_embeddings": 32_768,
+                "sliding_window": sliding_window,
+                "max_window_layers": 21,
+                "tie_word_embeddings": true,
+                "rope_theta": 1_000_000.0,
+                "rms_norm_eps": 1e-6,
+                "use_sliding_window": use_sliding_window,
+                "hidden_act": "silu",
+            })
+        };
+        for sliding_window in [json!(4096), Value::Null] {
+            let read = qwen2_config(&config(sliding_window, false)).unwrap();
+            assert_eq!(read.sliding_window, 32_768);
+            assert_eq!(read.shape().max_positions, 32_768);
+        }
+        let err = qwen2_config(&config(json!(4096), true)).unwrap_err();
+        assert!(err.to_string().contains("use_sliding_window"), "{err:#}");
     }
 
     /// Q5: `gpu_layers` 0 is the CPU in F32 and below -1 an error; -1 is the CPU too on a build without Metal (an Apple

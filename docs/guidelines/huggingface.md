@@ -216,6 +216,11 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   holding the snapshot commit, so a `main` lookup resolves offline. A repository that exists only locally gets a local
   commit id (`onnx.md`, "Repositories and the cache layout").
 - Treat everything in the cache as read-only once written; a changed file means a new commit, never an edit.
+- A download through `hf-hub` with a commit as its revision, which every `hub::Hub::file` is, writes no `refs/` file
+  and changes no file the cache holds: it adds blobs, the `snapshots/<commit>/` links to them and one lock file per
+  blob under `.locks/models--<org>--<repo>/`, which stays behind. `cargo xtask e2e candle` removes a row's downloads
+  on that ground: it lists the cache before the row and deletes every path added since, also inside a repository
+  `cargo xtask fetch` installed in part (HuggingFaceTB/SmolLM3-3B's tokenizer files stay, its shards go).
 
 ### Gated repositories (Q18)
 - Never download from a gated repo (meta-llama/*): the Hub requires an approved access request and an authenticated

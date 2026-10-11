@@ -1,0 +1,15 @@
+{
+  "model": "jev-latest",
+  "state": "My card was charged twice for order A-104. Please refund the duplicate.",
+  "questions": {
+    "charges": {
+      "type": "score",
+      "instructions": "How many times was the card charged for the order?",
+      "criteria": ["Never", "Once", "Twice", "Three times or more"]
+    },
+    "duplicate": {
+      "type": "noul",
+      "instructions": "Was the customer charged more than once?"
+    }
+  }
+}

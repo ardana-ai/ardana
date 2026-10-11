@@ -137,7 +137,9 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   `cargo test --workspace -- --include-ignored` under the home guard. The one plain test above that is `update.rs`
   "a_failed_lookup_is_an_error", which waits out the two 10 s request timeouts of a GitHub that never answers.
 - End-to-end tests use the official models from `xtask/fetch.toml` (decider:2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B, Gemma 4 E2B,
-  Ollama `llama3.2`), resolved from `tmp/hf`; never replace a real model with an invented fixture.
+  Ollama `llama3.2`), resolved from `tmp/hf`; never replace a real model with an invented fixture. The checkpoints of
+  `cargo xtask e2e candle` are too large to keep there: that suite pulls each from the Hub, checks it against the
+  commit its row pins and removes it again (`candle.md`, "Testing").
 - Put test temp files under `$ARDANA_TMP` (or `std::env::temp_dir()`, which `[env]` points at `tmp/sys`); never under
   the real home. Tests that run `ardana pull` give each child its own `ARDANA_HOME` under `$ARDANA_TMP/<test>` (tests
   run in parallel) and `HF_HUB_OFFLINE=1`, so they read `tmp/hf` and never the network; the library comes from the
@@ -226,11 +228,17 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check|--tests]`, `build`,
   `build-playground --public-url <path> [--hub <url>] [--library <url>]`, `check-deps`, `check-docs`,
   `export-decider`, `onnx convert <name>`, `onnx publish <name> [--dry-run]` (`onnx.md`), `e2e <suite>` (`smoke`,
-  `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`, `standalone`, `design`); keep its own dependency set small (the
-  workspace crate below is the one exception): downloads and HTTP probes go through `curl` and `git` run by `Sandbox::command`, not
-  HTTP crates. Its one codec is `lz-str` (the `design` suite's Jev share links).
+  `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`, `standalone`, `design`, `candle`); keep its own dependency
+  set small (the workspace crate below is the one exception): downloads and HTTP probes go through `curl` and `git`
+  run by `Sandbox::command`, not HTTP crates. Its one codec is `lz-str` (the `design` suite's Jev share links).
 - The API suites (`jevcompat`, `sdk`, `jevbench`) build `ardana` with `--release --locked` (llama.cpp in a debug build
   is too slow for 231 JevBench items) and run it through `xtask/src/serve.rs#Server`, which kills the server on drop.
+- The `candle` suite (`xtask/src/candle.rs`) is the one suite that downloads models itself: it runs the release
+  `ardana` online on a home per row, `tmp/e2e/candle/<row>/home`, serves that home as it is with `Server::start_on`,
+  lists `tmp/hf/hub` before a row and removes every path added since when the row ends, checks passed or not, and
+  runs `cargo clean` last. The `xtask` binary runs from `target/` while that happens; it is Unix only, where a running
+  file can be removed. Add a row to `xtask/src/e2e.rs#CANDLE_FIXTURES`, never a model to `xtask/fetch.toml`, for a
+  checkpoint the suite verifies.
 - Run every external tool through `Sandbox::command` (sandbox env, `PATH` prefixed with `tmp/bin`), and wrap `fetch`,
   `build`, `export-decider`, `onnx` and every `e2e` suite in `Sandbox::guarded`. `sandbox::run` (output on the
   terminal) and `sandbox::run_stdout` (output captured) fail on a non-zero exit with the command's `Debug` form, which
