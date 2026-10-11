@@ -7,9 +7,11 @@
 //! at every position; the readout is shared ([`CausalLm`]): the label logits are the head's rows for the label ids
 //! applied to the hidden states at the slots, in F32, so a prompt never computes a whole vocabulary row.
 //!
-//! candle-transformers' Llama, Phi-3, Granite and LFM2 narrow to the last position inside the model, so [`llama`],
-//! [`phi3`], [`granite`] and [`lfm2`] are its 0.11.0 files, copied and changed as each one's header lists.
+//! candle-transformers' Llama, Phi-3, Granite, LFM2 and Gemma 3 narrow to the last position inside the model, so
+//! [`llama`], [`phi3`], [`granite`], [`lfm2`] and [`gemma3`] are its 0.11.0 files, copied and changed as each one's
+//! header lists.
 
+mod gemma3;
 mod granite;
 mod lfm2;
 mod llama;
@@ -29,7 +31,7 @@ use candle_transformers::models::{qwen2, qwen3};
 use serde_json::Value;
 
 /// The `config.json#architectures` names this runtime implements.
-pub const ARCHITECTURES: [&str; 7] = [
+pub const ARCHITECTURES: [&str; 9] = [
     "Qwen3ForCausalLM",
     "Qwen2ForCausalLM",
     "SmolLM3ForCausalLM",
@@ -37,6 +39,8 @@ pub const ARCHITECTURES: [&str; 7] = [
     "Phi3ForCausalLM",
     "GraniteForCausalLM",
     "Lfm2ForCausalLM",
+    "Gemma3ForCausalLM",
+    "Gemma3ForConditionalGeneration",
 ];
 
 /// Candle for safetensors snapshots, on Metal by default on Apple silicon.
@@ -105,8 +109,15 @@ fn gpu() -> Result<(Device, DType)> {
     Ok((Device::Cpu, DType::F32))
 }
 
-/// Every tensor of `files` on `device` in `dtype`, each converted once, so a tied head shares its embedding's storage.
-fn read_tensors(files: &[PathBuf], device: &Device, dtype: DType) -> Result<VarBuilder<'static>> {
+/// Every tensor of `files` that `architecture` reads ([`Architecture::tensor`]), under the name it reads it by, on
+/// `device` in `dtype`, each converted once, so a tied head shares its embedding's storage; a tensor it never reads
+/// (a multimodal checkpoint's vision tower) stays in the mapping.
+fn read_tensors(
+    files: &[PathBuf],
+    architecture: &dyn Architecture,
+    device: &Device,
+    dtype: DType,
+) -> Result<HashMap<String, Tensor>> {
     // SAFETY: the files are hub cache blobs, which are never written in place once downloaded
     // (docs/guidelines/huggingface.md, "Hub cache layout"), so the mapping does not change while it is read; every
     // tensor is copied out of it before it is dropped at the end of this function.
@@ -114,13 +125,16 @@ fn read_tensors(files: &[PathBuf], device: &Device, dtype: DType) -> Result<VarB
         .with_context(|| format!("mapping {}", display(files)))?;
     let mut tensors = HashMap::new();
     for (name, _) in mapped.tensors() {
+        let Some(read_as) = architecture.tensor(&name) else {
+            continue;
+        };
         let tensor = mapped
             .load(&name, device)
             .and_then(|tensor| tensor.to_dtype(dtype))
             .with_context(|| format!("reading the tensor {name}"))?;
-        tensors.insert(name, tensor);
+        tensors.insert(read_as.to_string(), tensor);
     }
-    Ok(VarBuilder::from_tensors(tensors, dtype, device))
+    Ok(tensors)
 }
 
 fn display(files: &[PathBuf]) -> String {
@@ -147,6 +161,16 @@ trait Architecture {
     fn logits_scaling(&self) -> f64 {
         1.0
     }
+    /// What the readout softcaps the logits with, as `cap * tanh(logits / cap)`: none, but for Gemma 3's
+    /// `final_logit_softcapping`.
+    fn final_logit_softcapping(&self) -> Option<f64> {
+        None
+    }
+    /// The name the decoder reads the checkpoint tensor `name` under, or `None` for one it never reads: every tensor
+    /// under its own name, but for the text tower of a multimodal checkpoint.
+    fn tensor<'a>(&self, name: &'a str) -> Option<&'a str> {
+        Some(name)
+    }
     /// The decoder over the checkpoint's tensors, rooted where `config.json` sits.
     fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>>;
 }
@@ -170,6 +194,10 @@ fn configuration(architecture: &str, config: &Value) -> Result<Box<dyn Architect
         "Phi3ForCausalLM" => Box::new(serde_json::from_value::<phi3::Config>(config.clone())?),
         "GraniteForCausalLM" => Box::new(granite_config(config)?),
         "Lfm2ForCausalLM" => Box::new(lfm2_config(config)?),
+        "Gemma3ForCausalLM" => Box::new(gemma3_config(config)?),
+        "Gemma3ForConditionalGeneration" => Box::new(Gemma3TextTower(
+            gemma3_config(&config["text_config"]).context("text_config")?,
+        )),
         other => bail!("no implementation of {other}"),
     })
 }
@@ -429,6 +457,76 @@ impl Decoder for Lfm2 {
     }
 }
 
+/// `config` (a `Gemma3ForCausalLM` checkpoint's, or the `text_config` of a multimodal one) as the vendored Gemma 3
+/// configuration: candle's own fields, and the factor of a `rope_scaling` of type `linear`, which divides the global
+/// layers' rotary frequencies (gemma-3-4b-it writes 8) and is 1 without one; another type is refused.
+fn gemma3_config(config: &Value) -> Result<gemma3::Config> {
+    let scaling = &config["rope_scaling"];
+    let rope_type = scaling["rope_type"].as_str().or(scaling["type"].as_str());
+    let factor = match rope_type {
+        Some("linear") => {
+            serde_json::from_value(scaling["factor"].clone()).context("rope_scaling.factor")?
+        }
+        Some(other) if other != "default" => {
+            bail!("rope_scaling of type {other} is not implemented")
+        }
+        _ => 1.0,
+    };
+    let config = serde_json::from_value(config.clone())?;
+    Ok(gemma3::Config::new(config, factor))
+}
+
+/// Gemma 3 ties its head to the embedding and has no `tie_word_embeddings` to say so.
+impl Architecture for gemma3::Config {
+    fn shape(&self) -> Shape {
+        Shape {
+            vocab: self.vocab_size,
+            hidden: self.hidden_size,
+            max_positions: self.max_position_embeddings,
+            tied: true,
+        }
+    }
+
+    fn final_logit_softcapping(&self) -> Option<f64> {
+        self.final_logit_softcapping
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        Ok(Box::new(gemma3::Model::new(self, vb)?))
+    }
+}
+
+/// The text tower of a `Gemma3ForConditionalGeneration` checkpoint: `text_config`'s Gemma 3, over the tensors under
+/// `language_model.`, read under the names a `Gemma3ForCausalLM` checkpoint gives them; the vision tower's and the
+/// projector's are never read.
+struct Gemma3TextTower(gemma3::Config);
+
+impl Architecture for Gemma3TextTower {
+    fn shape(&self) -> Shape {
+        self.0.shape()
+    }
+
+    fn final_logit_softcapping(&self) -> Option<f64> {
+        self.0.final_logit_softcapping()
+    }
+
+    fn tensor<'a>(&self, name: &'a str) -> Option<&'a str> {
+        name.strip_prefix("language_model.")
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        self.0.build(vb)
+    }
+}
+
+/// Each prompt runs a clone of the loaded decoder, whose key-value caches start empty; a sliding layer attends over
+/// the whole prompt under its window's mask.
+impl Decoder for gemma3::Model {
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
+        self.clone().forward(input, 0)
+    }
+}
+
 /// A loaded causal LM of any architecture: its decoder and the readout every architecture shares.
 pub struct CausalLm {
     architecture: &'static str,
@@ -437,6 +535,8 @@ pub struct CausalLm {
     head: Tensor,
     /// What the head's logits are divided by ([`Architecture::logits_scaling`]).
     logits_scaling: f64,
+    /// What they are softcapped with after that ([`Architecture::final_logit_softcapping`]).
+    softcapping: Option<f64>,
     vocab: usize,
     n_ctx: usize,
     dir: PathBuf,
@@ -469,7 +569,8 @@ impl CausalLm {
         })?;
         let shape = configuration.shape();
         let files = snapshot::weight_files(dir).map_err(anyhow::Error::msg)?;
-        let vb = read_tensors(&files, device, dtype)?;
+        let tensors = read_tensors(&files, configuration.as_ref(), device, dtype)?;
+        let vb = VarBuilder::from_tensors(tensors, dtype, device);
         let decoder = configuration
             .build(vb.clone())
             .with_context(|| format!("building {architecture} from {}", dir.display()))?;
@@ -488,6 +589,7 @@ impl CausalLm {
             decoder,
             head,
             logits_scaling: configuration.logits_scaling(),
+            softcapping: configuration.final_logit_softcapping(),
             vocab: shape.vocab,
             n_ctx,
             dir: dir.to_path_buf(),
@@ -541,6 +643,11 @@ impl LoadedModel for CausalLm {
             .index_select(&Tensor::new(label_ids, device)?, 0)?
             .to_dtype(DType::F32)?;
         let logits = (at_slots.matmul(&labels.t()?)? / self.logits_scaling)?;
+        // Softcapping is elementwise, so the label rows alone softcap as the whole vocabulary row would.
+        let logits = match self.softcapping {
+            None => logits,
+            Some(cap) => ((logits / cap)?.tanh()? * cap)?,
+        };
         Ok(logits.to_vec2::<f32>()?)
     }
 }
@@ -598,6 +705,8 @@ mod tests {
             "Phi3ForCausalLM",
             "GraniteForCausalLM",
             "Lfm2ForCausalLM",
+            "Gemma3ForCausalLM",
+            "Gemma3ForConditionalGeneration",
         ] {
             assert!(ARCHITECTURES.contains(&architecture));
             assert!(runtime.supports(&write(architecture, json!([architecture]))));
@@ -616,7 +725,8 @@ mod tests {
         assert!(
             err.to_string().contains(
                 "[\"MambaForCausalLM\"]; candle implements Qwen3ForCausalLM, Qwen2ForCausalLM, SmolLM3ForCausalLM, \
-                 LlamaForCausalLM, Phi3ForCausalLM, GraniteForCausalLM, Lfm2ForCausalLM"
+                 LlamaForCausalLM, Phi3ForCausalLM, GraniteForCausalLM, Lfm2ForCausalLM, Gemma3ForCausalLM, \
+                 Gemma3ForConditionalGeneration"
             ),
             "{err:#}"
         );
@@ -825,16 +935,13 @@ mod tests {
                 decoder: configuration.build(vb).unwrap(),
                 head: head.clone(),
                 logits_scaling: configuration.logits_scaling(),
+                softcapping: None,
                 vocab: 20,
                 n_ctx: 32,
                 dir: PathBuf::new(),
             };
             let logits = model.slot_logits(&[3, 1, 4, 1, 5], &[2, 4], &[0, 7, 19]);
             logits.unwrap().concat()
-        };
-        let widest_gap = |a: &[f32], b: &[f32]| {
-            let gaps = a.iter().zip(b).map(|(a, b)| (a - b).abs());
-            gaps.fold(0f32, f32::max)
         };
         let wide = logits(json!({"attention_multiplier": 0.125}));
         for scalars in [
@@ -925,6 +1032,249 @@ mod tests {
         config["conv_bias"] = json!(true);
         let err = lfm2_config(&config).unwrap_err();
         assert!(err.to_string().contains("conv_bias"), "{err:#}");
+    }
+
+    /// A Gemma 3 `config.json` a few values wide: `layers` layers, a window of `sliding_window` tokens, and the layers
+    /// sliding by `sliding_window_pattern` (every layer with a pattern above their count, none with 1).
+    fn gemma3_config_json(layers: usize, sliding_window: usize, pattern: usize) -> Value {
+        json!({
+            "attention_bias": false,
+            "attn_logit_softcapping": null,
+            "final_logit_softcapping": null,
+            "head_dim": 8,
+            "hidden_activation": "gelu_pytorch_tanh",
+            "hidden_size": 16,
+            "intermediate_size": 24,
+            "max_position_embeddings": 32,
+            "num_attention_heads": 2,
+            "num_hidden_layers": layers,
+            "num_key_value_heads": 2,
+            "query_pre_attn_scalar": 8,
+            "rms_norm_eps": 1e-6,
+            "rope_local_base_freq": 10000.0,
+            "rope_scaling": null,
+            "rope_theta": 1000000.0,
+            "sliding_window": sliding_window,
+            "sliding_window_pattern": pattern,
+            "vocab_size": 20,
+        })
+    }
+
+    /// The widest gap between two rows.
+    fn widest_gap(a: &[f32], b: &[f32]) -> f32 {
+        let gaps = a.iter().zip(b).map(|(a, b)| (a - b).abs());
+        gaps.fold(0f32, f32::max)
+    }
+
+    /// The vendored Gemma 3 over random weights: one sliding layer with a window of 2 reads a prompt longer than the
+    /// window (candle's rotating cache hands the whole prompt back, and the mask windows it), and a position's state
+    /// follows its own token and the one before, never the one two back, as transformers and llama.cpp window it
+    /// (upstream's mask let that one in); a global layer follows every token. The global layers alone divide their
+    /// rotary frequencies by a linear `rope_scaling`'s factor, which leaves position 0 as it was; another type of
+    /// scaling is refused. Every position has its state.
+    #[test]
+    fn gemma3_windows_its_sliding_layers() {
+        let sliding = gemma3_config_json(1, 2, 6);
+        let (decoder, weights) = random_decoder("Gemma3ForCausalLM", &sliding);
+        assert_every_position(decoder.as_ref(), &[3, 1, 4, 1, 5, 9], 16);
+        let last = |decoder: &dyn Decoder, ids: &[u32]| hidden(decoder, ids).pop().unwrap();
+        let prompt = [3, 1, 4, 1, 5];
+        let windowed = last(decoder.as_ref(), &prompt);
+        assert!(widest_gap(&windowed, &last(decoder.as_ref(), &[7, 7, 7, 1, 5])) < 1e-5);
+        assert!(widest_gap(&windowed, &last(decoder.as_ref(), &[3, 1, 4, 7, 5])) > 1e-3);
+
+        let global = gemma3_config_json(1, 2, 1);
+        let vb = VarBuilder::from_tensors(weights.clone(), DType::F32, &Device::Cpu);
+        let decoder = gemma3_config(&global).unwrap().build(vb).unwrap();
+        let whole = last(decoder.as_ref(), &prompt);
+        assert!(widest_gap(&whole, &last(decoder.as_ref(), &[7, 1, 4, 1, 5])) > 1e-3);
+
+        let scaled = |mut config: Value| -> Vec<Vec<f32>> {
+            config["rope_scaling"] = json!({"rope_type": "linear", "factor": 8.0});
+            assert_eq!(gemma3_config(&config).unwrap().rope_scaling_factor, 8.0);
+            let vb = VarBuilder::from_tensors(weights.clone(), DType::F32, &Device::Cpu);
+            let decoder = gemma3_config(&config).unwrap().build(vb).unwrap();
+            hidden(decoder.as_ref(), &prompt)
+        };
+        let (unscaled, scaled_global) = (hidden(decoder.as_ref(), &prompt), scaled(global));
+        assert_eq!(unscaled[0], scaled_global[0]);
+        assert!(widest_gap(&unscaled[4], &scaled_global[4]) > 1e-3);
+        assert_eq!(
+            scaled(sliding.clone()),
+            hidden(&*random_decoder_of(&sliding, &weights), &prompt)
+        );
+        assert_eq!(gemma3_config(&sliding).unwrap().rope_scaling_factor, 1.0);
+
+        let mut yarn = sliding;
+        yarn["rope_scaling"] = json!({"rope_type": "yarn", "factor": 8.0});
+        let err = gemma3_config(&yarn).unwrap_err();
+        assert!(err.to_string().contains("yarn"), "{err:#}");
+    }
+
+    /// The decoder of a Gemma 3 `config` over `weights`.
+    fn random_decoder_of(config: &Value, weights: &HashMap<String, Tensor>) -> Box<dyn Decoder> {
+        let vb = VarBuilder::from_tensors(weights.clone(), DType::F32, &Device::Cpu);
+        gemma3_config(config).unwrap().build(vb).unwrap()
+    }
+
+    /// Final-logit softcapping in the shared readout: the slot logits of a `CausalLm` built in memory over a
+    /// `final_logit_softcapping` of 30 are `30 * tanh(x / 30)` of the ones without it, and the head is the embedding
+    /// (Gemma 3 ties it without a `tie_word_embeddings`). Both pinned checkpoints write `null`, which softcaps
+    /// nothing.
+    #[test]
+    fn gemma3_softcaps_the_logits_in_the_readout() {
+        let plain = gemma3_config_json(2, 4, 2);
+        let (_, weights) = random_decoder("Gemma3ForCausalLM", &plain);
+        let logits = |config: &Value| -> Vec<f32> {
+            let configuration = gemma3_config(config).unwrap();
+            assert!(configuration.shape().tied);
+            let vb = VarBuilder::from_tensors(weights.clone(), DType::F32, &Device::Cpu);
+            let mut model = CausalLm {
+                architecture: "Gemma3ForCausalLM",
+                decoder: configuration.build(vb.clone()).unwrap(),
+                head: vb.get((20, 16), "model.embed_tokens.weight").unwrap(),
+                logits_scaling: configuration.logits_scaling(),
+                softcapping: configuration.final_logit_softcapping(),
+                vocab: 20,
+                n_ctx: 32,
+                dir: PathBuf::new(),
+            };
+            let logits = model.slot_logits(&[3, 1, 4, 1, 5], &[2, 4], &[0, 7, 19]);
+            logits.unwrap().concat()
+        };
+        let raw = logits(&plain);
+        assert!(raw.iter().any(|x| x.abs() > 1.0), "{raw:?}");
+        let mut capped = plain;
+        capped["final_logit_softcapping"] = json!(30.0);
+        assert_eq!(
+            gemma3_config(&capped).unwrap().final_logit_softcapping(),
+            Some(30.0)
+        );
+        let want: Vec<f32> = raw.iter().map(|x| 30.0 * (x / 30.0).tanh()).collect();
+        assert!(widest_gap(&logits(&capped), &want) < 1e-5);
+    }
+
+    /// The 883 tensor names of unsloth/gemma-3-4b-it's `model.safetensors.index.json` at the pinned commit: 34 text
+    /// layers of 13 tensors with the embedding and the norm under `language_model.model.`, 27 SigLIP layers of 16
+    /// with the two embeddings and the post layer norm under `vision_tower.vision_model.`, and the projector's two.
+    fn gemma3_4b_weight_map() -> Vec<String> {
+        let mut names = vec![
+            "language_model.model.embed_tokens.weight".to_string(),
+            "language_model.model.norm.weight".to_string(),
+            "multi_modal_projector.mm_input_projection_weight".to_string(),
+            "multi_modal_projector.mm_soft_emb_norm.weight".to_string(),
+            "vision_tower.vision_model.embeddings.patch_embedding.bias".to_string(),
+            "vision_tower.vision_model.embeddings.patch_embedding.weight".to_string(),
+            "vision_tower.vision_model.embeddings.position_embedding.weight".to_string(),
+            "vision_tower.vision_model.post_layernorm.bias".to_string(),
+            "vision_tower.vision_model.post_layernorm.weight".to_string(),
+        ];
+        let text = [
+            "input_layernorm",
+            "mlp.down_proj",
+            "mlp.gate_proj",
+            "mlp.up_proj",
+            "post_attention_layernorm",
+            "post_feedforward_layernorm",
+            "pre_feedforward_layernorm",
+            "self_attn.k_norm",
+            "self_attn.k_proj",
+            "self_attn.o_proj",
+            "self_attn.q_norm",
+            "self_attn.q_proj",
+            "self_attn.v_proj",
+        ];
+        for layer in 0..34 {
+            for tensor in text {
+                names.push(format!(
+                    "language_model.model.layers.{layer}.{tensor}.weight"
+                ));
+            }
+        }
+        let vision = [
+            "layer_norm1",
+            "layer_norm2",
+            "mlp.fc1",
+            "mlp.fc2",
+            "self_attn.k_proj",
+            "self_attn.out_proj",
+            "self_attn.q_proj",
+            "self_attn.v_proj",
+        ];
+        for layer in 0..27 {
+            for tensor in vision {
+                for parameter in ["weight", "bias"] {
+                    names.push(format!(
+                        "vision_tower.vision_model.encoder.layers.{layer}.{tensor}.{parameter}"
+                    ));
+                }
+            }
+        }
+        names
+    }
+
+    /// R6.3: a `Gemma3ForConditionalGeneration` checkpoint's configuration is its `text_config` (refused when
+    /// missing), and of its weight map (883 tensors: 444 under `language_model.model.`, 437 under
+    /// `vision_tower.vision_model.`, two under `multi_modal_projector.`) the text tower reads the 444 alone, each
+    /// under the name a text-only checkpoint gives it. Mapped as a load maps the shards, a safetensors file holding
+    /// one value per name gives up exactly those 444: no vision tensor is copied to the device.
+    #[test]
+    fn gemma3_multimodal_reads_the_text_tower_only() {
+        let names = gemma3_4b_weight_map();
+        assert_eq!(names.len(), 883);
+        let under = |prefix: &str| names.iter().filter(|n| n.starts_with(prefix)).count();
+        assert_eq!(under("language_model.model."), 444);
+        assert_eq!(under("vision_tower.vision_model."), 437);
+        assert_eq!(under("multi_modal_projector."), 2);
+
+        let text_config = gemma3_config_json(34, 1024, 6);
+        let architecture = "Gemma3ForConditionalGeneration";
+        let Err(err) = configuration(architecture, &json!({"architectures": [architecture]}))
+        else {
+            panic!("a multimodal checkpoint without text_config read");
+        };
+        assert!(err.to_string().contains("text_config"), "{err:#}");
+        let config = json!({"architectures": [architecture], "text_config": text_config});
+        let tower = configuration(architecture, &config).unwrap();
+        assert_eq!(tower.shape().max_positions, 32);
+        let read: Vec<(&str, &str)> = names
+            .iter()
+            .filter_map(|name| tower.tensor(name).map(|read_as| (name.as_str(), read_as)))
+            .collect();
+        assert_eq!(read.len(), 444);
+        for (name, read_as) in &read {
+            assert_eq!(format!("language_model.{read_as}"), *name);
+            assert!(read_as.starts_with("model."), "{read_as}");
+        }
+
+        let file = scratch("candle-gemma3-text-tower").join(snapshot::SINGLE);
+        let values: HashMap<String, Tensor> = names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                (
+                    name.clone(),
+                    Tensor::new(&[i as f32], &Device::Cpu).unwrap(),
+                )
+            })
+            .collect();
+        candle_core::safetensors::save(&values, &file).unwrap();
+        let tensors = read_tensors(
+            std::slice::from_ref(&file),
+            tower.as_ref(),
+            &Device::Cpu,
+            DType::F32,
+        )
+        .unwrap();
+        assert_eq!(tensors.len(), 444);
+        assert!(tensors.keys().all(|name| name.starts_with("model.")));
+        let embedding = tensors["model.embed_tokens.weight"]
+            .to_vec1::<f32>()
+            .unwrap();
+        assert_eq!(embedding, [0.0]);
+        let every = configuration("Gemma3ForCausalLM", &text_config).unwrap();
+        let tensors = read_tensors(&[file], every.as_ref(), &Device::Cpu, DType::F32).unwrap();
+        assert_eq!(tensors.len(), 883);
     }
 
     /// Q5: `gpu_layers` 0 is the CPU in F32 and below -1 an error; -1 is the CPU too on a build without Metal (an Apple

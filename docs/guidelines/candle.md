@@ -37,7 +37,8 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - The implementation comes from `config.json#architectures` (`snapshot::architectures`), never from a model name or a
   per-model value in code (Q3). `ardana_candle::ARCHITECTURES` lists the names it implements, one implementation each
   (Q2): `Qwen3ForCausalLM`, `Qwen2ForCausalLM`, `SmolLM3ForCausalLM`, `LlamaForCausalLM`, `Phi3ForCausalLM`,
-  `GraniteForCausalLM` and `Lfm2ForCausalLM`. `CandleRuntime::supports` is true for a directory whose `config.json`
+  `GraniteForCausalLM`, `Lfm2ForCausalLM`, `Gemma3ForCausalLM` and `Gemma3ForConditionalGeneration` (its text tower).
+  `CandleRuntime::supports` is true for a directory whose `config.json`
   names one of them, so `Runtimes::for_weights` hands a GGUF file to llama.cpp and a snapshot directory to Candle.
 - One architecture is four things in `crates/ardana-candle/src/lib.rs` and nothing else: its name in `ARCHITECTURES`,
   its arm in `configuration`, `impl Architecture` for its configuration type (`shape`: the vocabulary, the hidden
@@ -45,16 +46,23 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   `impl Decoder` for its model (`hidden_states`: the final-normed states at every position of one prompt). The
   readout is `CausalLm`'s, shared: no architecture reads a head, checks a prompt or multiplies label rows itself.
   What an architecture asks of the readout it says through `Architecture`, never in a readout of its own:
-  `logits_scaling` (1 unless overridden; Granite's) is what `CausalLm` divides the label logits by.
+  `logits_scaling` (1 unless overridden; Granite's) is what `CausalLm` divides the label logits by, and
+  `final_logit_softcapping` (none unless overridden; Gemma 3's) what it then softcaps them with, as
+  `cap * tanh(logits / cap)`, elementwise, so the label rows alone softcap as a whole vocabulary row would. What
+  an architecture reads of a checkpoint it says through `Architecture::tensor`: every tensor under its own name,
+  unless overridden (the text tower of a multimodal checkpoint, which strips its prefix and skips the rest).
   An architecture whose candle-transformers model cannot return those states adds its vendored module file
   ("Vendored modules").
 - Read the architecture's own configuration from the same `config.json` with `serde_json::from_value` into the
   `candle-transformers` type (`models::qwen3::Config`, `models::qwen2::Config`, `models::smol::smollm3::Config`,
   `models::llama::LlamaConfig`, `models::phi3::Config`, `models::granite::GraniteConfig`,
-  `models::lfm2::Lfm2Config`); its unknown fields are ignored, and it is read before any tensor, so a configuration
+  `models::lfm2::Lfm2Config`, `models::gemma3::Config`); its unknown fields are ignored, and it is read before any
+  tensor, so a configuration
   that does not read costs no load. `ardana-candle` depends on neither `serde` nor `tracing`: a field the candle
   type lacks is read from the same value beside it (`llama_config` reads `head_dim`, `granite_config` the four
-  scalars and `tie_word_embeddings`, `lfm2_config` `intermediate_size`, `block_auto_adjust_ff_dim` and the tying).
+  scalars and `tie_word_embeddings`, `lfm2_config` `intermediate_size`, `block_auto_adjust_ff_dim` and the tying,
+  `gemma3_config` the linear `rope_scaling`'s factor). A multimodal checkpoint's text configuration is nested:
+  `Gemma3ForConditionalGeneration` reads `config.json#text_config` as `Gemma3ForCausalLM` reads the root.
 
 ### Vendored modules
 - Where a candle-transformers 0.11.0 model narrows to the last position inside the model and keeps its layers
@@ -83,6 +91,11 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   - `lfm2.rs` (`src/models/lfm2.rs`, `Lfm2ForCausalLM`): `Model::forward` returns the final-normed hidden states at
     every position instead of the last position's logits, and `Model` holds no `lm_head`. Also the feed-forward
     width as transformers computes it from `intermediate_size`, and the tying handed in by the caller.
+  - `gemma3.rs` (`src/models/gemma3.rs`, `Gemma3ForCausalLM` and the text tower of
+    `Gemma3ForConditionalGeneration`): `Model::forward` returns the final-normed hidden states at every position
+    instead of the last position's softcapped logits, and `Model` holds neither `lm_head` nor
+    `final_logit_softcapping`. Also the sliding mask's window, the attention scale and the global layers' linear
+    rope scaling as transformers and llama.cpp have them ("Gemma 3 in the vendored module").
 
 ### Loading
 - Map the files with `candle_core::safetensors::MmapedSafetensors::multi(&files)` (an `unsafe` call: the hub cache's
@@ -219,6 +232,56 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - Not measured on Metal (no Apple machine, 2026-10-11): both keep the BF16 rule. Both compute their rotary tables
   and their attention in F32; LFM2's convolution runs in the model's dtype.
 
+### Gemma 3 in the vendored module
+- Two checkpoint forms, one module. `Gemma3ForCausalLM` (gemma-3-1b-it, `model_type` `gemma3_text`) writes a flat
+  `config.json` and its tensors under `model.*`. `Gemma3ForConditionalGeneration` (gemma-3-4b-it and up,
+  `model_type` `gemma3`) is a multimodal checkpoint: its text fields sit under `config.json#text_config` beside a
+  `vision_config`, and its weight map holds the text tower under `language_model.model.*` (gemma-3-4b-it: 444 of 883
+  tensors), SigLIP under `vision_tower.vision_model.*` (437) and `multi_modal_projector.*` (2). `Gemma3TextTower`
+  reads `text_config` and, through `Architecture::tensor`, the `language_model.` tensors alone under the names a
+  text-only checkpoint gives them, so `read_tensors` copies no vision tensor to the device and the decoder and the
+  head read `model.*` either way. A checkpoint saved by transformers 4.52 or later writes the tower under
+  `model.language_model.*` with its own `lm_head.weight`; that form was not run and is not read (the load fails
+  naming `model.embed_tokens.weight`). The unsloth mirrors are the pins because google's repositories are gated.
+- `gemma3::Model::forward(input, 0)` returns the final-normed hidden states at every position, on a clone like every
+  other architecture. The head is always the embedding (`model.embed_tokens.weight`; there is no
+  `tie_word_embeddings`), the embeddings are multiplied by `sqrt(hidden_size)`, and every RmsNorm multiplies by
+  `1 + weight`. Final-logit softcapping belongs to the readout (`Architecture::final_logit_softcapping`, "Logits"):
+  both pinned checkpoints write `final_logit_softcapping: null` and `attn_logit_softcapping: null`, so on them
+  nothing is softcapped; the readout's path is pinned by a unit test over random weights.
+- A layer is sliding when `(layer_idx + 1) % sliding_window_pattern > 0` (five of every six); `sliding_window` is
+  512 for 1B and 1024 for 4B. A sliding layer attends over the whole prompt (candle's `RotatingKvCache::append`
+  hands back the whole source when one pass exceeds its window) under a mask that hides every key `sliding_window`
+  or more positions before its query, which is transformers' `sliding_window_overlay` (`kv > q - window`) and
+  llama.cpp's `is_masked_swa` (`p1 - p0 >= n_swa`); candle-transformers 0.11.0's mask hid one position less, a
+  window of `sliding_window + 1`. A sliding layer rotates with `rope_local_base_freq` (10,000) unscaled; a global
+  layer with `rope_theta` (1,000,000) divided by the `factor` of a `rope_scaling` of `rope_type` `linear`
+  (gemma-3-4b-it writes 8, gemma-3-1b-it `null`), which upstream does not read and which llama.cpp applies as the
+  GGUF's `rope.scaling.factor` to its non-SWA layers alone; another `rope_type` is refused at load. The attention
+  scores are scaled by `query_pre_attn_scalar^-0.5` as transformers does (llama.cpp: `f_attention_scale`), where
+  upstream scaled by `1/sqrt(head_dim)`: the same for 1B, 4B and 12B (256), not for 27B (168 against 128).
+- `models::gemma3::Config` wants all 18 fields, `sliding_window_pattern` among them (both pins write 6 and no
+  `layer_types`); a `config.json` that writes `layer_types` without the pattern, as transformers 4.54 and later
+  save, does not read. Each layer builds its own rotary table over `max_position_embeddings` positions, as upstream
+  does: 26 tables of 32,768 rows for 1B (0.9 GB in F32), 34 of 131,072 for 4B (4.6 GB), and a global layer's
+  `KvCache` allocates that many positions on the clone's first append (gemma-3-4b-it: 1 GB a layer, six layers),
+  freed with the clone.
+- Checked against transformers 5.19.0 in F32 on the CPU (2026-10-11, by hand, `Gemma3ForCausalLM` and
+  `Gemma3ForConditionalGeneration` loaded from the same snapshots): the label logits through Candle are within
+  0.0002 of it for gemma-3-1b-it and for gemma-3-4b-it, each at 42 and at 2.2k tokens, past both sliding windows,
+  so what separates a checkpoint from its GGUF is the quantization. candle-nn 0.11.0's plain `KvCache::append`
+  (a global layer's) refuses a non-contiguous tensor, which the transposed value states of a checkpoint with more
+  than one key-value head are (4B: four; 1B: one): the copy makes them contiguous first.
+- Attention is matmul over `[heads, len, len]` scores in the model's dtype on every device, so memory and time
+  grow with the square of the prompt. In F32 on a 16-core x86 CPU (release build) gemma-3-1b-it answers the ticket
+  in 7.3 s, its Q8_0 GGUF through llama.cpp in 2.9 s, and the ticket's two rows over a 5.4k-token state in 148 s
+  against the GGUF's 66 s; gemma-3-4b-it, whose text tower is 7.7 GB of BF16 read as F32, answers the ticket in
+  31 s (the GGUF: 9.3 s) and the 5.4k-token state in 434 s (288 s), and holds 22.8 GB for a 42-token prompt and for
+  one of 2.2k tokens.
+- Not measured on Metal (no Apple machine, 2026-10-11): both keep the BF16 rule. The rotary table is computed in the
+  model's dtype as upstream does, so in BF16 its positions past 256 are not exact, and the attention runs in the
+  model's dtype; measure a long prompt against the GGUF before relying on Gemma 3 on Metal.
+
 ### Logits
 - Return label logits only: index the hidden states at the slots and the head's rows at the label ids
   (`index_select`), cast both to F32, multiply and divide by the architecture's `logits_scaling`, so a prompt never
@@ -231,8 +294,9 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   sentiment and score fixtures, in F32 on the CPU against the Q8_0 GGUF: Qwen2.5-1.5B-Instruct stays within 0.001
   (0.008 over a 5.4k-token state), SmolLM3-3B within 0.003, Llama-3.2-1B within 0.014, MiniCPM5-1B within 0.037 (a
   noul near 0.6), Phi-4-mini within 0.001 (0.0002 over a 4.9k-token state), granite-4.2-3b within 0.0001 (its
-  answers to the three sit at 0 and 1) and LFM2.5-1.2B-Instruct within 0.022 (a score level; 0.008 over a
-  4.9k-token state).
+  answers to the three sit at 0 and 1), LFM2.5-1.2B-Instruct within 0.022 (a score level; 0.008 over a
+  4.9k-token state), gemma-3-1b-it within 0.0001 (0.0009 over a 5.4k-token state) and gemma-3-4b-it within 0.0001
+  (its answers to the three and to the 5.4k-token state sit at 0 and 1).
 
 ## Testing
 - `cargo test -p ardana-candle` reads only Qwen3-1.7B's `config.json` from `tmp/hf` (`cargo xtask fetch --tests`
@@ -245,10 +309,17 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   real model's answers: "llama_reads_a_written_head_dim" (the projections' shapes, a state at every position, each
   the one the prompt cut there has, a missing tensor as an error), "phi3_scales_longrope_by_the_prompt_length"
   (the rotary table read back through `apply_rotary_emb_qkv`), "granite_applies_its_multipliers" (the slot logits
-  of a `CausalLm` built in memory move with each of the three multipliers and are divided by `logits_scaling`) and
+  of a `CausalLm` built in memory move with each of the three multipliers and are divided by `logits_scaling`),
   "lfm2_sizes_its_feed_forward_as_transformers" (the width, the tying, a state at every position through
-  convolution and attention layers). A `VarMap` starts a tensor read with `vb.get` at zero (LFM2's convolution
-  kernel): give it random values before a test relies on it. The real checkpoints stay the suite's.
+  convolution and attention layers), "gemma3_windows_its_sliding_layers" (a sliding layer's last state over a prompt
+  longer than its window follows the tokens inside the window alone, a global layer's every token, the linear
+  rope factor moves the global layers alone, another type is refused) and
+  "gemma3_softcaps_the_logits_in_the_readout" (the slot logits of a `CausalLm` built in memory over a cap of 30 are
+  `30 * tanh(x / 30)` of the ones without). "gemma3_multimodal_reads_the_text_tower_only" (R6.3) writes the 883
+  names of gemma-3-4b-it's weight map, one value each, into a scratch safetensors file and reads it as a load reads
+  the shards: the 444 text-tower tensors come out under `model.*` and nothing else. A `VarMap` starts a tensor
+  read with `vb.get` at zero (LFM2's convolution kernel, Gemma 3's norms, which multiply by `1 + weight`): give it
+  random values before a test relies on it. The real checkpoints stay the suite's.
 - `crates/ardana/tests/e2e_registry.rs` pulls the checkpoint online from a loopback stand-in of the Hub
   (`common::HubStandIn`) that records each file asked for, over a hub cache holding links to the fetched blobs, so the
   pull is checked file by file without copying weights.
@@ -271,9 +342,13 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   `cfbefacb99257ffa30c83adab238a50856ac3083` against unsloth/Phi-4-mini-instruct-GGUF
   `Phi-4-mini-instruct.Q8_0.gguf` at `78eb92a46fc37e6b524df991ed9aca9bc6aa7b80` (`long_state`),
   ibm-granite/granite-4.2-3b at `e459acceac81e5fe67c07d9cfc72329a332e7eb1` against ibm-granite/granite-4.2-3b-GGUF
-  `granite-4.2-3b-Q8_0.gguf` at `c40945d71cd90f249a56985e8155551a9188dc30`, and LiquidAI/LFM2.5-1.2B-Instruct at
+  `granite-4.2-3b-Q8_0.gguf` at `c40945d71cd90f249a56985e8155551a9188dc30`, LiquidAI/LFM2.5-1.2B-Instruct at
   `0f604ada3f766f9f257460c4c9f0b5d6f69d431b` against LiquidAI/LFM2.5-1.2B-Instruct-GGUF
-  `LFM2.5-1.2B-Instruct-Q8_0.gguf` at `8ed288026e23958ad9dfa92d53ed773a8eee7125` (`long_state`).
+  `LFM2.5-1.2B-Instruct-Q8_0.gguf` at `8ed288026e23958ad9dfa92d53ed773a8eee7125` (`long_state`),
+  unsloth/gemma-3-1b-it at `5b11413a10db4e486ef16a20101fd028f8f2499c` against ggml-org/gemma-3-1b-it-GGUF
+  `gemma-3-1b-it-Q8_0.gguf` at `f9c28bcd85737ffc5aef028638d3341d49869c27` (`long_state`), and unsloth/gemma-3-4b-it
+  at `bf46152c47f5dd20b896357cb51abc4c03b8ee8c` against ggml-org/gemma-3-4b-it-GGUF `gemma-3-4b-it-Q8_0.gguf` at
+  `d0976223747697cb51e056d85c532013931fe52e` (`long_state`).
 
 ## Sources
 - https://github.com/huggingface/candle — README: pure-Rust ML framework, backends, feature flags
@@ -287,12 +362,15 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/granite.rs — the file `granite.rs` is copied from: `GraniteConfig`, `Cache`, `Granite::forward` and its last-position narrowing, the `1/sqrt(head_dim)` scale, the `unwrap()` in `Granite::load`
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/granitemoehybrid.rs — the four Granite scalars as candle applies them elsewhere: `attention_multiplier`, `embedding_multiplier`, `residual_multiplier`, `logits_scaling`
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/lfm2.rs — the file `lfm2.rs` is copied from: `Lfm2Config`, `compute_intermediate_size`, `ShortConv`, `Model::forward` and its last-position narrowing
+- https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/gemma3.rs — the file `gemma3.rs` is copied from: `Config`, `prepare_decoder_attention_mask` and its sliding window, the `1/sqrt(head_dim)` scale, `Model::forward`, its last-position narrowing and its softcapping
+- https://github.com/huggingface/candle/blob/0.11.0/candle-nn/src/kv_cache.rs — `RotatingCache::append`: the whole source returned when one pass exceeds the window
 - https://github.com/huggingface/candle/blob/0.11.0/LICENSE-APACHE — the license the vendored files are taken under
 - https://huggingface.co/docs/transformers/internal/rope_utils — `longrope` and `llama3` rope scaling: `short_factor`, `long_factor`, `original_max_position_embeddings`, `attention_factor`
 - https://huggingface.co/docs/transformers/model_doc/phi3 — `Phi3Config`: `rope_parameters` (a `config.json`'s `rope_scaling`), `original_max_position_embeddings`
 - https://huggingface.co/docs/transformers/model_doc/llama — `LlamaConfig`: `head_dim`, `rope_parameters` (a `config.json`'s `rope_scaling`), `tie_word_embeddings`
 - https://huggingface.co/docs/transformers/model_doc/granite — `GraniteConfig`: `embedding_multiplier`, `attention_multiplier`, `residual_multiplier`, `logits_scaling`, each 1.0 by default
 - https://huggingface.co/docs/transformers/model_doc/lfm2 — `Lfm2Config`: `intermediate_size`, `block_auto_adjust_ff_dim`, `block_ffn_dim_multiplier`, `block_multiple_of`, `layer_types`, `conv_L_cache`, `tie_word_embeddings`
+- https://huggingface.co/docs/transformers/model_doc/gemma3 — `Gemma3TextConfig` (`query_pre_attn_scalar`, `sliding_window`, `sliding_window_pattern`, `layer_types`, `rope_local_base_freq`, `final_logit_softcapping`) and `Gemma3Config` (`text_config`, `vision_config`); `Gemma3ForCausalLM` and `Gemma3ForConditionalGeneration`
 - https://docs.rs/candle-core/0.11.0/candle_core/enum.Device.html — `Device::Cpu`, `new_metal`, `is_metal`
 - https://docs.rs/candle-core/0.11.0/candle_core/safetensors/struct.MmapedSafetensors.html — `multi`, `tensors`, `load`
 - https://docs.rs/candle-nn/0.11.0/candle_nn/var_builder/type.VarBuilder.html — `from_tensors`, `from_mmaped_safetensors`, `get`

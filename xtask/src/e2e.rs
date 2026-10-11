@@ -152,6 +152,36 @@ pub const CANDLE_FIXTURES: &[CandleFixture] = &[
         )),
         long_state: true,
     },
+    CandleFixture {
+        name: "gemma-3-1b",
+        checkpoint: Pin {
+            repo: "unsloth/gemma-3-1b-it",
+            commit: "5b11413a10db4e486ef16a20101fd028f8f2499c",
+        },
+        gguf: Some((
+            Pin {
+                repo: "ggml-org/gemma-3-1b-it-GGUF",
+                commit: "f9c28bcd85737ffc5aef028638d3341d49869c27",
+            },
+            "gemma-3-1b-it-Q8_0.gguf",
+        )),
+        long_state: true,
+    },
+    CandleFixture {
+        name: "gemma-3-4b",
+        checkpoint: Pin {
+            repo: "unsloth/gemma-3-4b-it",
+            commit: "bf46152c47f5dd20b896357cb51abc4c03b8ee8c",
+        },
+        gguf: Some((
+            Pin {
+                repo: "ggml-org/gemma-3-4b-it-GGUF",
+                commit: "d0976223747697cb51e056d85c532013931fe52e",
+            },
+            "gemma-3-4b-it-Q8_0.gguf",
+        )),
+        long_state: true,
+    },
 ];
 
 /// The request fixture the SDK suite sends.

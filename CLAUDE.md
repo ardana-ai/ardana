@@ -149,14 +149,17 @@ change them) and its Requirements are the definition of done.
   `docs/design/audit.md` with `P0: 0 · P1: 0`, clean scans, the hook enabled); and the Candle suite `candle`
   (`cargo xtask e2e candle`: each `xtask/src/e2e.rs#CANDLE_FIXTURES` row in turn, Qwen/Qwen2.5-1.5B-Instruct,
   HuggingFaceTB/SmolLM3-3B, unsloth/Llama-3.2-1B-Instruct, openbmb/MiniCPM5-1B, microsoft/Phi-4-mini-instruct,
-  ibm-granite/granite-4.2-3b then LiquidAI/LFM2.5-1.2B-Instruct, with the release binary on a home of the row's own.
+  ibm-granite/granite-4.2-3b, LiquidAI/LFM2.5-1.2B-Instruct, unsloth/gemma-3-1b-it then unsloth/gemma-3-4b-it (a
+  multimodal checkpoint, its text tower alone), with the release binary on a home of the row's own.
   It pulls the safetensors checkpoint and the Q8_0 GGUF of the same model (the checkpoint repository as
-  `--tokenizer`, `--layout chat`) from the Hub into `tmp/hf`, about 5 GB, 9.5 GB, 3.8 GB, 3.3 GB, 11.8 GB, 11.2 GB
-  and 3.6 GB, and checks each against the commit the row pins and the checkpoint's runtime, `candle`; `ardana run
+  `--tokenizer`, `--layout chat`) from the Hub into `tmp/hf`, about 5 GB, 9.5 GB, 3.8 GB, 3.3 GB, 11.8 GB, 11.2 GB,
+  3.6 GB, 3.1 GB and 12.8 GB, and checks each against the commit the row pins and the checkpoint's runtime, `candle`;
+  `ardana run
   --json` answers `tests/fixtures/requests/ticket.json`, `sentiment.json` and `score.json` through both, Candle's
   answers with the GGUF's choices and noul sides and every probability within 0.1; one `ardana serve` answers the
   three through Candle and the first again with identical probabilities; a `long_state` row (Qwen2.5, Phi-4-mini,
-  LFM2.5) also answers the ticket's state repeated past 4,500 tokens through both. Then, also when a check failed,
+  LFM2.5, both Gemma 3) also answers the ticket's state repeated past 4,500 tokens through both. Then, also when a
+  check failed,
   the row's registry entries and every file it added under `tmp/hf/hub` are removed, the files that were there
   before staying, and after the last row the suite runs `cargo clean`: no `target/` is left, and the next cargo
   command builds from nothing. A failed row does not stop the others; the suite fails naming it).
@@ -188,7 +191,9 @@ change them) and its Requirements are the definition of done.
   `config.json` pulls that safetensors checkpoint at `main` (`config.json`, the shards its index names or its
   `model.safetensors`, the root tokenizer files), recorded with its snapshot directory as the weights and runtime
   `candle` when `config.json#architectures` names one Candle implements (`Qwen3ForCausalLM`, `Qwen2ForCausalLM`,
-  `SmolLM3ForCausalLM`, `LlamaForCausalLM`, `Phi3ForCausalLM`, `GraniteForCausalLM`, `Lfm2ForCausalLM`), and refused
+  `SmolLM3ForCausalLM`, `LlamaForCausalLM`, `Phi3ForCausalLM`, `GraniteForCausalLM`, `Lfm2ForCausalLM`,
+  `Gemma3ForCausalLM`, and `Gemma3ForConditionalGeneration` as its text tower alone, read from `text_config` and the
+  `language_model.` tensors), and refused
   naming the architectures before any weight file when none does; `list` sizes it by its safetensors files. Downloads
   go to the
   standard HF cache (`$HF_HOME/hub`); `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list`
