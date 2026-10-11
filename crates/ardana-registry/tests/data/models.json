@@ -134,6 +134,149 @@
 			]
 		},
 		{
+			"name": "apertus",
+			"kind": "instruct",
+			"summary": "Apertus, a stock instruct model read zero-shot in the chat layout.",
+			"license": "Apache-2.0",
+			"layout": "chat",
+			"latest": "8b",
+			"sizes": [
+				{
+					"size": "8b",
+					"params": "8B",
+					"base": "swiss-ai/Apertus-8B-Instruct-2509",
+					"release_date": "2025-09-02",
+					"tokenizer": {
+						"repo": "hf.co/swiss-ai/Apertus-8B-Instruct-2509",
+						"commit": "b946d40447b2b597999b9c86d44bee0b452c919f"
+					},
+					"gguf": {
+						"repo": "hf.co/unsloth/Apertus-8B-Instruct-2509-GGUF",
+						"commit": "61c32783830424ac7a6d0fd80d4166e29dbaee06",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Apertus-8B-Instruct-2509-Q4_K_M.gguf",
+								"bytes": 5057885440
+							},
+							{
+								"quant": "q8_0",
+								"file": "Apertus-8B-Instruct-2509-Q8_0.gguf",
+								"bytes": 8565372160
+							},
+							{
+								"quant": "bf16",
+								"file": "Apertus-8B-Instruct-2509-BF16.gguf",
+								"bytes": 16115119072
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "gemma-3",
+			"kind": "instruct",
+			"summary": "Gemma 3, a stock instruct model read zero-shot in the chat layout.",
+			"license": "Gemma",
+			"layout": "chat",
+			"latest": "4b",
+			"sizes": [
+				{
+					"size": "1b",
+					"params": "1B",
+					"base": "google/gemma-3-1b-it",
+					"release_date": "2025-03-10",
+					"tokenizer": {
+						"repo": "hf.co/unsloth/gemma-3-1b-it",
+						"commit": "5b11413a10db4e486ef16a20101fd028f8f2499c"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/gemma-3-1b-it-GGUF",
+						"commit": "f9c28bcd85737ffc5aef028638d3341d49869c27",
+						"default": "q8_0",
+						"quants": [
+							{
+								"quant": "q8_0",
+								"file": "gemma-3-1b-it-Q8_0.gguf",
+								"bytes": 1069306368
+							},
+							{
+								"quant": "f16",
+								"file": "gemma-3-1b-it-f16.gguf",
+								"bytes": 2006573568
+							}
+						]
+					}
+				},
+				{
+					"size": "4b",
+					"params": "4B",
+					"base": "google/gemma-3-4b-it",
+					"release_date": "2025-03-10",
+					"tokenizer": {
+						"repo": "hf.co/unsloth/gemma-3-4b-it",
+						"commit": "bf46152c47f5dd20b896357cb51abc4c03b8ee8c"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/gemma-3-4b-it-GGUF",
+						"commit": "d0976223747697cb51e056d85c532013931fe52e",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "gemma-3-4b-it-Q4_K_M.gguf",
+								"bytes": 2489757856
+							},
+							{
+								"quant": "q8_0",
+								"file": "gemma-3-4b-it-Q8_0.gguf",
+								"bytes": 4130226336
+							},
+							{
+								"quant": "f16",
+								"file": "gemma-3-4b-it-f16.gguf",
+								"bytes": 7767474336
+							}
+						]
+					}
+				},
+				{
+					"size": "12b",
+					"params": "12B",
+					"base": "google/gemma-3-12b-it",
+					"release_date": "2025-03-10",
+					"tokenizer": {
+						"repo": "hf.co/unsloth/gemma-3-12b-it",
+						"commit": "9478e665381f42974aa06177b019352fb6291876"
+					},
+					"gguf": {
+						"repo": "hf.co/ggml-org/gemma-3-12b-it-GGUF",
+						"commit": "ec0cbabd8dbff316f659876a50202295c3c4a314",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "gemma-3-12b-it-Q4_K_M.gguf",
+								"bytes": 7300574976
+							},
+							{
+								"quant": "q8_0",
+								"file": "gemma-3-12b-it-Q8_0.gguf",
+								"bytes": 12509949696
+							},
+							{
+								"quant": "f16",
+								"file": "gemma-3-12b-it-f16.gguf",
+								"bytes": 23539658496
+							}
+						]
+					}
+				}
+			]
+		},
+		{
 			"name": "gemma-4",
 			"kind": "instruct",
 			"summary": "Gemma 4, a stock instruct model read zero-shot in the chat layout.",
@@ -304,6 +447,812 @@
 			]
 		},
 		{
+			"name": "granite-4.2",
+			"kind": "instruct",
+			"summary": "Granite 4.2, a stock instruct model read zero-shot in the chat layout.",
+			"license": "Apache-2.0",
+			"layout": "chat",
+			"latest": "8b",
+			"sizes": [
+				{
+					"size": "3b",
+					"params": "3B",
+					"base": "ibm-granite/granite-4.2-3b",
+					"release_date": "2026-08-07",
+					"tokenizer": {
+						"repo": "hf.co/ibm-granite/granite-4.2-3b",
+						"commit": "e459acceac81e5fe67c07d9cfc72329a332e7eb1"
+					},
+					"gguf": {
+						"repo": "hf.co/ibm-granite/granite-4.2-3b-GGUF",
+						"commit": "c40945d71cd90f249a56985e8155551a9188dc30",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "granite-4.2-3b-Q4_K_M.gguf",
+								"bytes": 2244011552
+							},
+							{
+								"quant": "q8_0",
+								"file": "granite-4.2-3b-Q8_0.gguf",
+								"bytes": 3892651552
+							},
+							{
+								"quant": "bf16",
+								"file": "granite-4.2-3b-bf16.gguf",
+								"bytes": 7323461152
+							}
+						]
+					}
+				},
+				{
+					"size": "8b",
+					"params": "8B",
+					"base": "ibm-granite/granite-4.2-8b",
+					"release_date": "2026-08-07",
+					"tokenizer": {
+						"repo": "hf.co/ibm-granite/granite-4.2-8b",
+						"commit": "f8de16cdcdbc6c779ca517604e050d82cc119e44"
+					},
+					"gguf": {
+						"repo": "hf.co/ibm-granite/granite-4.2-8b-GGUF",
+						"commit": "93f3f6a8938ee922b784cf4e5b4203cd3428df8f",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "granite-4.2-8b-Q4_K_M.gguf",
+								"bytes": 5347917952
+							},
+							{
+								"quant": "q8_0",
+								"file": "granite-4.2-8b-Q8_0.gguf",
+								"bytes": 9345613952
+							},
+							{
+								"quant": "bf16",
+								"file": "granite-4.2-8b-bf16.gguf",
+								"bytes": 17587421312
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "jevk5",
+			"kind": "instruct",
+			"summary": "JevK5, an open Jev alternative fine-tuned from Qwen3.5 for typed decisions, read in the chat layout.",
+			"license": "Apache-2.0",
+			"layout": "chat",
+			"latest": "4b",
+			"sizes": [
+				{
+					"size": "2b",
+					"params": "2B",
+					"base": "alibiserikbay/JevK5-2B",
+					"release_date": "2026-09-23",
+					"version": "v0.2",
+					"tokenizer": {
+						"repo": "hf.co/alibiserikbay/JevK5-2B",
+						"commit": "7922d1f55df137b72ef763fced56fd09efc5e99d"
+					},
+					"gguf": {
+						"repo": "hf.co/alibiserikbay/JevK5-GGUF",
+						"commit": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+						"default": "q8_0",
+						"quants": [
+							{
+								"quant": "q8_0",
+								"file": "jevk5-2b-v0.2-Q8_0.gguf",
+								"bytes": 2012012000
+							}
+						]
+					}
+				},
+				{
+					"size": "4b",
+					"params": "4B",
+					"base": "alibiserikbay/JevK5",
+					"release_date": "2026-09-22",
+					"version": "v0.3",
+					"tokenizer": {
+						"repo": "hf.co/alibiserikbay/JevK5",
+						"commit": "c4f7fdb3aeab5582336406e78d3bef11bf98833d"
+					},
+					"gguf": {
+						"repo": "hf.co/alibiserikbay/JevK5-GGUF",
+						"commit": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "jevk5-4b-v0.3-Q4_K_M.gguf",
+								"bytes": 2708804000
+							},
+							{
+								"quant": "q8_0",
+								"file": "jevk5-4b-v0.3-Q8_0.gguf",
+								"bytes": 4482402720
+							}
+						]
+					}
+				},
+				{
+					"size": "9b",
+					"params": "9B",
+					"base": "alibiserikbay/JevK5-9B",
+					"release_date": "2026-09-25",
+					"version": "v0.3.3",
+					"tokenizer": {
+						"repo": "hf.co/alibiserikbay/JevK5-9B",
+						"commit": "d6521a18a86999190e9d775c915af3d6d6772fc4"
+					},
+					"gguf": {
+						"repo": "hf.co/alibiserikbay/JevK5-GGUF",
+						"commit": "ec67b0bfce5119a8b11a2cdb430bb43e3fa3e82a",
+						"default": "q5_k_m",
+						"quants": [
+							{
+								"quant": "q5_k_m",
+								"file": "jevk5-9b-v0.3.3-Q5_K_M.gguf",
+								"bytes": 6467969504
+							},
+							{
+								"quant": "q8_0",
+								"file": "jevk5-9b-v0.3.3-Q8_0.gguf",
+								"bytes": 9527501280
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "lfm2.5",
+			"kind": "instruct",
+			"summary": "LFM2.5, a stock instruct model read zero-shot in the chat layout.",
+			"license": "LFM Open License v1.0",
+			"layout": "chat",
+			"latest": "2.6b",
+			"sizes": [
+				{
+					"size": "1.2b",
+					"params": "1.2B",
+					"base": "LiquidAI/LFM2.5-1.2B-Instruct",
+					"release_date": "2026-01-06",
+					"tokenizer": {
+						"repo": "hf.co/LiquidAI/LFM2.5-1.2B-Instruct",
+						"commit": "0f604ada3f766f9f257460c4c9f0b5d6f69d431b"
+					},
+					"gguf": {
+						"repo": "hf.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+						"commit": "8ed288026e23958ad9dfa92d53ed773a8eee7125",
+						"default": "q8_0",
+						"quants": [
+							{
+								"quant": "q8_0",
+								"file": "LFM2.5-1.2B-Instruct-Q8_0.gguf",
+								"bytes": 1246253888
+							},
+							{
+								"quant": "bf16",
+								"file": "LFM2.5-1.2B-Instruct-BF16.gguf",
+								"bytes": 2343326528
+							}
+						]
+					}
+				},
+				{
+					"size": "2.6b",
+					"params": "2.6B",
+					"base": "LiquidAI/LFM2.5-2.6B",
+					"release_date": "2026-07-28",
+					"tokenizer": {
+						"repo": "hf.co/LiquidAI/LFM2.5-2.6B",
+						"commit": "654f9463ce32b05d0429d76fe1f580b27d4c1ac0"
+					},
+					"gguf": {
+						"repo": "hf.co/LiquidAI/LFM2.5-2.6B-GGUF",
+						"commit": "e7caca5d835a3901a8e0d63e94009429bafafdfc",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "LFM2.5-2.6B-Q4_K_M.gguf",
+								"bytes": 1674455040
+							},
+							{
+								"quant": "q8_0",
+								"file": "LFM2.5-2.6B-Q8_0.gguf",
+								"bytes": 2874779648
+							},
+							{
+								"quant": "bf16",
+								"file": "LFM2.5-2.6B-BF16.gguf",
+								"bytes": 5403158528
+							}
+						]
+					}
+				},
+				{
+					"size": "8b-a1b",
+					"params": "8.3B",
+					"base": "LiquidAI/LFM2.5-8B-A1B",
+					"release_date": "2026-05-24",
+					"tokenizer": {
+						"repo": "hf.co/LiquidAI/LFM2.5-8B-A1B",
+						"commit": "5dd22602c2e9f6a097b1de4c4efe0658b605015c"
+					},
+					"gguf": {
+						"repo": "hf.co/LiquidAI/LFM2.5-8B-A1B-GGUF",
+						"commit": "49c14831707011e64d70b2ebd8462ba08d608434",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "LFM2.5-8B-A1B-Q4_K_M.gguf",
+								"bytes": 5155564768
+							},
+							{
+								"quant": "q8_0",
+								"file": "LFM2.5-8B-A1B-Q8_0.gguf",
+								"bytes": 9010195680
+							},
+							{
+								"quant": "bf16",
+								"file": "LFM2.5-8B-A1B-BF16.gguf",
+								"bytes": 16947260640
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "ling-3.0",
+			"kind": "instruct",
+			"summary": "Ling 3.0, a stock instruct model read zero-shot in the chat layout.",
+			"license": "MIT",
+			"layout": "chat",
+			"latest": "tiny",
+			"sizes": [
+				{
+					"size": "tiny",
+					"params": "7.9B",
+					"base": "inclusionAI/Ling-3.0-tiny",
+					"release_date": "2026-08-10",
+					"tokenizer": {
+						"repo": "hf.co/inclusionAI/Ling-3.0-tiny",
+						"commit": "9a98e35fe1c9ee255f78dd64771c7ae15a799481"
+					},
+					"gguf": {
+						"repo": "hf.co/inclusionAI/Ling-3.0-tiny-GGUF",
+						"commit": "01b850e29ed5b44e2b810160ff980a9bb353296f",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Ling-3.0-tiny-Q4_K_M.gguf",
+								"bytes": 4823894944
+							},
+							{
+								"quant": "q8_0",
+								"file": "Ling-3.0-tiny-Q8_0.gguf",
+								"bytes": 8408187808
+							},
+							{
+								"quant": "bf16",
+								"file": "Ling-3.0-tiny-bf16.gguf",
+								"bytes": 15803475264
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "llama-3.1",
+			"kind": "instruct",
+			"summary": "Llama 3.1, a stock instruct model read zero-shot in the chat layout.",
+			"license": "Llama 3.1 Community License",
+			"layout": "chat",
+			"latest": "8b",
+			"sizes": [
+				{
+					"size": "8b",
+					"params": "8B",
+					"base": "meta-llama/Llama-3.1-8B-Instruct",
+					"release_date": "2024-07-23",
+					"tokenizer": {
+						"repo": "hf.co/unsloth/Llama-3.1-8B-Instruct",
+						"commit": "4699cc75b550f9c6f3173fb80f4703b62d946aa5"
+					},
+					"gguf": {
+						"repo": "hf.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+						"commit": "bf5b95e96dac0462e2a09145ec66cae9a3f12067",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+								"bytes": 4920739232
+							},
+							{
+								"quant": "q8_0",
+								"file": "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf",
+								"bytes": 8540775840
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "llama-3.2",
+			"kind": "instruct",
+			"summary": "Llama 3.2, a stock instruct model read zero-shot in the chat layout.",
+			"license": "Llama 3.2 Community License",
+			"layout": "chat",
+			"latest": "3b",
+			"sizes": [
+				{
+					"size": "1b",
+					"params": "1.2B",
+					"base": "meta-llama/Llama-3.2-1B-Instruct",
+					"release_date": "2024-09-25",
+					"tokenizer": {
+						"repo": "hf.co/unsloth/Llama-3.2-1B-Instruct",
+						"commit": "5a8abab4a5d6f164389b1079fb721cfab8d7126c"
+					},
+					"gguf": {
+						"repo": "hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF",
+						"commit": "067b946cf014b7c697f3654f621d577a3e3afd1c",
+						"default": "q8_0",
+						"quants": [
+							{
+								"quant": "q8_0",
+								"file": "Llama-3.2-1B-Instruct-Q8_0.gguf",
+								"bytes": 1321083008
+							},
+							{
+								"quant": "f16",
+								"file": "Llama-3.2-1B-Instruct-f16.gguf",
+								"bytes": 2479595360
+							}
+						]
+					}
+				},
+				{
+					"size": "3b",
+					"params": "3.2B",
+					"base": "meta-llama/Llama-3.2-3B-Instruct",
+					"release_date": "2024-09-25",
+					"tokenizer": {
+						"repo": "hf.co/unsloth/Llama-3.2-3B-Instruct",
+						"commit": "006f5dcd1393c3add266de40994ba96225e9689d"
+					},
+					"gguf": {
+						"repo": "hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF",
+						"commit": "5ab33fa94d1d04e903623ae72c95d1696f09f9e8",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+								"bytes": 2019377696
+							},
+							{
+								"quant": "q8_0",
+								"file": "Llama-3.2-3B-Instruct-Q8_0.gguf",
+								"bytes": 3421899296
+							},
+							{
+								"quant": "f16",
+								"file": "Llama-3.2-3B-Instruct-f16.gguf",
+								"bytes": 6433687840
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "minicpm5",
+			"kind": "instruct",
+			"summary": "MiniCPM5, a stock instruct model read zero-shot in the chat layout.",
+			"license": "Apache-2.0",
+			"layout": "chat",
+			"latest": "2b",
+			"sizes": [
+				{
+					"size": "1b",
+					"params": "1B",
+					"base": "openbmb/MiniCPM5-1B",
+					"release_date": "2026-05-21",
+					"tokenizer": {
+						"repo": "hf.co/openbmb/MiniCPM5-1B",
+						"commit": "87179e5c1f455ef22e6223592d2d61351b525bfc"
+					},
+					"gguf": {
+						"repo": "hf.co/openbmb/MiniCPM5-1B-GGUF",
+						"commit": "3d55fac80935ae6456986ad2384b5cbcc4d6c948",
+						"default": "q8_0",
+						"quants": [
+							{
+								"quant": "q8_0",
+								"file": "MiniCPM5-1B-Q8_0.gguf",
+								"bytes": 1153529216
+							},
+							{
+								"quant": "f16",
+								"file": "MiniCPM5-1B-F16.gguf",
+								"bytes": 2166551936
+							}
+						]
+					}
+				},
+				{
+					"size": "2b",
+					"params": "2B",
+					"base": "openbmb/MiniCPM5-2B",
+					"release_date": "2026-09-05",
+					"tokenizer": {
+						"repo": "hf.co/openbmb/MiniCPM5-2B",
+						"commit": "f97400052a43d642bbc6e9975e2397e3ae6a6b52"
+					},
+					"gguf": {
+						"repo": "hf.co/openbmb/MiniCPM5-2B-GGUF",
+						"commit": "2079a22f3beaa4e306449978533478fe0522f4b3",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "MiniCPM5-2B-Q4_K_M.gguf",
+								"bytes": 1561318368
+							},
+							{
+								"quant": "q8_0",
+								"file": "MiniCPM5-2B-Q8_0.gguf",
+								"bytes": 2679710688
+							},
+							{
+								"quant": "f16",
+								"file": "MiniCPM5-2B-F16.gguf",
+								"bytes": 5039006688
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "nemotron-3-nano",
+			"kind": "instruct",
+			"summary": "Nemotron 3 Nano, a stock instruct model read zero-shot in the chat layout.",
+			"license": "NVIDIA Open Model License",
+			"layout": "chat",
+			"latest": "4b",
+			"sizes": [
+				{
+					"size": "4b",
+					"params": "4B",
+					"base": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+					"release_date": "2026-03-07",
+					"tokenizer": {
+						"repo": "hf.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+						"commit": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f"
+					},
+					"gguf": {
+						"repo": "hf.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF",
+						"commit": "ba223d14e45525f7fae81db77ea8cabeb2fc6c25",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf",
+								"bytes": 2837072864
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "olmo-3",
+			"kind": "instruct",
+			"summary": "Olmo 3, a stock instruct model read zero-shot in the chat layout.",
+			"license": "Apache-2.0",
+			"layout": "chat",
+			"latest": "7b",
+			"sizes": [
+				{
+					"size": "7b",
+					"params": "7.3B",
+					"base": "allenai/Olmo-3-7B-Instruct",
+					"release_date": "2025-11-19",
+					"tokenizer": {
+						"repo": "hf.co/allenai/Olmo-3-7B-Instruct",
+						"commit": "6e5971d9eba42665f5bd5a0fcf047f299ce1dccc"
+					},
+					"gguf": {
+						"repo": "hf.co/unsloth/Olmo-3-7B-Instruct-GGUF",
+						"commit": "a2a9ae53f5a95087616b3f45ca96e9d2631344ee",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Olmo-3-7B-Instruct-Q4_K_M.gguf",
+								"bytes": 4471602048
+							},
+							{
+								"quant": "q8_0",
+								"file": "Olmo-3-7B-Instruct-Q8_0.gguf",
+								"bytes": 7759252672
+							},
+							{
+								"quant": "bf16",
+								"file": "Olmo-3-7B-Instruct-BF16.gguf",
+								"bytes": 14600642496
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "ornith-1.5",
+			"kind": "instruct",
+			"summary": "Ornith 1.5, a stock instruct model read zero-shot in the chat layout.",
+			"license": "MIT",
+			"layout": "chat",
+			"latest": "9b",
+			"sizes": [
+				{
+					"size": "9b",
+					"params": "9B",
+					"base": "ornith-ai/Ornith-1.5-9B",
+					"release_date": "2026-08-18",
+					"tokenizer": {
+						"repo": "hf.co/ornith-ai/Ornith-1.5-9B",
+						"commit": "489cb97981b8654bcfcf30ce1f94ed1b62e07b53"
+					},
+					"gguf": {
+						"repo": "hf.co/ornith-ai/Ornith-1.5-9B-GGUF",
+						"commit": "abdd624b12ebf020b767fff532ff44fe552b28c3",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Ornith-1.5-9B-Q4_K_M.gguf",
+								"bytes": 5780090816
+							},
+							{
+								"quant": "q8_0",
+								"file": "Ornith-1.5-9B-Q8_0.gguf",
+								"bytes": 9786060384
+							},
+							{
+								"quant": "bf16",
+								"file": "Ornith-1.5-9B-BF16.gguf",
+								"bytes": 18407321184
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "phi-4",
+			"kind": "instruct",
+			"summary": "Phi-4, a stock instruct model read zero-shot in the chat layout.",
+			"license": "MIT",
+			"layout": "chat",
+			"latest": "14b",
+			"sizes": [
+				{
+					"size": "mini",
+					"params": "3.8B",
+					"base": "microsoft/Phi-4-mini-instruct",
+					"release_date": "2025-02-26",
+					"tokenizer": {
+						"repo": "hf.co/microsoft/Phi-4-mini-instruct",
+						"commit": "cfbefacb99257ffa30c83adab238a50856ac3083"
+					},
+					"gguf": {
+						"repo": "hf.co/unsloth/Phi-4-mini-instruct-GGUF",
+						"commit": "78eb92a46fc37e6b524df991ed9aca9bc6aa7b80",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Phi-4-mini-instruct-Q4_K_M.gguf",
+								"bytes": 2491874272
+							},
+							{
+								"quant": "q8_0",
+								"file": "Phi-4-mini-instruct.Q8_0.gguf",
+								"bytes": 4084611040
+							},
+							{
+								"quant": "bf16",
+								"file": "Phi-4-mini-instruct.BF16.gguf",
+								"bytes": 7680694240
+							}
+						]
+					}
+				},
+				{
+					"size": "14b",
+					"params": "14.7B",
+					"base": "microsoft/phi-4",
+					"release_date": "2024-12-11",
+					"tokenizer": {
+						"repo": "hf.co/microsoft/phi-4",
+						"commit": "2db69c1c3e91a05d2c64a3185acfbaf36f744e25"
+					},
+					"gguf": {
+						"repo": "hf.co/microsoft/phi-4-gguf",
+						"commit": "6edc2ef6664b739a8e11e62f2672ff6afe0c15ac",
+						"default": "q4_k",
+						"quants": [
+							{
+								"quant": "q4_k",
+								"file": "phi-4-Q4_K.gguf",
+								"bytes": 9053114560
+							},
+							{
+								"quant": "q8_0",
+								"file": "phi-4-Q8_0.gguf",
+								"bytes": 15580500160
+							},
+							{
+								"quant": "bf16",
+								"file": "phi-4-bf16.gguf",
+								"bytes": 29323399360
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "qwen3",
+			"kind": "instruct",
+			"summary": "Qwen3, a stock instruct model read zero-shot in the chat layout.",
+			"license": "Apache-2.0",
+			"layout": "chat",
+			"latest": "8b",
+			"sizes": [
+				{
+					"size": "0.6b",
+					"params": "0.6B",
+					"base": "Qwen/Qwen3-0.6B",
+					"release_date": "2025-04-27",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3-0.6B",
+						"commit": "c1899de289a04d12100db370d81485cdf75e47ca"
+					},
+					"gguf": {
+						"repo": "hf.co/Qwen/Qwen3-0.6B-GGUF",
+						"commit": "23749fefcc72300e3a2ad315e1317431b06b590a",
+						"default": "q8_0",
+						"quants": [
+							{
+								"quant": "q8_0",
+								"file": "Qwen3-0.6B-Q8_0.gguf",
+								"bytes": 639446688
+							}
+						]
+					}
+				},
+				{
+					"size": "1.7b",
+					"params": "1.7B",
+					"base": "Qwen/Qwen3-1.7B",
+					"release_date": "2025-04-27",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3-1.7B",
+						"commit": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+					},
+					"gguf": {
+						"repo": "hf.co/Qwen/Qwen3-1.7B-GGUF",
+						"commit": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+						"default": "q8_0",
+						"quants": [
+							{
+								"quant": "q8_0",
+								"file": "Qwen3-1.7B-Q8_0.gguf",
+								"bytes": 1834426016
+							}
+						]
+					}
+				},
+				{
+					"size": "4b",
+					"params": "4B",
+					"base": "Qwen/Qwen3-4B",
+					"release_date": "2025-04-27",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3-4B",
+						"commit": "1cfa9a7208912126459214e8b04321603b3df60c"
+					},
+					"gguf": {
+						"repo": "hf.co/Qwen/Qwen3-4B-GGUF",
+						"commit": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Qwen3-4B-Q4_K_M.gguf",
+								"bytes": 2497280256
+							},
+							{
+								"quant": "q8_0",
+								"file": "Qwen3-4B-Q8_0.gguf",
+								"bytes": 4280404704
+							}
+						]
+					}
+				},
+				{
+					"size": "8b",
+					"params": "8.2B",
+					"base": "Qwen/Qwen3-8B",
+					"release_date": "2025-04-27",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3-8B",
+						"commit": "b968826d9c46dd6066d109eabc6255188de91218"
+					},
+					"gguf": {
+						"repo": "hf.co/Qwen/Qwen3-8B-GGUF",
+						"commit": "7c41481f57cb95916b40956ab2f0b139b296d974",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Qwen3-8B-Q4_K_M.gguf",
+								"bytes": 5027783488
+							},
+							{
+								"quant": "q8_0",
+								"file": "Qwen3-8B-Q8_0.gguf",
+								"bytes": 8709518112
+							}
+						]
+					}
+				},
+				{
+					"size": "14b",
+					"params": "14.8B",
+					"base": "Qwen/Qwen3-14B",
+					"release_date": "2025-04-27",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3-14B",
+						"commit": "40c069824f4251a91eefaf281ebe4c544efd3e18"
+					},
+					"gguf": {
+						"repo": "hf.co/Qwen/Qwen3-14B-GGUF",
+						"commit": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Qwen3-14B-Q4_K_M.gguf",
+								"bytes": 9001752960
+							},
+							{
+								"quant": "q8_0",
+								"file": "Qwen3-14B-Q8_0.gguf",
+								"bytes": 15698533728
+							}
+						]
+					}
+				}
+			]
+		},
+		{
 			"name": "qwen3.5",
 			"kind": "instruct",
 			"summary": "Qwen3.5, a stock instruct model read zero-shot in the chat layout.",
@@ -363,6 +1312,102 @@
 							"isolated_levels": false,
 							"release_date": "2026-02-28"
 						}
+					}
+				},
+				{
+					"size": "2b",
+					"params": "2B",
+					"base": "Qwen/Qwen3.5-2B",
+					"release_date": "2026-02-28",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3.5-2B",
+						"commit": "15852e8c16360a2fea060d615a32b45270f8a8fc"
+					},
+					"gguf": {
+						"repo": "hf.co/unsloth/Qwen3.5-2B-GGUF",
+						"commit": "f6d5376be1edb4d416d56da11e5397a961aca8ae",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Qwen3.5-2B-Q4_K_M.gguf",
+								"bytes": 1280835840
+							},
+							{
+								"quant": "q8_0",
+								"file": "Qwen3.5-2B-Q8_0.gguf",
+								"bytes": 2012012800
+							},
+							{
+								"quant": "bf16",
+								"file": "Qwen3.5-2B-BF16.gguf",
+								"bytes": 3775709216
+							}
+						]
+					}
+				},
+				{
+					"size": "4b",
+					"params": "4B",
+					"base": "Qwen/Qwen3.5-4B",
+					"release_date": "2026-02-27",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3.5-4B",
+						"commit": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+					},
+					"gguf": {
+						"repo": "hf.co/unsloth/Qwen3.5-4B-GGUF",
+						"commit": "e87f176479d0855a907a41277aca2f8ee7a09523",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Qwen3.5-4B-Q4_K_M.gguf",
+								"bytes": 2740937888
+							},
+							{
+								"quant": "q8_0",
+								"file": "Qwen3.5-4B-Q8_0.gguf",
+								"bytes": 4482403488
+							},
+							{
+								"quant": "bf16",
+								"file": "Qwen3.5-4B-BF16.gguf",
+								"bytes": 8424393632
+							}
+						]
+					}
+				},
+				{
+					"size": "9b",
+					"params": "9B",
+					"base": "Qwen/Qwen3.5-9B",
+					"release_date": "2026-02-27",
+					"tokenizer": {
+						"repo": "hf.co/Qwen/Qwen3.5-9B",
+						"commit": "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+					},
+					"gguf": {
+						"repo": "hf.co/unsloth/Qwen3.5-9B-GGUF",
+						"commit": "3885219b6810b007914f3a7950a8d1b469d598a5",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Qwen3.5-9B-Q4_K_M.gguf",
+								"bytes": 5680522464
+							},
+							{
+								"quant": "q8_0",
+								"file": "Qwen3.5-9B-Q8_0.gguf",
+								"bytes": 9527502048
+							},
+							{
+								"quant": "bf16",
+								"file": "Qwen3.5-9B-BF16.gguf",
+								"bytes": 17920697312
+							}
+						]
 					}
 				}
 			]
@@ -487,6 +1532,75 @@
 								"quant": "f16",
 								"file": "SmolLM3-f16.gguf",
 								"bytes": 6158339424
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "spark-x2.5",
+			"kind": "instruct",
+			"summary": "Spark X2.5, a stock instruct model read zero-shot in the chat layout.",
+			"license": "Apache-2.0",
+			"layout": "chat",
+			"latest": "4b",
+			"sizes": [
+				{
+					"size": "1.7b",
+					"params": "1.7B",
+					"base": "XHToken/Spark-X2.5-1.7B",
+					"release_date": "2026-08-24",
+					"tokenizer": {
+						"repo": "hf.co/XHToken/Spark-X2.5-1.7B",
+						"commit": "14d6e83c13c7add2b62a7c39b2131f4ed1cddcf8"
+					},
+					"gguf": {
+						"repo": "hf.co/XHToken/Spark-X2.5-1.7B-GGUF",
+						"commit": "1f7fa33b1245c14730da39e125714ad3a327901b",
+						"default": "q8_0",
+						"quants": [
+							{
+								"quant": "q8_0",
+								"file": "Spark-X2.5-1.7B-Q8_0.gguf",
+								"bytes": 1820112704
+							},
+							{
+								"quant": "bf16",
+								"file": "Spark-X2.5-1.7B.gguf",
+								"bytes": 3420931904
+							}
+						]
+					}
+				},
+				{
+					"size": "4b",
+					"params": "4B",
+					"base": "XHToken/Spark-X2.5-4B",
+					"release_date": "2026-08-24",
+					"tokenizer": {
+						"repo": "hf.co/XHToken/Spark-X2.5-4B",
+						"commit": "0bcb35678590218655dff3765b9e61c83b35e9c4"
+					},
+					"gguf": {
+						"repo": "hf.co/XHToken/Spark-X2.5-4B-GGUF",
+						"commit": "9826e0be84e6e6e8b9668abc91421109a1df1e2d",
+						"default": "q4_k_m",
+						"quants": [
+							{
+								"quant": "q4_k_m",
+								"file": "Spark-X2.5-4B-Q4_K_M.gguf",
+								"bytes": 2600224352
+							},
+							{
+								"quant": "q8_0",
+								"file": "Spark-X2.5-4B-Q8_0.gguf",
+								"bytes": 4375021152
+							},
+							{
+								"quant": "bf16",
+								"file": "Spark-X2.5-4B.gguf",
+								"bytes": 8229920352
 							}
 						]
 					}

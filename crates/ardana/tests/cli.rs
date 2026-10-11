@@ -490,7 +490,7 @@ fn the_binary_holds_no_library() -> Result<()> {
     }
     assert!(checked >= 15, "{checked} references checked");
     let sizes = common::snapshot_names()?;
-    assert_eq!(sizes.len(), 12);
+    assert_eq!(sizes.len(), 45);
     assert_eq!(named_in(&binary, &sizes), [] as [&str; 0]);
 
     let ardana = Ardana::new("cli-binary-holds-no-library")?;

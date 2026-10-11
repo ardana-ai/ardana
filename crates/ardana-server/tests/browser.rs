@@ -94,23 +94,24 @@ async fn browser_routes() -> Result<()> {
             )
         })
         .collect();
+    let mut expected = vec![
+        ("decider:2b".to_string(), Some(1_121_602_009)),
+        ("stock".to_string(), None),
+    ];
+    expected.extend(
+        common::library()?
+            .sizes()
+            .iter()
+            .filter(|pick| pick.name() != "decider:2b")
+            .map(|pick| (pick.name(), pick.size.browser.as_ref().map(|b| b.bytes))),
+    );
+    assert_eq!(expected[2], ("decider:0.8b".to_string(), Some(467_748_928)));
     assert_eq!(
-        browser,
-        [
-            ("decider:2b", Some(1_121_602_009)),
-            ("stock", None),
-            ("decider:0.8b", Some(467_748_928)),
-            ("decider:4b", None),
-            ("gemma-4:e2b", None),
-            ("gemma-4:e4b", None),
-            ("gemma-4:12b", None),
-            ("gemma-4:26b-a4b", None),
-            ("gemma-4:31b", None),
-            ("qwen3.5:0.8b", Some(904_574_185)),
-            ("qwen3.6:35b-a3b", None),
-            ("qwen3.8:27b", None),
-            ("smollm3:3b", None),
-        ]
+        browser
+            .iter()
+            .map(|b| (b.0.to_string(), b.1))
+            .collect::<Vec<_>>(),
+        expected
     );
 
     // R3.4: the cache holds a variant only at the commit the library names; a document naming one it lacks lists every

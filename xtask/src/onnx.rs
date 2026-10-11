@@ -1372,8 +1372,9 @@ mod tests {
         );
         assert_eq!(
             refused("nomodel:1b"),
-            "no library model nomodel:1b; the library's families are decider, gemma-4, qwen3.5, qwen3.6, qwen3.8, \
-             smollm3"
+            "no library model nomodel:1b; the library's families are decider, apertus, gemma-3, gemma-4, \
+             granite-4.2, jevk5, lfm2.5, ling-3.0, llama-3.1, llama-3.2, minicpm5, nemotron-3-nano, olmo-3, \
+             ornith-1.5, phi-4, qwen3, qwen3.5, qwen3.6, qwen3.8, smollm3, spark-x2.5"
         );
     }
 

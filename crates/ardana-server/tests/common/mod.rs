@@ -194,6 +194,35 @@ pub fn hf_file(repo: &str, name: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// The `/v1/models` rows of every library size whose canonical name is not in `pulled`, in document order (R3.1): the
+/// default quant's reference and bytes, a browser variant's bytes, the document's browser default, and `x_default` on
+/// `default` when it names one of them.
+pub fn library_rows(pulled: &[&str], default: Option<&str>) -> Result<Vec<Value>> {
+    let library = library()?;
+    Ok(library
+        .sizes()
+        .iter()
+        .filter(|pick| !pulled.contains(&pick.name().as_str()))
+        .map(|pick| {
+            let name = pick.name();
+            let mut row = serde_json::json!({
+                "name": name, "description": pick.reference(), "release_date": pick.size.release_date,
+                "x_pulled": false, "x_size": pick.quant.bytes,
+            });
+            if default == Some(name.as_str()) {
+                row["x_default"] = Value::Bool(true);
+            }
+            if let Some(browser) = &pick.size.browser {
+                row["x_browser"] = Value::from(browser.bytes);
+            }
+            if library.browser_default.as_deref() == Some(name.as_str()) {
+                row["x_browser_default"] = Value::Bool(true);
+            }
+            row
+        })
+        .collect())
+}
+
 /// `listed`, a `/v1/models` body as a test expects it, with `x_browser_pulled` on every model whose browser variant the
 /// hub cache (`tmp/hf`) holds whole: all three once `cargo xtask onnx convert` has built them, none where `cargo xtask
 /// fetch --tests` fetched no ONNX file (CI).

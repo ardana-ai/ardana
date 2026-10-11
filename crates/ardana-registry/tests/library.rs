@@ -147,7 +147,7 @@ impl Loopback {
     }
 }
 
-/// R2.3: the snapshot is a schema 1 document of 6 families, 12 sizes and 34 quants that reads whole, the landing's
+/// R2.3: the snapshot is a schema 1 document of 21 families, 45 sizes and 114 quants that reads whole, the landing's
 /// document byte for byte where that checkout is beside this one; its names and defaults are the library's, every
 /// repository `xtask/fetch.toml` installs is pinned at that file's revision, and cargo names it as `ARDANA_LIBRARY`
 /// for every test.
@@ -180,16 +180,16 @@ fn the_snapshot_is_a_schema_1_library_of_families() -> Result<()> {
             .sum();
         (families.len(), sizes.len(), quants)
     };
-    assert_eq!(count(&raw["models"]), (6, 12, 34));
+    assert_eq!(count(&raw["models"]), (21, 45, 114));
     assert_eq!(
         count(&serde_json::to_value(&document.models)?),
-        (6, 12, 34),
+        (21, 45, 114),
         "nothing is left out"
     );
     let library = Library::from_document(document);
     assert_eq!(
         count(&serde_json::to_value(&library.models)?),
-        (6, 12, 34),
+        (21, 45, 114),
         "a pull reads every size"
     );
     assert_eq!(library.default, "decider:2b");
@@ -207,11 +207,26 @@ fn the_snapshot_is_a_schema_1_library_of_families() -> Result<()> {
         families,
         [
             ("decider", "2b"),
+            ("apertus", "8b"),
+            ("gemma-3", "4b"),
             ("gemma-4", "e4b"),
+            ("granite-4.2", "8b"),
+            ("jevk5", "4b"),
+            ("lfm2.5", "2.6b"),
+            ("ling-3.0", "tiny"),
+            ("llama-3.1", "8b"),
+            ("llama-3.2", "3b"),
+            ("minicpm5", "2b"),
+            ("nemotron-3-nano", "4b"),
+            ("olmo-3", "7b"),
+            ("ornith-1.5", "9b"),
+            ("phi-4", "14b"),
+            ("qwen3", "8b"),
             ("qwen3.5", "0.8b"),
             ("qwen3.6", "35b-a3b"),
             ("qwen3.8", "27b"),
-            ("smollm3", "3b")
+            ("smollm3", "3b"),
+            ("spark-x2.5", "4b")
         ]
     );
     assert_eq!(
@@ -220,15 +235,48 @@ fn the_snapshot_is_a_schema_1_library_of_families() -> Result<()> {
             "decider:0.8b",
             "decider:2b",
             "decider:4b",
+            "apertus:8b",
+            "gemma-3:1b",
+            "gemma-3:4b",
+            "gemma-3:12b",
             "gemma-4:e2b",
             "gemma-4:e4b",
             "gemma-4:12b",
             "gemma-4:26b-a4b",
             "gemma-4:31b",
+            "granite-4.2:3b",
+            "granite-4.2:8b",
+            "jevk5:2b",
+            "jevk5:4b",
+            "jevk5:9b",
+            "lfm2.5:1.2b",
+            "lfm2.5:2.6b",
+            "lfm2.5:8b-a1b",
+            "ling-3.0:tiny",
+            "llama-3.1:8b",
+            "llama-3.2:1b",
+            "llama-3.2:3b",
+            "minicpm5:1b",
+            "minicpm5:2b",
+            "nemotron-3-nano:4b",
+            "olmo-3:7b",
+            "ornith-1.5:9b",
+            "phi-4:mini",
+            "phi-4:14b",
+            "qwen3:0.6b",
+            "qwen3:1.7b",
+            "qwen3:4b",
+            "qwen3:8b",
+            "qwen3:14b",
             "qwen3.5:0.8b",
+            "qwen3.5:2b",
+            "qwen3.5:4b",
+            "qwen3.5:9b",
             "qwen3.6:35b-a3b",
             "qwen3.8:27b",
-            "smollm3:3b"
+            "smollm3:3b",
+            "spark-x2.5:1.7b",
+            "spark-x2.5:4b"
         ]
     );
     let sizes = library.sizes();
@@ -634,7 +682,7 @@ fn off_and_file_sources_send_nothing() -> Result<()> {
         file.index()?,
         block_on(file.refresh())?.context("a file source reads its document again")?,
     ] {
-        assert_eq!(library.names().len(), 12);
+        assert_eq!(library.names().len(), 45);
         assert!(matches!(
             registry.named("decider", &library)?,
             Named::Library(pick) if pick.name() == "decider:2b"

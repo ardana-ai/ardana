@@ -82,39 +82,26 @@ async fn surface() -> Result<()> {
 
     let listed = get(&app, "/v1/models").await?;
     assert_eq!(listed.status, 200);
+    let mut expected = vec![
+        json!({"name": "decider:2b", "description": "hf.co/test/decider:2b-GGUF", "release_date": "2026-09-24",
+               "x_pulled": true, "x_default": true, "x_browser": 1_121_602_009}),
+        json!({"name": "stock", "description": "hf.co/test/stock-GGUF", "release_date": "2026-09-28", "x_pulled": true}),
+    ];
+    expected.extend(common::library_rows(&["decider:2b", "stock"], None)?);
+    assert_eq!(
+        expected[2],
+        json!({"name": "decider:0.8b", "description": "hf.co/ardana-ai/decider-0.8b-GGUF:decider-0.8b-Q8_0.gguf",
+               "release_date": "2026-09-19", "x_pulled": false, "x_size": 811_843_552, "x_browser": 467_748_928,
+               "x_browser_default": true})
+    );
+    assert_eq!(
+        expected[3],
+        json!({"name": "decider:4b", "description": "hf.co/Mapika/decider-4b-GGUF:decider-4b-v2.1-Q4_K_M.gguf",
+               "release_date": "2026-09-24", "x_pulled": false, "x_size": 2_708_804_640_u64})
+    );
     assert_eq!(
         listed.body,
-        with_held_variants(json!({"models": [
-            {"name": "decider:2b", "description": "hf.co/test/decider:2b-GGUF", "release_date": "2026-09-24",
-             "x_pulled": true, "x_default": true, "x_browser": 1_121_602_009},
-            {"name": "stock", "description": "hf.co/test/stock-GGUF", "release_date": "2026-09-28", "x_pulled": true},
-            {"name": "decider:0.8b", "description": "hf.co/ardana-ai/decider-0.8b-GGUF:decider-0.8b-Q8_0.gguf",
-             "release_date": "2026-09-19", "x_pulled": false, "x_size": 811_843_552, "x_browser": 467_748_928,
-             "x_browser_default": true},
-            {"name": "decider:4b", "description": "hf.co/Mapika/decider-4b-GGUF:decider-4b-v2.1-Q4_K_M.gguf",
-             "release_date": "2026-09-24", "x_pulled": false, "x_size": 2_708_804_640_u64},
-            {"name": "gemma-4:e2b", "description": "hf.co/ggml-org/gemma-4-E2B-it-GGUF:gemma-4-E2B-it-Q4_0.gguf",
-             "release_date": "2026-03-02", "x_pulled": false, "x_size": 2_841_481_184_u64},
-            {"name": "gemma-4:e4b", "description": "hf.co/ggml-org/gemma-4-E4B-it-GGUF:gemma-4-E4B-it-Q4_0.gguf",
-             "release_date": "2026-03-02", "x_pulled": false, "x_size": 4_590_807_392_u64},
-            {"name": "gemma-4:12b", "description": "hf.co/ggml-org/gemma-4-12B-it-GGUF:gemma-4-12B-it-Q4_0.gguf",
-             "release_date": "2026-05-23", "x_pulled": false, "x_size": 7_219_673_216_u64},
-            {"name": "gemma-4:26b-a4b",
-             "description": "hf.co/ggml-org/gemma-4-26B-A4B-it-GGUF:gemma-4-26B-A4B-it-Q4_0.gguf",
-             "release_date": "2026-03-11", "x_pulled": false, "x_size": 14_618_145_824_u64},
-            {"name": "gemma-4:31b", "description": "hf.co/ggml-org/gemma-4-31B-it-GGUF:gemma-4-31B-it-Q4_0.gguf",
-             "release_date": "2026-03-11", "x_pulled": false, "x_size": 17_992_313_088_u64},
-            {"name": "qwen3.5:0.8b", "description": "hf.co/ggml-org/Qwen3.5-0.8B-GGUF:Qwen3.5-0.8B-Q4_0.gguf",
-             "release_date": "2026-02-28", "x_pulled": false, "x_size": 563_036_064, "x_browser": 904_574_185},
-            {"name": "qwen3.6:35b-a3b",
-             "description": "hf.co/ggml-org/Qwen3.6-35B-A3B-GGUF:Qwen3.6-35B-A3B-Q4_K_M.gguf",
-             "release_date": "2026-04-15", "x_pulled": false, "x_size": 20_419_565_568_u64},
-            {"name": "qwen3.8:27b", "description": "hf.co/ggml-org/Qwen3.8-27B-GGUF:Qwen3.8-27B-Q4_K_M.gguf",
-             "release_date": "2026-08-05", "x_pulled": false, "x_size": 18_973_870_528_u64},
-            {"name": "smollm3:3b", "description": "hf.co/ggml-org/SmolLM3-3B-GGUF:SmolLM3-Q4_K_M.gguf",
-             "release_date": "2025-07-08", "x_pulled": false, "x_size": 1_915_305_312},
-        ]}))
-        .await?
+        with_held_variants(json!({"models": expected})).await?
     );
     assert_eq!(fake.loads(), 0, "listing loads nothing");
 
@@ -192,44 +179,55 @@ async fn sizes_are_rows() -> Result<()> {
             )
         })
         .collect();
+    /// A [`Row`] the snapshot predicts, its name owned.
+    type Expected = (String, Option<u64>, bool, Option<u64>, bool);
+    let library = common::library()?;
+    let expected: Vec<Expected> = library
+        .sizes()
+        .iter()
+        .map(|pick| {
+            let name = pick.name();
+            (
+                name.clone(),
+                Some(pick.quant.bytes),
+                name == library.default,
+                pick.size.browser.as_ref().map(|b| b.bytes),
+                library.browser_default.as_deref() == Some(name.as_str()),
+            )
+        })
+        .collect();
     assert_eq!(
-        flags,
+        expected[..3],
         [
             (
-                "decider:0.8b",
+                "decider:0.8b".to_string(),
                 Some(811_843_552),
                 false,
                 Some(467_748_928),
                 true
             ),
             (
-                "decider:2b",
+                "decider:2b".to_string(),
                 Some(1_274_396_800),
                 true,
                 Some(1_121_602_009),
                 false
             ),
-            ("decider:4b", Some(2_708_804_640), false, None, false),
-            ("gemma-4:e2b", Some(2_841_481_184), false, None, false),
-            ("gemma-4:e4b", Some(4_590_807_392), false, None, false),
-            ("gemma-4:12b", Some(7_219_673_216), false, None, false),
-            ("gemma-4:26b-a4b", Some(14_618_145_824), false, None, false),
-            ("gemma-4:31b", Some(17_992_313_088), false, None, false),
             (
-                "qwen3.5:0.8b",
-                Some(563_036_064),
+                "decider:4b".to_string(),
+                Some(2_708_804_640),
                 false,
-                Some(904_574_185),
+                None,
                 false
             ),
-            ("qwen3.6:35b-a3b", Some(20_419_565_568), false, None, false),
-            ("qwen3.8:27b", Some(18_973_870_528), false, None, false),
-            ("smollm3:3b", Some(1_915_305_312), false, None, false),
         ]
     );
     assert_eq!(
-        flags.iter().map(|f| f.0).collect::<Vec<_>>(),
-        common::library()?.names(),
+        flags
+            .iter()
+            .map(|f| (f.0.to_string(), f.1, f.2, f.3, f.4))
+            .collect::<Vec<_>>(),
+        expected,
         "the snapshot's order"
     );
 
@@ -250,23 +248,22 @@ async fn sizes_are_rows() -> Result<()> {
             )
         })
         .collect();
+    let mut expected = vec![
+        ("decider:2b".to_string(), true),
+        ("decider:2b-q8_0".to_string(), true),
+    ];
+    expected.extend(
+        library
+            .names()
+            .into_iter()
+            .filter(|name| name != "decider:2b")
+            .map(|name| (name, false)),
+    );
     assert_eq!(
-        rows,
-        [
-            ("decider:2b", true),
-            ("decider:2b-q8_0", true),
-            ("decider:0.8b", false),
-            ("decider:4b", false),
-            ("gemma-4:e2b", false),
-            ("gemma-4:e4b", false),
-            ("gemma-4:12b", false),
-            ("gemma-4:26b-a4b", false),
-            ("gemma-4:31b", false),
-            ("qwen3.5:0.8b", false),
-            ("qwen3.6:35b-a3b", false),
-            ("qwen3.8:27b", false),
-            ("smollm3:3b", false),
-        ]
+        rows.iter()
+            .map(|r| (r.0.to_string(), r.1))
+            .collect::<Vec<_>>(),
+        expected
     );
     assert_eq!(fake.loads(), 0, "listing loads nothing");
     Ok(())
@@ -357,22 +354,20 @@ async fn model_resolution() -> Result<()> {
             )
         })
         .collect();
+    let mut expected = vec![("decider:2b".to_string(), true, false)];
+    expected.extend(
+        common::library()?
+            .names()
+            .into_iter()
+            .filter(|name| name != "decider:2b")
+            .map(|name| (name.clone(), false, name == "decider:4b")),
+    );
     assert_eq!(
-        flags,
-        [
-            ("decider:2b", true, false),
-            ("decider:0.8b", false, false),
-            ("decider:4b", false, true),
-            ("gemma-4:e2b", false, false),
-            ("gemma-4:e4b", false, false),
-            ("gemma-4:12b", false, false),
-            ("gemma-4:26b-a4b", false, false),
-            ("gemma-4:31b", false, false),
-            ("qwen3.5:0.8b", false, false),
-            ("qwen3.6:35b-a3b", false, false),
-            ("qwen3.8:27b", false, false),
-            ("smollm3:3b", false, false),
-        ]
+        flags
+            .iter()
+            .map(|f| (f.0.to_string(), f.1, f.2))
+            .collect::<Vec<_>>(),
+        expected
     );
 
     // R3.2 (Q10): every spelling of a library size reaches its one entry, under its canonical name.
@@ -410,7 +405,7 @@ async fn model_resolution() -> Result<()> {
     assert_eq!(listed["models"][1]["x_size"], 1_274_396_800_u64);
     assert_eq!(
         listed["models"].as_array().map(Vec::len),
-        Some(12),
+        Some(common::library()?.names().len()),
         "{listed}"
     );
     let reply = post(&app, &ask(Some("gamma"))).await?;

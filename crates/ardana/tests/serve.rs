@@ -100,23 +100,7 @@ fn serve_binds_localhost_and_reads_the_key_from_the_environment() -> Result<()> 
     let listed: Value = serde_json::from_str(&body)?;
     let models = listed["models"].as_array().context("models")?;
     let names: Vec<&str> = models.iter().filter_map(|m| m["name"].as_str()).collect();
-    assert_eq!(
-        names,
-        [
-            "decider:0.8b",
-            "decider:2b",
-            "decider:4b",
-            "gemma-4:e2b",
-            "gemma-4:e4b",
-            "gemma-4:12b",
-            "gemma-4:26b-a4b",
-            "gemma-4:31b",
-            "qwen3.5:0.8b",
-            "qwen3.6:35b-a3b",
-            "qwen3.8:27b",
-            "smollm3:3b"
-        ]
-    );
+    assert_eq!(names, common::snapshot_names()?);
     assert!(models.iter().all(|m| m["x_pulled"] == false), "{body}");
     assert_eq!(models[1]["x_default"], true, "{body}");
     Ok(())
