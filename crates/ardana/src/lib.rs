@@ -1,9 +1,10 @@
-//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`. `main.rs` only
-//! parses arguments and reports errors.
+//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`, and `update`.
+//! `main.rs` only parses arguments and reports errors.
 
 mod ask;
 mod help;
 mod render;
+pub mod update;
 
 use std::io::{IsTerminal, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
@@ -65,6 +66,9 @@ pub enum Command {
     /// Remove models
     #[command(after_help = help::rm())]
     Rm(RmArgs),
+    /// Update ardana to the latest release
+    #[command(after_help = help::update())]
+    Update,
 }
 
 #[derive(Debug, Args)]
@@ -251,11 +255,13 @@ pub fn run(cli: Cli, matches: &ArgMatches) -> Result<()> {
         Command::Show(args) => show(&args),
         Command::Ps(args) => ps(&args),
         Command::Rm(args) => rm(&args),
+        Command::Update => update::update(),
     }
 }
 
 /// `ardana serve`: the registry's models behind the API until Ctrl-C or SIGTERM, with the library read from its
 /// source on start and every `--library-refresh` (Q9), in the background, so binding never waits on the network.
+/// Once bound it makes the daily check for a newer release, in the background too.
 fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
     let registry = Registry::open_default()?;
     let names = registry.names();
@@ -295,6 +301,13 @@ fn serve(args: &ardana_server::ServeArgs) -> Result<()> {
             }
         );
         eprintln!("ardana serve: the playground is at http://{local}/");
+        // The one check at start (Q4): its line is logged when it answers, from a thread that waits for it.
+        let news = update::notice();
+        std::thread::spawn(move || {
+            if let Ok(notice) = news.recv() {
+                eprintln!("ardana serve: {notice}");
+            }
+        });
         let app = ardana_server::router(models.clone(), args.api_key.clone());
         ardana_server::serve(listener, app, models)
             .await
@@ -567,8 +580,10 @@ fn rm(args: &RmArgs) -> Result<()> {
     Ok(())
 }
 
-/// `ardana run`: builds the request, answers it and prints the answers (or the response as JSON).
+/// `ardana run`: builds the request, answers it and prints the answers (or the response as JSON), then the notice
+/// of a newer release when the daily check has one.
 fn run_model(args: &RunArgs, asked: &ask::Asked) -> Result<()> {
+    let news = update::notice();
     let model = args.name.as_deref().unwrap_or(DEFAULT_MODEL);
     let request = match &args.request {
         Some(path) => read_request(path)?,
@@ -603,6 +618,10 @@ fn run_model(args: &RunArgs, asked: &ask::Asked) -> Result<()> {
                 started.elapsed()
             )
         );
+    }
+    // What the daily check knows by now (Q4): a lookup still in flight is not waited for.
+    if let Ok(notice) = news.try_recv() {
+        eprintln!("{notice}");
     }
     Ok(())
 }

@@ -29,6 +29,9 @@ ardana-llama = { path = "crates/ardana-llama" }
 ardana-registry = { path = "crates/ardana-registry" }
 ardana-server = { path = "crates/ardana-server" }
 anyhow = "1"
+# `ardana update` and the daily check (`crates/ardana/src/update.rs`): dist's install receipt, the GitHub Releases
+# lookup and the installer run. Its axoasset takes the workspace's `reqwest`, so one client type serves both.
+axoupdater = "=0.10.2"
 axum = "0.8"
 # The Candle runtime (`ardana-candle`), pinned together: the three crates release in lockstep. candle-core brings its
 # own `tokenizers` 0.22 (`onig` only), which stays in the lock beside ardana's 0.23.2.

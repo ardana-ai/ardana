@@ -39,6 +39,8 @@ irm https://ardana.ai/install.ps1 | iex
 
 It is one binary, installed in `~/.local/bin`.
 
+`ardana update` brings it to the latest release.
+
 ## Get started
 
 ```shell

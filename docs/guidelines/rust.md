@@ -44,12 +44,30 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts) and
   `float_roundtrip` (floats parse to the exact `f64` Python's `json.loads` gives, which prompts re-render), `clap` 4
   with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
-  `tokio` 1 (the `ardana` binary runs `pull` on a current-thread runtime and `serve` on a multi-thread one;
+  `tokio` 1 (the `ardana` binary runs `pull` and `update` on a current-thread runtime and `serve` on a multi-thread one;
   `ardana-server` adds `sync`, `signal`, `macros`, `fs` and `io-util`; `ardana-registry` takes `rt` for its unit
   tests only, and xtask for `build-playground`: a current-thread runtime under its async Hub lookups), `reqwest`
-  0.13.5 (the library document's GETs in `ardana-registry`, at the version hf-hub resolves, `huggingface.md`), `axum`
+  0.13.5 (the library document's GETs in `ardana-registry` and the update lookup's client in `ardana`, at the version
+  hf-hub resolves, `huggingface.md`), `axum`
   0.8, `tower-http` 0.7, `http-body` 1 and `tower` 0.5 (dev) as `axum.md` pins them, plus the library pins in their
   own guidelines.
+- `axoupdater` 0.10.2 (pinned `=`, its default features) is `ardana update` and the check behind it, used in
+  `crates/ardana/src/update.rs` alone: it reads dist's install receipt, looks the latest GitHub Release up and runs
+  that release's installer, and nothing is built beside it. Its `axoasset` asks `reqwest >=0.13.0`, which the lock
+  resolves to the workspace's 0.13.5, so `AxoUpdater::set_client` takes a workspace `reqwest::Client`: give it a
+  timeout (10 s a request; the client `new_for` builds has none, and a failed lookup is two requests). Call its
+  async API (`query_new_version`, `is_update_needed`, `run`) through the binary's `block_on`, on a plain thread: a
+  runtime started inside another runtime's context panics, which is also why the `blocking` feature (`*_sync`) stays
+  off. One `block_on` covers a lookup and the install after it, since the client's connections belong to the runtime
+  that opened them. `update::check` is the one lookup; `Check::Unmanaged` (no receipt for this executable, or one whose JSON or versions
+  do not read) sends nothing. `AxoUpdater::new_for` builds a client of its own (about 30 ms in a debug build), so even
+  reading the receipt stays off a command's own thread.
+  `update::notice` is the daily check of `run` and `serve`: it reads `$ARDANA_HOME/update-check.json` on the caller's
+  thread (the notice of a version seen within the day is there at once) and does everything that builds a client or
+  sends a request on a `std::thread` of its own, handing the notice back over an `mpsc` channel: `run` takes what is
+  there at exit (`try_recv`), `serve` waits for it on one more thread. No command waits on the lookup, and a new
+  caller must not either. That thread dates the lookup in the file under the file's own lock (`File::lock`, read to
+  write), so of the ardanas that find a lookup due together one sends it; write the file through `locked` only.
 - `[profile.release.package.brotli]` and `[profile.release.package.sha2]` set `opt-level = 3`: `ardana-server`'s build
   script embeds the playground through memory-serve, which brotli-compresses (quality 11) and hashes every asset,
   onnxruntime-web's 41 MB of WASM among them, and release builds compile a build script's dependencies unoptimised.
@@ -108,14 +126,16 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   helpers through `tests/common/mod.rs`, not a top-level `tests/common.rs`.
 - Keep `main.rs` thin and logic in `lib.rs` so integration tests can call it; test the CLI through
   `env!("CARGO_BIN_EXE_ardana")`.
-- The `ardana` CLI follows Ollama's shape (`serve`/`start`, `run`, `pull`, `list`/`ls`, `show`, `ps`, `rm`, `-v`):
+- The `ardana` CLI follows Ollama's shape (`serve`/`start`, `run`, `pull`, `list`/`ls`, `show`, `ps`, `rm`, `-v`),
+  plus `update`:
   a one-line imperative description per command and flag, an `Examples:` block in every command's `after_help`
   (`crates/ardana/src/help.rs`, checked by a unit test), readable output by default with `--json` for the exact
   data, figures through `ardana_api::format`, and errors that end with the command to type next. Every `serve` flag
   also reads an `ARDANA_<FLAG>` variable, its value hidden in `--help`.
 - Mark every test that needs a real model, network, the Ollama store or more than a few seconds with
   `#[ignore = "e2e: <what it needs>"]`. Plain `cargo test` stays fast and offline; `cargo xtask e2e rust` runs
-  `cargo test --workspace -- --include-ignored` under the home guard.
+  `cargo test --workspace -- --include-ignored` under the home guard. The one plain test above that is `update.rs`
+  "a_failed_lookup_is_an_error", which waits out the two 10 s request timeouts of a GitHub that never answers.
 - End-to-end tests use the official models from `xtask/fetch.toml` (decider:2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B, Gemma 4 E2B,
   Ollama `llama3.2`), resolved from `tmp/hf`; never replace a real model with an invented fixture.
 - Put test temp files under `$ARDANA_TMP` (or `std::env::temp_dir()`, which `[env]` points at `tmp/sys`); never under
@@ -128,6 +148,12 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   and does its work in the child, which it tells by a variable naming that test's own scratch directory
   (`library.rs` "library_pulls_read_the_pinned_commit"); a test that pulls online points `HF_ENDPOINT` at a loopback
   stand-in of the Hub serving `tmp/hf` (`e2e_library.rs` "pull_reads_the_pinned_commit").
+- A test of `ardana update` or the daily check gives its child a receipt directory of its own in
+  `AXOUPDATER_CONFIG_PATH` (the receipt naming the directory of `CARGO_BIN_EXE_ardana` as `install_prefix`) and a
+  loopback stand-in of GitHub's API in `ARDANA_INSTALLER_GHE_BASE_URL`, which records every request
+  (`crates/ardana/tests/update.rs`); the real download and install is `#[ignore = "e2e: network, GitHub Releases"]`
+  and installs into `$ARDANA_TMP`. No other test's `ardana` has a receipt for it (a developer's own install receipt
+  names another directory), so it checks nothing.
 - Prefer tests returning `anyhow::Result<()>` with `?` over chains of `unwrap()`.
 - Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice. The decider goldens in
   `crates/ardana-core/tests/data/decider/` are regenerated only by `cargo xtask export-decider`.
@@ -245,6 +271,7 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - https://docs.rs/anyhow/latest/anyhow/ — `Context`, `bail!`, `ensure!`
 - https://docs.rs/clap/4/clap/_derive/index.html — `Parser`, `Subcommand`, `Args` derive for the `ardana` CLI
 - https://docs.rs/indexmap/2/indexmap/ — insertion-ordered maps with `serde` support
+- https://docs.rs/axoupdater — `AxoUpdater`: `load_receipt`, `check_receipt_is_for_this_executable`, `query_new_version`, `is_update_needed`, `run`, `set_client`
 - https://github.com/rust-lang/rustfmt — `cargo fmt --all -- --check`, `rustfmt.toml`, `style_edition`
 - https://github.com/rust-lang/cargo/issues/8938 — nested cargo from a build script deadlocks on the target-dir lock
 - https://github.com/matklad/cargo-xtask — xtask alias, workspace member layout, keep xtask fast to compile
