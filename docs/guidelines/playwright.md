@@ -14,7 +14,7 @@ It covers npm setup inside the sandbox, config, browsers, locators, assertions, 
 share-link decoding.
 
 ## Versions
-- `@playwright/test` 1.63.0 — test runner, fixtures, web-first assertions; pinned exactly in `package.json` (Q20, R6.8)
+- `@playwright/test` 1.64.0 — test runner, fixtures, web-first assertions; pinned exactly in `package.json` (Q20, R6.8)
 - `lz-string` 1.5.0 — decodes Jev share links in tests with `decompressFromEncodedURIComponent` (Q28, R7.4, R7.8)
 - `@typesafe-ai/sdk` 0.6.0 — the official TypeSafe TypeScript SDK the `snippets` case runs the TypeScript snippet with
   (R7.6, R7.8); ESM and CJS builds, no dependencies, needs Node 20+
