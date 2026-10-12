@@ -182,6 +182,21 @@ pub const CANDLE_FIXTURES: &[CandleFixture] = &[
         )),
         long_state: true,
     },
+    CandleFixture {
+        name: "olmo-3-7b",
+        checkpoint: Pin {
+            repo: "allenai/Olmo-3-7B-Instruct",
+            commit: "6e5971d9eba42665f5bd5a0fcf047f299ce1dccc",
+        },
+        gguf: Some((
+            Pin {
+                repo: "unsloth/Olmo-3-7B-Instruct-GGUF",
+                commit: "a2a9ae53f5a95087616b3f45ca96e9d2631344ee",
+            },
+            "Olmo-3-7B-Instruct-Q8_0.gguf",
+        )),
+        long_state: true,
+    },
 ];
 
 /// The request fixture the SDK suite sends.

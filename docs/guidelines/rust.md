@@ -168,8 +168,8 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - Silence a lint locally with `#[expect(clippy::<lint>, reason = "...")]` on the smallest item (`expect` warns once
   the lint no longer fires, so stale suppressions surface); never crate-wide without a note in this file.
 - `cargo fmt --all -- --check` must pass; keep rustfmt at its defaults, and add a `rustfmt.toml` only for stable options.
-- A source file copied from a dependency (`crates/ardana-candle/src/llama.rs`, `phi3.rs`, `granite.rs`, `lfm2.rs` and
-  `gemma3.rs`, from candle-transformers) is held to the same two checks with no lint silenced for it: it is formatted by
+- A source file copied from a dependency (`crates/ardana-candle/src/llama.rs`, `phi3.rs`, `granite.rs`, `lfm2.rs`,
+  `gemma3.rs` and `olmo2.rs`, from candle-transformers) is held to the same two checks with no lint silenced for it: it is formatted by
   `cargo fmt`, and what nothing calls is left out, not allowed. Its header carries the upstream path and version, the
   license notice and the list of changes (`candle.md`, "Vendored modules").
 

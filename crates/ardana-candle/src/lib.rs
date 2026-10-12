@@ -7,14 +7,15 @@
 //! at every position; the readout is shared ([`CausalLm`]): the label logits are the head's rows for the label ids
 //! applied to the hidden states at the slots, in F32, so a prompt never computes a whole vocabulary row.
 //!
-//! candle-transformers' Llama, Phi-3, Granite, LFM2 and Gemma 3 narrow to the last position inside the model, so
-//! [`llama`], [`phi3`], [`granite`], [`lfm2`] and [`gemma3`] are its 0.11.0 files, copied and changed as each one's
-//! header lists.
+//! candle-transformers' Llama, Phi-3, Granite, LFM2, Gemma 3 and OLMo 2 narrow to the last position inside the model,
+//! so [`llama`], [`phi3`], [`granite`], [`lfm2`], [`gemma3`] and [`olmo2`] (Olmo 3) are its 0.11.0 files, copied and
+//! changed as each one's header lists.
 
 mod gemma3;
 mod granite;
 mod lfm2;
 mod llama;
+mod olmo2;
 mod phi3;
 
 use std::collections::HashMap;
@@ -31,7 +32,7 @@ use candle_transformers::models::{qwen2, qwen3};
 use serde_json::Value;
 
 /// The `config.json#architectures` names this runtime implements.
-pub const ARCHITECTURES: [&str; 9] = [
+pub const ARCHITECTURES: [&str; 10] = [
     "Qwen3ForCausalLM",
     "Qwen2ForCausalLM",
     "SmolLM3ForCausalLM",
@@ -41,6 +42,7 @@ pub const ARCHITECTURES: [&str; 9] = [
     "Lfm2ForCausalLM",
     "Gemma3ForCausalLM",
     "Gemma3ForConditionalGeneration",
+    "Olmo3ForCausalLM",
 ];
 
 /// Candle for safetensors snapshots, on Metal by default on Apple silicon.
@@ -198,6 +200,7 @@ fn configuration(architecture: &str, config: &Value) -> Result<Box<dyn Architect
         "Gemma3ForConditionalGeneration" => Box::new(Gemma3TextTower(
             gemma3_config(&config["text_config"]).context("text_config")?,
         )),
+        "Olmo3ForCausalLM" => Box::new(olmo3_config(config)?),
         other => bail!("no implementation of {other}"),
     })
 }
@@ -527,6 +530,90 @@ impl Decoder for gemma3::Model {
     }
 }
 
+/// `config` as the vendored Olmo 3 configuration: candle's own OLMo 2 fields, each layer's attention from
+/// `layer_types` (`sliding_attention` or `full_attention`; another is refused), the `sliding_window` a sliding layer
+/// needs, and the `rope_scaling` of the full layers: `yarn`, read as transformers reads it (`attention_factor`
+/// `0.1 ln(factor) + 1` without one, `beta_fast` 32 and `beta_slow` 1 without them), or none (`null`, or `default`);
+/// another type, or a `truncate` of false, is refused.
+fn olmo3_config(config: &Value) -> Result<olmo2::Config> {
+    let layer_types: Vec<String> =
+        serde_json::from_value(config["layer_types"].clone()).context("layer_types")?;
+    let layer_types = layer_types
+        .iter()
+        .map(|layer_type| match layer_type.as_str() {
+            "sliding_attention" => Ok(olmo2::LayerType::SlidingAttention),
+            "full_attention" => Ok(olmo2::LayerType::FullAttention),
+            other => bail!("layer_types names {other}, and only sliding_attention and full_attention are implemented"),
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let sliding_window: Option<usize> =
+        serde_json::from_value(config["sliding_window"].clone()).context("sliding_window")?;
+    ensure!(
+        sliding_window.is_some() || !layer_types.contains(&olmo2::LayerType::SlidingAttention),
+        "layer_types names sliding_attention, and there is no sliding_window"
+    );
+    let scaling = &config["rope_scaling"];
+    let rope_type = scaling["rope_type"].as_str().or(scaling["type"].as_str());
+    let rope_scaling = match rope_type {
+        Some("yarn") => {
+            let number = |name: &'static str| -> Result<Option<f64>> {
+                serde_json::from_value(scaling[name].clone())
+                    .with_context(|| format!("rope_scaling.{name}"))
+            };
+            ensure!(
+                scaling["truncate"] != Value::Bool(false),
+                "rope_scaling.truncate is false, and only a truncated correction range is implemented"
+            );
+            let factor = number("factor")?.context("rope_scaling.factor")?;
+            Some(olmo2::Yarn {
+                factor,
+                original_max_position_embeddings: serde_json::from_value(
+                    scaling["original_max_position_embeddings"].clone(),
+                )
+                .context("rope_scaling.original_max_position_embeddings")?,
+                attention_factor: number("attention_factor")?.unwrap_or(0.1 * factor.ln() + 1.0),
+                beta_fast: number("beta_fast")?.unwrap_or(32.0),
+                beta_slow: number("beta_slow")?.unwrap_or(1.0),
+            })
+        }
+        Some(other) if other != "default" => {
+            bail!("rope_scaling of type {other} is not implemented")
+        }
+        _ => None,
+    };
+    let config = serde_json::from_value(config.clone())?;
+    Ok(olmo2::Config::new(
+        config,
+        layer_types,
+        sliding_window,
+        rope_scaling,
+    ))
+}
+
+impl Architecture for olmo2::Config {
+    fn shape(&self) -> Shape {
+        Shape {
+            vocab: self.vocab_size,
+            hidden: self.hidden_size,
+            max_positions: self.max_position_embeddings,
+            tied: self.tie_word_embeddings,
+        }
+    }
+
+    fn build(&self, vb: VarBuilder<'static>) -> candle_core::Result<Box<dyn Decoder>> {
+        Ok(Box::new(olmo2::Model::new(self, vb)?))
+    }
+}
+
+/// The vendored module keeps no key-value cache (a prompt is decoded whole, and a 7B model's would hold gigabytes), so
+/// the loaded decoder runs each prompt itself, with nothing to clear or clone; a sliding layer attends over the whole
+/// prompt under its window's mask.
+impl Decoder for olmo2::Model {
+    fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
+        self.forward(input, 0)
+    }
+}
+
 /// A loaded causal LM of any architecture: its decoder and the readout every architecture shares.
 pub struct CausalLm {
     architecture: &'static str,
@@ -707,6 +794,7 @@ mod tests {
             "Lfm2ForCausalLM",
             "Gemma3ForCausalLM",
             "Gemma3ForConditionalGeneration",
+            "Olmo3ForCausalLM",
         ] {
             assert!(ARCHITECTURES.contains(&architecture));
             assert!(runtime.supports(&write(architecture, json!([architecture]))));
@@ -726,7 +814,7 @@ mod tests {
             err.to_string().contains(
                 "[\"MambaForCausalLM\"]; candle implements Qwen3ForCausalLM, Qwen2ForCausalLM, SmolLM3ForCausalLM, \
                  LlamaForCausalLM, Phi3ForCausalLM, GraniteForCausalLM, Lfm2ForCausalLM, Gemma3ForCausalLM, \
-                 Gemma3ForConditionalGeneration"
+                 Gemma3ForConditionalGeneration, Olmo3ForCausalLM"
             ),
             "{err:#}"
         );
@@ -1275,6 +1363,184 @@ mod tests {
         let every = configuration("Gemma3ForCausalLM", &text_config).unwrap();
         let tensors = read_tensors(&[file], every.as_ref(), &Device::Cpu, DType::F32).unwrap();
         assert_eq!(tensors.len(), 883);
+    }
+
+    /// An Olmo 3 `config.json` a few values wide: one layer per entry of `layer_types`, a window of `sliding_window`
+    /// tokens and the `rope_scaling` given.
+    fn olmo3_config_json(layer_types: Value, sliding_window: Value, rope_scaling: Value) -> Value {
+        json!({
+            "attention_bias": false,
+            "hidden_act": "silu",
+            "hidden_size": 16,
+            "intermediate_size": 24,
+            "layer_types": layer_types,
+            "max_position_embeddings": 1024,
+            "num_attention_heads": 2,
+            "num_hidden_layers": layer_types.as_array().unwrap().len(),
+            "num_key_value_heads": 2,
+            "rms_norm_eps": 1e-6,
+            "rope_scaling": rope_scaling,
+            "rope_theta": 500000,
+            "sliding_window": sliding_window,
+            "tie_word_embeddings": false,
+            "vocab_size": 20,
+        })
+    }
+
+    /// The slot logits at every position of `ids` through a `CausalLm` built in memory over the Olmo 3 `config` and
+    /// `weights`, with `head` as its output projection.
+    fn olmo3_logits(
+        config: &Value,
+        weights: &HashMap<String, Tensor>,
+        head: &Tensor,
+        ids: &[u32],
+    ) -> Vec<Vec<f32>> {
+        let configuration = olmo3_config(config).unwrap();
+        let vb = VarBuilder::from_tensors(weights.clone(), DType::F32, &Device::Cpu);
+        let mut model = CausalLm {
+            architecture: "Olmo3ForCausalLM",
+            decoder: configuration.build(vb).unwrap(),
+            head: head.clone(),
+            logits_scaling: configuration.logits_scaling(),
+            softcapping: None,
+            vocab: 20,
+            n_ctx: 1024,
+            dir: PathBuf::new(),
+        };
+        let slots: Vec<usize> = (0..ids.len()).collect();
+        model.slot_logits(ids, &slots, &[0, 7, 19]).unwrap()
+    }
+
+    /// R7.3, the vendored Olmo 3 over random weights: two layers, `layer_types` `[sliding_attention,
+    /// full_attention]` and a `sliding_window` of 8. A 16-token prompt's slot logits change when the window is set to
+    /// 16 (every key in reach: full attention) at the positions from 8 on, which lose a key under the window of 8,
+    /// and stay the same before them; an 8-token prompt gives identical logits under both windows. Every position
+    /// has its state, past the 512 query rows one attention matmul covers too. A sliding layer without a window and a
+    /// layer of another type are refused.
+    #[test]
+    fn olmo3_sliding_layers_see_their_window() {
+        let types = json!(["sliding_attention", "full_attention"]);
+        let narrow = olmo3_config_json(types.clone(), json!(8), Value::Null);
+        let (decoder, weights) = random_decoder("Olmo3ForCausalLM", &narrow);
+        assert_every_position(decoder.as_ref(), &[3, 1, 4, 1, 5, 9, 2, 6, 5, 3], 16);
+        // Past 512 tokens the attention runs in chunks of query rows: 513 tokens (two chunks) have the states their
+        // first 512 (one chunk) have.
+        let two_chunks: Vec<u32> = (0..513).map(|i| (i * 7 + 3) % 20).collect();
+        assert_every_position(decoder.as_ref(), &two_chunks, 16);
+
+        let head = Tensor::randn(0f32, 1., (20, 16), &Device::Cpu).unwrap();
+        let wide = olmo3_config_json(types.clone(), json!(16), Value::Null);
+        let sixteen: Vec<u32> = (0..16).map(|i| (i * 7 + 3) % 20).collect();
+        let (under_8, under_16) = (
+            olmo3_logits(&narrow, &weights, &head, &sixteen),
+            olmo3_logits(&wide, &weights, &head, &sixteen),
+        );
+        for (position, (a, b)) in under_8.iter().zip(&under_16).enumerate() {
+            let gap = widest_gap(a, b);
+            if position < 8 {
+                assert!(gap < 1e-6, "position {position}: the logits moved by {gap}");
+            } else {
+                assert!(gap > 1e-3, "position {position}: the logits moved by {gap}");
+            }
+        }
+        let eight = &sixteen[..8];
+        assert_eq!(
+            olmo3_logits(&narrow, &weights, &head, eight),
+            olmo3_logits(&wide, &weights, &head, eight)
+        );
+
+        let err = olmo3_config(&olmo3_config_json(types, Value::Null, Value::Null)).unwrap_err();
+        assert!(err.to_string().contains("sliding_window"), "{err:#}");
+        let conv = json!(["conv", "full_attention"]);
+        let err = olmo3_config(&olmo3_config_json(conv, json!(8), Value::Null)).unwrap_err();
+        assert!(err.to_string().contains("conv"), "{err:#}");
+        let mut none = narrow;
+        none.as_object_mut().unwrap().remove("layer_types");
+        let err = olmo3_config(&none).unwrap_err();
+        assert!(err.to_string().contains("layer_types"), "{err:#}");
+    }
+
+    /// The vendored Olmo 3's YaRN, as transformers computes it for Olmo-3-7B-Instruct's own parameters (heads 128
+    /// wide, `rope_theta` 500,000, `original_max_position_embeddings` 8192, `factor` 8, `beta_fast` 32, `beta_slow`
+    /// 1): the correction range runs from pair 18 (`floor(128 ln(8192 / 64 pi) / 2 ln 500000)` = 18.08) to pair 35
+    /// (`ceil` of 34.98 for one rotation), so the pairs up to 18 keep their frequency, those from 35 on take it
+    /// divided by 8, and pair 26 mixes the two by 8/17; `attention_factor` is `0.1 ln 8 + 1` when left out, the
+    /// betas 32 and 1. Over random weights the scaling moves the full-attention layers alone, at every position but
+    /// the first, which attends to itself alone whatever its scores; another `rope_type` is refused.
+    #[test]
+    fn olmo3_scales_the_full_layers_by_yarn() {
+        let yarn = olmo2::Yarn {
+            factor: 8.0,
+            original_max_position_embeddings: 8192,
+            attention_factor: 1.2079441541679836,
+            beta_fast: 32.0,
+            beta_slow: 1.0,
+        };
+        let inv_freq = yarn.inv_freq(128, 500_000.0);
+        assert_eq!(inv_freq.len(), 64);
+        let unscaled = |i: usize| 500_000f64.powf(-(i as f64) / 64.0);
+        for (i, got) in inv_freq.iter().enumerate() {
+            let want = match i {
+                0..=18 => unscaled(i),
+                35.. => unscaled(i) / 8.0,
+                26 => unscaled(i) * (9.0 / 17.0 + 8.0 / 17.0 / 8.0),
+                _ => continue,
+            };
+            let gap = (f64::from(*got) - want).abs() / want;
+            assert!(gap < 1e-6, "pair {i}: {got}, not {want}");
+        }
+
+        let scaling = json!({
+            "rope_type": "yarn",
+            "factor": 8.0,
+            "original_max_position_embeddings": 8192,
+        });
+        let full = olmo3_config_json(
+            json!(["full_attention", "full_attention"]),
+            json!(8),
+            scaling.clone(),
+        );
+        assert_eq!(olmo3_config(&full).unwrap().rope_scaling, Some(yarn));
+        let (decoder, weights) = random_decoder("Olmo3ForCausalLM", &full);
+        let prompt = [3, 1, 4, 1, 5];
+        assert_every_position(decoder.as_ref(), &prompt, 16);
+        let plain = |config: &Value| {
+            let mut config = config.clone();
+            config["rope_scaling"] = Value::Null;
+            config
+        };
+        let vb = VarBuilder::from_tensors(weights.clone(), DType::F32, &Device::Cpu);
+        let unscaled = olmo3_config(&plain(&full)).unwrap().build(vb).unwrap();
+        let (scaled, unscaled) = (
+            hidden(decoder.as_ref(), &prompt),
+            hidden(unscaled.as_ref(), &prompt),
+        );
+        assert_eq!(scaled[0], unscaled[0]);
+        for (position, (a, b)) in scaled.iter().zip(&unscaled).enumerate().skip(1) {
+            assert!(
+                widest_gap(a, b) > 1e-3,
+                "position {position}: {a:?} and {b:?}"
+            );
+        }
+
+        let sliding = olmo3_config_json(
+            json!(["sliding_attention", "sliding_attention"]),
+            json!(8),
+            scaling,
+        );
+        let build = |config: &Value| {
+            let vb = VarBuilder::from_tensors(weights.clone(), DType::F32, &Device::Cpu);
+            olmo3_config(config).unwrap().build(vb).unwrap()
+        };
+        assert_eq!(
+            hidden(&*build(&sliding), &prompt),
+            hidden(&*build(&plain(&sliding)), &prompt)
+        );
+
+        let mut linear = sliding;
+        linear["rope_scaling"] = json!({"rope_type": "linear", "factor": 8.0});
+        let err = olmo3_config(&linear).unwrap_err();
+        assert!(err.to_string().contains("linear"), "{err:#}");
     }
 
     /// Q5: `gpu_layers` 0 is the CPU in F32 and below -1 an error; -1 is the CPU too on a build without Metal (an Apple

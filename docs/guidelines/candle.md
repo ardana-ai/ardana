@@ -37,7 +37,8 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - The implementation comes from `config.json#architectures` (`snapshot::architectures`), never from a model name or a
   per-model value in code (Q3). `ardana_candle::ARCHITECTURES` lists the names it implements, one implementation each
   (Q2): `Qwen3ForCausalLM`, `Qwen2ForCausalLM`, `SmolLM3ForCausalLM`, `LlamaForCausalLM`, `Phi3ForCausalLM`,
-  `GraniteForCausalLM`, `Lfm2ForCausalLM`, `Gemma3ForCausalLM` and `Gemma3ForConditionalGeneration` (its text tower).
+  `GraniteForCausalLM`, `Lfm2ForCausalLM`, `Gemma3ForCausalLM`, `Gemma3ForConditionalGeneration` (its text tower) and
+  `Olmo3ForCausalLM`.
   `CandleRuntime::supports` is true for a directory whose `config.json`
   names one of them, so `Runtimes::for_weights` hands a GGUF file to llama.cpp and a snapshot directory to Candle.
 - One architecture is four things in `crates/ardana-candle/src/lib.rs` and nothing else: its name in `ARCHITECTURES`,
@@ -56,12 +57,14 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - Read the architecture's own configuration from the same `config.json` with `serde_json::from_value` into the
   `candle-transformers` type (`models::qwen3::Config`, `models::qwen2::Config`, `models::smol::smollm3::Config`,
   `models::llama::LlamaConfig`, `models::phi3::Config`, `models::granite::GraniteConfig`,
-  `models::lfm2::Lfm2Config`, `models::gemma3::Config`); its unknown fields are ignored, and it is read before any
+  `models::lfm2::Lfm2Config`, `models::gemma3::Config`, `models::olmo2::Config`); its unknown fields are ignored, and
+  it is read before any
   tensor, so a configuration
   that does not read costs no load. `ardana-candle` depends on neither `serde` nor `tracing`: a field the candle
   type lacks is read from the same value beside it (`llama_config` reads `head_dim`, `granite_config` the four
   scalars and `tie_word_embeddings`, `lfm2_config` `intermediate_size`, `block_auto_adjust_ff_dim` and the tying,
-  `gemma3_config` the linear `rope_scaling`'s factor). A multimodal checkpoint's text configuration is nested:
+  `gemma3_config` the linear `rope_scaling`'s factor, `olmo3_config` `layer_types`, `sliding_window` and the yarn
+  `rope_scaling`). A multimodal checkpoint's text configuration is nested:
   `Gemma3ForConditionalGeneration` reads `config.json#text_config` as `Gemma3ForCausalLM` reads the root.
 
 ### Vendored modules
@@ -96,6 +99,11 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
     instead of the last position's softcapped logits, and `Model` holds neither `lm_head` nor
     `final_logit_softcapping`. Also the sliding mask's window, the attention scale and the global layers' linear
     rope scaling as transformers and llama.cpp have them ("Gemma 3 in the vendored module").
+  - `olmo2.rs` (`src/models/olmo2.rs`, `Olmo3ForCausalLM`): `Model::forward` returns the final-normed hidden states
+    at every position instead of the last position's logits, and `Model` holds no `lm_head`. Also Olmo 3's
+    `layer_types` sliding layers under their window's mask and the full layers' yarn rope scaling, the attention
+    over chunks of query rows and no key-value cache, which a 7B model's memory asks for ("Olmo 3 in the vendored
+    module").
 
 ### Loading
 - Map the files with `candle_core::safetensors::MmapedSafetensors::multi(&files)` (an `unsafe` call: the hub cache's
@@ -282,6 +290,49 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   model's dtype as upstream does, so in BF16 its positions past 256 are not exact, and the attention runs in the
   model's dtype; measure a long prompt against the GGUF before relying on Gemma 3 on Metal.
 
+### Olmo 3 in the vendored module
+- `Olmo3ForCausalLM` (Olmo-3-7B-Instruct, `model_type` `olmo3`) is OLMo 2's graph (post-norms, `q_norm` and `k_norm`
+  over the whole projection width, an untied `lm_head.weight`) with two things candle-transformers 0.11.0's `olmo2`
+  lacks, which `olmo2.rs` adds: `layer_types` and `rope_scaling`. `olmo2::Model::forward(input, 0)` returns the
+  final-normed hidden states at every position; the module keeps no key-value cache, so the loaded decoder runs each
+  prompt itself, nothing cloned or cleared.
+- A layer is `config.json#layer_types[layer_idx]`: `sliding_attention` (three of every four in the 7B) attends under a
+  mask that hides every key `sliding_window` (4096) or more positions before its query, transformers'
+  `sliding_window_overlay` (`kv > q - window`) and llama.cpp's `is_masked_swa` (`p1 - p0 >= n_swa`), the rule W6 pinned
+  for Gemma 3; `full_attention` attends over the whole prompt. Another type is refused, and so is a `config.json`
+  without `layer_types` (transformers defaults to the 4-pattern and a window of 4096; the Olmo 3 checkpoints write
+  both) or with a sliding layer and no `sliding_window`. The 7B has 32 key-value heads for its 32 heads: no grouping.
+- `rope_scaling` (`rope_type` `yarn`: `factor` 8, `original_max_position_embeddings` 8192, `attention_factor`
+  1.2079, `beta_fast` 32, `beta_slow` 1) scales the full-attention layers' rotary table alone, as transformers
+  (`rope_parameters["full_attention"]`) and llama.cpp (`freq_scale` and `attn_factor` 1 on an SWA layer) have it; a
+  sliding layer rotates with `rope_theta` (500,000) unscaled. The yarn table is transformers'
+  `_compute_yarn_parameters`: a frequency pair that rotates `beta_fast` times or more over the original positions keeps
+  its frequency, one rotating `beta_slow` times or fewer takes it divided by `factor`, a pair between (the range's ends
+  floored and ceiled: pairs 18 to 35 of the 7B's 64) mixes the two linearly, and sin and cos are multiplied by
+  `attention_factor` (`0.1 ln(factor) + 1` when left out, which is what the 7B writes). `null` or `default` scales
+  nothing; another type, or `truncate: false`, is refused. llama.cpp reaches the same factor by another road (its
+  `yarn_attn_factor` is cancelled and reapplied inside `rope_yarn`).
+- Memory: the 7B's 7.3 billion parameters are 29.3 GB in F32, and candle's `[heads, len, len]` attention would add
+  3.5 GB per score tensor and 5.5 GB of stored keys and values for a 5.2k-token prompt, past what this machine has
+  beside the weights. The copy therefore computes the attention over 512 query rows at a time (`QUERY_CHUNK`: each
+  chunk's scores masked, softmaxed and multiplied by the values before the next, the chunks concatenated, the same
+  numbers as one matmul) and stores no key-value cache (a prompt is decoded whole, at offset 0). On a 16-core x86 CPU
+  (release build) the ticket's answers and the 2,490-token state's are identical to the unchunked copy's.
+- In F32 on that CPU (release build) the 7B loads in 31 s, answers the ticket in 14 s (49 s with the load; its Q8_0
+  GGUF through llama.cpp: 22 s), the 2,490-token state in 288 s and the suite's 4.9k-token state in 757 s against the
+  GGUF's 563 s, time growing with the square of the prompt as for every other architecture. Its peak resident set
+  is the load's, 36.9 GB for the ticket (the F32 weights beside the mapped BF16 pages, which the kernel can drop),
+  and 38.0 GB for that 4,890-token state (729 s by hand), where the unchunked copy with a cache would have needed
+  about 42 GB. Use the GGUF where that is too much.
+- Checked against transformers 5.19.0 in F32 on the CPU (2026-10-12, by hand, `Olmo3ForCausalLM` from the same
+  snapshot): the label logits through Candle are within 0.00003 of it at 28 tokens and within 0.00014 at 4,408 tokens,
+  past the sliding window (slots at 1, 1469, 2204, 4406 and 4407), so what separates the checkpoint from its GGUF is
+  the quantization. That 4.4k-token prompt took Candle 465 s at a 37.8 GB peak (dev profile, Candle's crates
+  optimised; the peak is the load's, F32 weights beside the mapped BF16 pages) and transformers about 2 minutes.
+- Not measured on Metal (no Apple machine, 2026-10-12): it keeps the BF16 rule. The rotary tables are computed in the
+  model's dtype as upstream does, so in BF16 their positions past 256 are not exact, and the attention runs in the
+  model's dtype; measure a long prompt against the GGUF before relying on Olmo 3 on Metal.
+
 ### Logits
 - Return label logits only: index the hidden states at the slots and the head's rows at the label ids
   (`index_select`), cast both to F32, multiply and divide by the architecture's `logits_scaling`, so a prompt never
@@ -296,7 +347,9 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   noul near 0.6), Phi-4-mini within 0.001 (0.0002 over a 4.9k-token state), granite-4.2-3b within 0.0001 (its
   answers to the three sit at 0 and 1), LFM2.5-1.2B-Instruct within 0.022 (a score level; 0.008 over a
   4.9k-token state), gemma-3-1b-it within 0.0001 (0.0009 over a 5.4k-token state) and gemma-3-4b-it within 0.0001
-  (its answers to the three and to the 5.4k-token state sit at 0 and 1).
+  (its answers to the three and to the 5.4k-token state sit at 0 and 1) and Olmo-3-7B-Instruct within 0.0001 on the
+  three (its answers sit at 0 and 1) and 0.053 over a 4.9k-token state past its sliding window (a noul at 0.94 against
+  the GGUF's 0.99).
 
 ## Testing
 - `cargo test -p ardana-candle` reads only Qwen3-1.7B's `config.json` from `tmp/hf` (`cargo xtask fetch --tests`
@@ -315,7 +368,11 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   longer than its window follows the tokens inside the window alone, a global layer's every token, the linear
   rope factor moves the global layers alone, another type is refused) and
   "gemma3_softcaps_the_logits_in_the_readout" (the slot logits of a `CausalLm` built in memory over a cap of 30 are
-  `30 * tanh(x / 30)` of the ones without). "gemma3_multimodal_reads_the_text_tower_only" (R6.3) writes the 883
+  `30 * tanh(x / 30)` of the ones without), "olmo3_sliding_layers_see_their_window" (two layers, `[sliding_attention,
+  full_attention]` with a window of 8: a 16-token prompt's slot logits move from position 8 on when the window is set
+  to 16 and an 8-token prompt's not at all; a 513-token prompt has the states its 512 have, past the query chunk)
+  and "olmo3_scales_the_full_layers_by_yarn" (the yarn frequencies for Olmo-3-7B-Instruct's own parameters, the
+  scaling moving the full layers alone, another type refused). "gemma3_multimodal_reads_the_text_tower_only" (R6.3) writes the 883
   names of gemma-3-4b-it's weight map, one value each, into a scratch safetensors file and reads it as a load reads
   the shards: the 444 text-tower tensors come out under `model.*` and nothing else. A `VarMap` starts a tensor
   read with `vb.get` at zero (LFM2's convolution kernel, Gemma 3's norms, which multiply by `1 + weight`): give it
@@ -346,9 +403,11 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   `0f604ada3f766f9f257460c4c9f0b5d6f69d431b` against LiquidAI/LFM2.5-1.2B-Instruct-GGUF
   `LFM2.5-1.2B-Instruct-Q8_0.gguf` at `8ed288026e23958ad9dfa92d53ed773a8eee7125` (`long_state`),
   unsloth/gemma-3-1b-it at `5b11413a10db4e486ef16a20101fd028f8f2499c` against ggml-org/gemma-3-1b-it-GGUF
-  `gemma-3-1b-it-Q8_0.gguf` at `f9c28bcd85737ffc5aef028638d3341d49869c27` (`long_state`), and unsloth/gemma-3-4b-it
+  `gemma-3-1b-it-Q8_0.gguf` at `f9c28bcd85737ffc5aef028638d3341d49869c27` (`long_state`), unsloth/gemma-3-4b-it
   at `bf46152c47f5dd20b896357cb51abc4c03b8ee8c` against ggml-org/gemma-3-4b-it-GGUF `gemma-3-4b-it-Q8_0.gguf` at
-  `d0976223747697cb51e056d85c532013931fe52e` (`long_state`).
+  `d0976223747697cb51e056d85c532013931fe52e` (`long_state`), and allenai/Olmo-3-7B-Instruct at
+  `6e5971d9eba42665f5bd5a0fcf047f299ce1dccc` against unsloth/Olmo-3-7B-Instruct-GGUF `Olmo-3-7B-Instruct-Q8_0.gguf`
+  at `a2a9ae53f5a95087616b3f45ca96e9d2631344ee` (`long_state`, past its 4,096-token sliding window).
 
 ## Sources
 - https://github.com/huggingface/candle — README: pure-Rust ML framework, backends, feature flags
@@ -363,9 +422,11 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/granitemoehybrid.rs — the four Granite scalars as candle applies them elsewhere: `attention_multiplier`, `embedding_multiplier`, `residual_multiplier`, `logits_scaling`
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/lfm2.rs — the file `lfm2.rs` is copied from: `Lfm2Config`, `compute_intermediate_size`, `ShortConv`, `Model::forward` and its last-position narrowing
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/gemma3.rs — the file `gemma3.rs` is copied from: `Config`, `prepare_decoder_attention_mask` and its sliding window, the `1/sqrt(head_dim)` scale, `Model::forward`, its last-position narrowing and its softcapping
+- https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/olmo2.rs — the file `olmo2.rs` is copied from: `Config`, `RotaryEmbedding::new` (one unscaled table), `prepare_decoder_attention_mask` (causal alone), `Attention::forward` and its `kv_cache`, `Model::forward` and its last-position narrowing
 - https://github.com/huggingface/candle/blob/0.11.0/candle-nn/src/kv_cache.rs — `RotatingCache::append`: the whole source returned when one pass exceeds the window
 - https://github.com/huggingface/candle/blob/0.11.0/LICENSE-APACHE — the license the vendored files are taken under
-- https://huggingface.co/docs/transformers/internal/rope_utils — `longrope` and `llama3` rope scaling: `short_factor`, `long_factor`, `original_max_position_embeddings`, `attention_factor`
+- https://huggingface.co/docs/transformers/internal/rope_utils — `longrope`, `llama3` and `yarn` rope scaling: `short_factor`, `long_factor`, `original_max_position_embeddings`, `attention_factor`, `beta_fast`, `beta_slow`
+- https://huggingface.co/docs/transformers/model_doc/olmo3 — `Olmo3Config`: `layer_types`, `sliding_window`, `rope_scaling` of the full-attention layers alone; `Olmo3ForCausalLM`
 - https://huggingface.co/docs/transformers/model_doc/phi3 — `Phi3Config`: `rope_parameters` (a `config.json`'s `rope_scaling`), `original_max_position_embeddings`
 - https://huggingface.co/docs/transformers/model_doc/llama — `LlamaConfig`: `head_dim`, `rope_parameters` (a `config.json`'s `rope_scaling`), `tie_word_embeddings`
 - https://huggingface.co/docs/transformers/model_doc/granite — `GraniteConfig`: `embedding_multiplier`, `attention_multiplier`, `residual_multiplier`, `logits_scaling`, each 1.0 by default
