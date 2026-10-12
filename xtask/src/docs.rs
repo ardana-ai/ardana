@@ -109,7 +109,7 @@ pub const GUIDELINES: &[Guideline] = &[
     Guideline {
         file: "playwright.md",
         pins: &[
-            ("@playwright/test", "1.63.0"),
+            ("@playwright/test", "1.64.0"),
             ("lz-string", "1.5.0"),
             ("@typesafe-ai/sdk", "0.6.0"),
         ],
