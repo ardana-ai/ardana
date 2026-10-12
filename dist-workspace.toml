@@ -26,3 +26,8 @@ dispatch-releases = true
 pr-run-mode = "skip"
 # Steps inserted into every build job before "Build artifacts": the playground `ardana` embeds
 github-build-setup = "../build-setup.yml"
+
+# The action versions release.yml uses where they differ from dist's own defaults; Dependabot bumps them in the
+# generated file, and the same version goes here so that `dist generate --check` agrees
+[dist.github-action-commits]
+"actions/checkout" = "v7"
