@@ -1,0 +1,44 @@
+{
+ "generated_by": "xtask/scripts/thx01_goldens.py (cargo xtask export-thx01)",
+ "thx01": "1.0.0",
+ "checkpoint": "doofz/THX-01@bef2e2478be7acd79429324a658558a57552a2e8",
+ "device": "cpu",
+ "torch": "2.14.0+cpu",
+ "transformers": "5.17.0",
+ "request": "tests/fixtures/requests/score.json",
+ "model": "THX-01",
+ "answers": {
+  "charges": {
+   "type": "score",
+   "score": 1.9031,
+   "legend": {
+    "0": "Never",
+    "1": "Once",
+    "2": "Twice",
+    "3": "Three times or more"
+   },
+   "probabilities": {
+    "0": 0.0325,
+    "1": 0.1405,
+    "2": 0.7183,
+    "3": 0.1086
+   },
+   "confidence": 0.3753,
+   "action": {
+    "act_probability": 1.0
+   }
+  },
+  "duplicate": {
+   "type": "noul",
+   "noul": 0.9928,
+   "confidence": 0.9928,
+   "action": {
+    "act_probability": 1.0
+   }
+  }
+ },
+ "usage": {
+  "input_tokens": 115,
+  "output_tokens": 0
+ }
+}

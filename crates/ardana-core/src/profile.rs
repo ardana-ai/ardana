@@ -1,5 +1,7 @@
 //! What a model needs besides its weights and tokenizer: prompt layout, answer temperatures, level isolation and
-//! naming, read from decider's `decider_config.json` (`decider/temperature.py#from_config`, `serve.py#apply_config`).
+//! naming, read from decider's `decider_config.json` (`decider/temperature.py#from_config`, `serve.py#apply_config`);
+//! for a decision model (THX-01), its sequence limits and base temperatures, read from the `thx01` package's
+//! `rl_agent_config.json` ([`from_rl_agent_config`]).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -20,6 +22,25 @@ pub struct ModelProfile {
     /// Score questions read one yes/no row per level unless the question says `"isolated": false`.
     pub isolated_levels: bool,
     pub release_date: Option<String>,
+    /// A decision model's sequence limits; `None` for a causal model, which reads prompt rows in `layout`. Absent from
+    /// the `models.toml` entries written before decision models existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<DecisionFormat>,
+}
+
+/// How a decision model's question sequences are built and bounded (`thx01.common.build_sequence`,
+/// `Agent._head_budget`):
+/// known at pull time from `rl_agent_config.json`, before any load.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DecisionFormat {
+    /// `max_len`: the tokens one sequence (question, options and state) may hold; a longer one is refused.
+    pub window: usize,
+    /// `tournament_above`: the options a choice question may have; above it the package runs a tournament, which
+    /// Ardana refuses instead.
+    pub max_options: usize,
+    /// `head_max_len`: the tokens of the question and options together, raised to what the options need up to half
+    /// the window.
+    pub head_max_len: usize,
 }
 
 /// How a prompt row is wrapped.
@@ -101,6 +122,7 @@ impl ModelProfile {
             temperature_by_type: BTreeMap::new(),
             isolated_levels: false,
             release_date: None,
+            decision: None,
         }
     }
 }
@@ -147,6 +169,102 @@ pub fn from_decider_config(cfg: &Value, layout: Layout) -> Result<ModelProfile, 
         temperature_by_type,
         isolated_levels: cfg.get("isolated_levels").is_some_and(py::truthy),
         release_date: cfg.get("release_date").map(py::str),
+        decision: None,
+    })
+}
+
+/// The `thx01` package's defaults for an `rl_agent_config.json` that leaves a key out (`Agent.system_one`,
+/// `Agent._head_budget`, `predict_batch`).
+const THX01_MAX_LEN: usize = 512;
+const THX01_HEAD_MAX_LEN: usize = 192;
+const THX01_TOURNAMENT_ABOVE: usize = 24;
+/// `thx01.common.TEMP_MIN` and `TEMP_MAX`: the range a temperature is confined to before it is applied.
+pub const THX01_TEMPERATURE_RANGE: (f64, f64) = (0.5, 5.0);
+/// The package's `QTYPES` order of the `temperature` triple: choice, score, noul.
+const THX01_TYPES: [AnswerType; 3] = [AnswerType::Choice, AnswerType::Score, AnswerType::Noul];
+
+/// `thx01.common.clamp_temperature`: `t` confined to [0.5, 5.0]; 1.0 when it is no finite number.
+pub fn clamp_temperature(t: &Value) -> f64 {
+    let (lo, hi) = THX01_TEMPERATURE_RANGE;
+    match t {
+        Value::Number(n) => n
+            .as_f64()
+            .filter(|t| t.is_finite())
+            .map_or(1.0, |t| t.clamp(lo, hi)),
+        Value::String(s) => py::float_from_str(s)
+            .filter(|t| t.is_finite())
+            .map_or(1.0, |t| t.clamp(lo, hi)),
+        _ => 1.0,
+    }
+}
+
+/// The profile of a THX-01 decision model from the `thx01` package's `rl_agent_config.json`: named `model_name`
+/// (`THX-01` without one, the `model` the package reports), its limits from `max_len`, `tournament_above` (`null` or
+/// 0, no tournament, allows every width the API does) and `head_max_len`, and `temperature_by_type` the base triple
+/// `temperature` (choice, score, noul) clamped as the package clamps it; the per-bucket temperatures the model applies
+/// stay with the runtime. `auto_head_budget: false` is refused: the head budget is built as the package builds it with
+/// the flag on, which the published checkpoint writes.
+pub fn from_rl_agent_config(cfg: &Value) -> Result<ModelProfile, ProfileError> {
+    const WHERE: &str = "rl_agent_config.json";
+    let Value::Object(cfg) = cfg else {
+        return Err(ProfileError::Invalid(format!(
+            "{WHERE} must be a JSON object, got {}",
+            py::repr(cfg)
+        )));
+    };
+    let count = |key: &str, default: usize| -> Result<Option<usize>, ProfileError> {
+        match cfg.get(key) {
+            None => Ok(Some(default)),
+            Some(Value::Null) => Ok(None),
+            Some(Value::Number(n)) => Ok(n.as_u64().map(|n| n as usize).filter(|&n| n > 0)),
+            Some(other) => Err(ProfileError::Invalid(format!(
+                "{WHERE} \"{key}\" must be a positive integer, got {}",
+                py::repr(other)
+            ))),
+        }
+    };
+    let positive = |key: &str, default: usize| -> Result<usize, ProfileError> {
+        count(key, default)?.ok_or_else(|| {
+            ProfileError::Invalid(format!("{WHERE} \"{key}\" must be a positive integer"))
+        })
+    };
+    if cfg.get("auto_head_budget").is_some_and(|v| !py::truthy(v)) {
+        return Err(ProfileError::Invalid(format!(
+            "{WHERE} turns \"auto_head_budget\" off, and only the package's default head budget is implemented"
+        )));
+    }
+    let decision = DecisionFormat {
+        window: positive("max_len", THX01_MAX_LEN)?,
+        max_options: count("tournament_above", THX01_TOURNAMENT_ABOVE)?
+            .unwrap_or(crate::systemone::MAX_CHOICE),
+        head_max_len: positive("head_max_len", THX01_HEAD_MAX_LEN)?,
+    };
+    let temperatures = match cfg.get("temperature") {
+        None | Some(Value::Null) => vec![Value::from(1.0); 3],
+        Some(Value::Array(items)) if items.len() == 3 => items.clone(),
+        Some(other) => {
+            return Err(ProfileError::Invalid(format!(
+                "{WHERE} \"temperature\" must be a list of three numbers (choice, score, noul), got {}",
+                py::repr(other)
+            )));
+        }
+    };
+    let temperature_by_type = THX01_TYPES
+        .into_iter()
+        .zip(temperatures.iter().map(clamp_temperature))
+        .collect();
+    Ok(ModelProfile {
+        name: cfg
+            .get("model_name")
+            .and_then(Value::as_str)
+            .unwrap_or("THX-01")
+            .to_string(),
+        layout: Layout::Plain,
+        temperature: 1.0,
+        temperature_by_type,
+        isolated_levels: false,
+        release_date: None,
+        decision: Some(decision),
     })
 }
 
@@ -282,5 +400,66 @@ mod tests {
         let p = ModelProfile::stock("m", Layout::Plain);
         assert_eq!((p.temperature, p.isolated_levels), (1.0, false));
         assert!(p.temperature_by_type.is_empty());
+        assert_eq!(p.decision, None);
+    }
+
+    /// THX-01's `rl_agent_config.json`: the limits, the clamped base triple in the package's order (choice, score,
+    /// noul), the name, and the defaults of a config that leaves the keys out; a tournament limit of `null` lets a
+    /// choice question be as wide as the API allows, `auto_head_budget: false` is refused, and an entry written
+    /// without `decision` still reads.
+    #[test]
+    fn reads_thx01_config() {
+        let cfg = json!({"model_name": "THX-01", "max_len": 1024, "head_max_len": 256, "tournament_above": 24,
+                         "temperature": [2.55, 3.05, 0.1], "auto_head_budget": true,
+                         "temperature_by_options": {"noul:2": 2.0}});
+        let p = from_rl_agent_config(&cfg).unwrap();
+        assert_eq!(p.name, "THX-01");
+        assert_eq!(
+            p.decision,
+            Some(DecisionFormat {
+                window: 1024,
+                max_options: 24,
+                head_max_len: 256
+            })
+        );
+        assert_eq!(p.temperature_for(AnswerType::Choice), 2.55);
+        assert_eq!(p.temperature_for(AnswerType::Score), 3.05);
+        assert_eq!(p.temperature_for(AnswerType::Noul), 0.5);
+        assert!(!p.isolated_levels);
+
+        let p = from_rl_agent_config(&json!({"temperature": ["7", null, 1.5]})).unwrap();
+        assert_eq!(p.name, "THX-01");
+        assert_eq!(
+            p.decision,
+            Some(DecisionFormat {
+                window: 512,
+                max_options: 24,
+                head_max_len: 192
+            })
+        );
+        assert_eq!(p.temperature_for(AnswerType::Choice), 5.0);
+        assert_eq!(p.temperature_for(AnswerType::Score), 1.0);
+        assert_eq!(p.temperature_for(AnswerType::Noul), 1.5);
+        let wide = from_rl_agent_config(&json!({"tournament_above": null})).unwrap();
+        assert_eq!(wide.decision.unwrap().max_options, 255);
+        let err = from_rl_agent_config(&json!({"auto_head_budget": false})).unwrap_err();
+        assert!(err.to_string().contains("auto_head_budget"), "{err}");
+        let err = from_rl_agent_config(&json!({"max_len": "long"})).unwrap_err();
+        assert!(err.to_string().contains("max_len"), "{err}");
+
+        let written: ModelProfile =
+            serde_json::from_str(r#"{"name":"m","layout":{"kind":"plain"},"temperature":1.0,"temperature_by_type":{},"isolated_levels":false,"release_date":null}"#)
+                .unwrap();
+        assert_eq!(written.decision, None);
+        assert!(
+            !serde_json::to_string(&written)
+                .unwrap()
+                .contains("decision")
+        );
+        assert!(
+            serde_json::to_string(&p)
+                .unwrap()
+                .contains("\"window\":512")
+        );
     }
 }

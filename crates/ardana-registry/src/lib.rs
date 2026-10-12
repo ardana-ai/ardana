@@ -3,7 +3,8 @@
 //! `ardana pull <ref>` resolves a library name ([`library`], read at run time from the published library document)
 //! or a reference ([`refs::Ref`]) to weights and a tokenizer in place (the hub cache, the Ollama store or a local
 //! file; nothing is copied), derives the model's profile (from `decider_config.json` when the weights come with one,
-//! else [`ModelProfile::stock`] in the chat layout) and records the result as one entry of `$ARDANA_HOME/models.toml`
+//! from `rl_agent_config.json` for a THX-01 decision checkpoint, whose tokenizer sits in its `tokenizer/`, else
+//! [`ModelProfile::stock`] in the chat layout) and records the result as one entry of `$ARDANA_HOME/models.toml`
 //! ([`Registry`]). The server and `ardana run <name>` look names up with [`Registry::named`]: a pulled entry, else a
 //! library model they pull first. [`pull_browser`] resolves a library model's browser variant (ONNX weights a
 //! visitor's tab runs) the same way, into the hub cache only: a browser variant is never a registry entry.
@@ -17,8 +18,8 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use ardana_core::{
-    ChatTemplateError, Layout, LoadOptions, LoadedModel, ModelProfile, ProfileError, Runtimes,
-    chat_layout, from_decider_config, read_template,
+    ChatTemplateError, Layout, LoadOptions, Loaded, ModelProfile, ProfileError, Runtimes,
+    chat_layout, from_decider_config, from_rl_agent_config, read_template, thx01,
 };
 use serde::{Deserialize, Serialize};
 use tokenizers::Tokenizer;
@@ -186,12 +187,9 @@ impl ResolvedModel {
             .sum()
     }
 
-    /// Loads the weights with the first runtime that supports them ([`Runtimes::for_weights`]).
-    pub fn load(
-        &self,
-        runtimes: &Runtimes,
-        opts: &LoadOptions,
-    ) -> Result<Box<dyn LoadedModel>, RegistryError> {
+    /// Loads the weights with the first runtime that supports them ([`Runtimes::for_weights`]), as a model of either
+    /// kind.
+    pub fn load(&self, runtimes: &Runtimes, opts: &LoadOptions) -> Result<Loaded, RegistryError> {
         let runtime =
             runtimes
                 .for_weights(&self.weights)
@@ -500,21 +498,30 @@ async fn pull_ref(
     let (weights, config, own_tokenizer) = match &parsed {
         Ref::Hf { org, repo, file } => {
             let snapshot = hub.snapshot(org, repo, revisions.weights).await?;
-            let weights = if file.is_none() && is_checkpoint(&snapshot) {
+            let checkpoint = file.is_none() && is_checkpoint(&snapshot);
+            let weights = if checkpoint {
                 snapshot_weights(&hub, &snapshot, runtimes).await?
             } else {
                 let gguf = pick_gguf(&snapshot, file.as_ref())?;
                 hub.file(&snapshot, &gguf).await?
             };
-            let config = if snapshot.has(DECIDER_CONFIG) {
-                Some(hub.file(&snapshot, DECIDER_CONFIG).await?)
+            let (config, tokenizer) = if checkpoint && snapshot.has(thx01::DECISION_CONFIG) {
+                let decision = decision_files(&hub, &snapshot).await?;
+                (Some(decision.config), Some(decision.tokenizer))
             } else {
-                None
+                let config = if snapshot.has(DECIDER_CONFIG) {
+                    Some(Config::Decider(hub.file(&snapshot, DECIDER_CONFIG).await?))
+                } else {
+                    None
+                };
+                let tokenizer = if snapshot.has(TOKENIZER_FILE) {
+                    Some(hf_tokenizer(&hub, &snapshot).await?)
+                } else {
+                    None
+                };
+                (config, tokenizer)
             };
-            let tokenizer = match (&opts.tokenizer, snapshot.has(TOKENIZER_FILE)) {
-                (None, true) => Some(hf_tokenizer(&hub, &snapshot).await?),
-                _ => None,
-            };
+            let tokenizer = tokenizer.filter(|_| opts.tokenizer.is_none());
             (weights, config, tokenizer)
         }
         Ref::Ollama {
@@ -531,7 +538,7 @@ async fn pull_ref(
             };
             (
                 weights.clone(),
-                beside(DECIDER_CONFIG),
+                beside(DECIDER_CONFIG).map(Config::Decider),
                 beside(TOKENIZER_FILE),
             )
         }
@@ -559,16 +566,17 @@ async fn pull_ref(
         .id()
         .to_string();
     let tokenizer = load_tokenizer(&tokenizer_path)?;
-    let layout = opts
-        .layout
-        .unwrap_or_else(|| default_layout(config.as_deref()));
-    let profile = read_profile(
-        &tokenizer_path,
-        &tokenizer,
-        config.as_deref(),
-        layout,
-        &name,
-    )?;
+    let profile = match &config {
+        Some(Config::Decision(path)) => decision_profile(path)?,
+        Some(Config::Decider(_)) | None => {
+            let config = match &config {
+                Some(Config::Decider(path)) => Some(path.as_path()),
+                _ => None,
+            };
+            let layout = opts.layout.unwrap_or_else(|| default_layout(config));
+            read_profile(&tokenizer_path, &tokenizer, config, layout, &name)?
+        }
+    };
     Ok(ResolvedModel {
         name,
         source,
@@ -577,6 +585,61 @@ async fn pull_ref(
         runtime,
         profile,
         pulled_at: today(),
+    })
+}
+
+/// The configuration file a pull derives a model's profile from, when the weights come with one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Config {
+    /// decider's `decider_config.json`.
+    Decider(PathBuf),
+    /// A THX-01 checkpoint's `rl_agent_config.json`.
+    Decision(PathBuf),
+}
+
+/// The files of a THX-01 checkpoint a pull fetches beside its `config.json` and weights.
+struct DecisionFiles {
+    config: Config,
+    /// `tokenizer/tokenizer.json`, with its `tokenizer_config.json` beside it.
+    tokenizer: PathBuf,
+}
+
+/// The files of a THX-01 decision checkpoint (`ardana_core::thx01`): its `rl_agent_config.json`, its encoder's
+/// `config.json`, which the runtime reads at load, and its tokenizer with its configuration; one the repository lacks
+/// is an error naming it.
+async fn decision_files(hub: &Hub, snapshot: &Snapshot) -> Result<DecisionFiles, RegistryError> {
+    for file in [
+        thx01::DECISION_CONFIG,
+        thx01::ENCODER_CONFIG,
+        thx01::TOKENIZER,
+        thx01::TOKENIZER_CONFIG,
+    ] {
+        if !snapshot.has(file) {
+            return Err(RegistryError::Invalid {
+                what: snapshot.id(),
+                msg: format!(
+                    "it has {} but no {file}, which a decision model needs",
+                    thx01::DECISION_CONFIG
+                ),
+            });
+        }
+    }
+    let config = hub.file(snapshot, thx01::DECISION_CONFIG).await?;
+    hub.file(snapshot, thx01::ENCODER_CONFIG).await?;
+    hub.file(snapshot, thx01::TOKENIZER_CONFIG).await?;
+    let tokenizer = hub.file(snapshot, thx01::TOKENIZER).await?;
+    Ok(DecisionFiles {
+        config: Config::Decision(config),
+        tokenizer,
+    })
+}
+
+/// The profile of a THX-01 decision model from its `rl_agent_config.json` at `path`
+/// ([`ardana_core::from_rl_agent_config`]).
+fn decision_profile(path: &Path) -> Result<ModelProfile, RegistryError> {
+    from_rl_agent_config(&read_json(path)?).map_err(|err| RegistryError::Profile {
+        path: path.to_path_buf(),
+        err,
     })
 }
 
@@ -1081,6 +1144,12 @@ mod tests {
             .temperature_by_type
             .insert(ardana_core::AnswerType::Noul, 1.5);
         profile.release_date = Some("2026-09-24".into());
+        // A decision model's limits travel with its profile; an entry written without them reads as `None`.
+        profile.decision = Some(ardana_core::DecisionFormat {
+            window: 1024,
+            max_options: 24,
+            head_max_len: 256,
+        });
         let model = ResolvedModel {
             name: "qwen".into(),
             source: "hf.co/org/Repo-GGUF:Q4_0".into(),
@@ -1096,6 +1165,16 @@ mod tests {
         .unwrap();
         let back: ModelsFile = toml::from_str(&text).unwrap();
         assert_eq!(back.models, vec![model], "{text}");
+        assert!(text.contains("[model.profile.decision]"), "{text}");
+        let without: ModelsFile = toml::from_str(
+            &text
+                .lines()
+                .take_while(|line| !line.starts_with("[model.profile.decision]"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .unwrap();
+        assert_eq!(without.models[0].profile.decision, None);
     }
 
     /// The library snapshot (C5), which cargo's `[env]` names as `ARDANA_LIBRARY` for every test.

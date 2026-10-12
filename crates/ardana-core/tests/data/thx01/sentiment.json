@@ -1,0 +1,37 @@
+{
+ "generated_by": "xtask/scripts/thx01_goldens.py (cargo xtask export-thx01)",
+ "thx01": "1.0.0",
+ "checkpoint": "doofz/THX-01@bef2e2478be7acd79429324a658558a57552a2e8",
+ "device": "cpu",
+ "torch": "2.14.0+cpu",
+ "transformers": "5.17.0",
+ "request": "tests/fixtures/requests/sentiment.json",
+ "model": "THX-01",
+ "answers": {
+  "sentiment": {
+   "type": "choice",
+   "choice": "positive",
+   "probabilities": {
+    "positive": 0.9159,
+    "negative": 0.0335,
+    "neutral": 0.0506
+   },
+   "confidence": 0.6857,
+   "action": {
+    "act_probability": 1.0
+   }
+  },
+  "happy": {
+   "type": "noul",
+   "noul": 0.4009,
+   "confidence": 0.5991,
+   "action": {
+    "act_probability": 1.0
+   }
+  }
+ },
+ "usage": {
+  "input_tokens": 72,
+  "output_tokens": 0
+ }
+}

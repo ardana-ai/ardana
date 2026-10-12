@@ -113,8 +113,10 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   `Display` for them (derive with `thiserror` from `[workspace.dependencies]`, or by hand); keep them `Send + Sync`.
 - Write `Display` messages lowercase and without trailing punctuation, except where a message must reproduce
   decider's exact text (R2.3) or contain a contract substring ("context window", "has no chat template").
-- Use `anyhow::Result` in `xtask`, in the `ardana` binary's command layer, and at the `Runtime`/`LoadedModel` trait
-  boundary exactly as `crates/ardana-core/src/runtime.rs` defines it; wrap it as `DecideError::Runtime`.
+- Use `anyhow::Result` in `xtask`, in the `ardana` binary's command layer, and at the `Runtime`/`LoadedModel`/
+  `DecisionModel` trait boundary exactly as `crates/ardana-core/src/runtime.rs` defines it; wrap it as
+  `DecideError::Runtime`. `Runtime::load` returns a `Loaded` of either kind, and every caller (the CLI, the server's
+  worker, the registry, every test fake) answers through `Decider::answer`, which takes either.
 - Attach context with `.context()`/`.with_context(|| ...)` naming the path, ref or model involved; use `bail!` and
   `ensure!` for early exits in xtask and the binary.
 - Convert between error types with `From` impls (`#[from]`) so `?` works; do not stringify an error just to re-wrap it.
@@ -158,7 +160,8 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   names another directory), so it checks nothing.
 - Prefer tests returning `anyhow::Result<()>` with `?` over chains of `unwrap()`.
 - Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice. The decider goldens in
-  `crates/ardana-core/tests/data/decider/` are regenerated only by `cargo xtask export-decider`.
+  `crates/ardana-core/tests/data/decider/` are regenerated only by `cargo xtask export-decider`, the THX-01 goldens in
+  `crates/ardana-core/tests/data/thx01/` only by `cargo xtask export-thx01`; neither is ever edited by hand.
 - Tests that read only tokenizer or config files from `tmp/hf` (no weights) are not `#[ignore]`d: they are fast and
   offline once `cargo xtask fetch` has run, and fail with a message naming that command when the file is missing.
 
@@ -231,20 +234,21 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 ## xtask
 - `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check|--tests]`, `build`,
   `build-playground --public-url <path> [--hub <url>] [--library <url>]`, `check-deps`, `check-docs`,
-  `export-decider`, `onnx convert <name>`, `onnx publish <name> [--dry-run]` (`onnx.md`), `e2e <suite>` (`smoke`,
+  `export-decider`, `export-thx01`, `onnx convert <name>`, `onnx publish <name> [--dry-run]` (`onnx.md`), `e2e <suite>` (`smoke`,
   `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`, `standalone`, `design`, `candle`); keep its own dependency
   set small (the workspace crate below is the one exception): downloads and HTTP probes go through `curl` and `git`
   run by `Sandbox::command`, not HTTP crates. Its one codec is `lz-str` (the `design` suite's Jev share links).
 - The API suites (`jevcompat`, `sdk`, `jevbench`) build `ardana` with `--release --locked` (llama.cpp in a debug build
   is too slow for 231 JevBench items) and run it through `xtask/src/serve.rs#Server`, which kills the server on drop.
 - The `candle` suite (`xtask/src/candle.rs`) is the one suite that downloads models itself: it runs the release
-  `ardana` online on a home per row, `tmp/e2e/candle/<row>/home`, serves that home as it is with `Server::start_on`,
-  lists `tmp/hf/hub` before a row and removes every path added since when the row ends, checks passed or not, and
+  `ardana` online on a home per row, `tmp/e2e/candle/<row>/home`, serves that home as it is with `Server::start_on`
+  (a row with a GGUF; a row without one, THX-01, compares `ardana run` with the goldens instead), lists `tmp/hf/hub`
+  before a row and removes every path added since when the row ends, checks passed or not, and
   runs `cargo clean` last. The `xtask` binary runs from `target/` while that happens; it is Unix only, where a running
   file can be removed. Add a row to `xtask/src/e2e.rs#CANDLE_FIXTURES`, never a model to `xtask/fetch.toml`, for a
   checkpoint the suite verifies.
 - Run every external tool through `Sandbox::command` (sandbox env, `PATH` prefixed with `tmp/bin`), and wrap `fetch`,
-  `build`, `export-decider`, `onnx` and every `e2e` suite in `Sandbox::guarded`. `sandbox::run` (output on the
+  `build`, `export-decider`, `export-thx01`, `onnx` and every `e2e` suite in `Sandbox::guarded`. `sandbox::run` (output on the
   terminal) and `sandbox::run_stdout` (output captured) fail on a non-zero exit with the command's `Debug` form, which
   lists every variable set on it: never set a secret on a command run through them (`onnx publish` runs `hf` itself).
 - xtask links one workspace crate, `ardana-registry`, which reads the landing's document

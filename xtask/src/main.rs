@@ -20,6 +20,8 @@ const USAGE: &str = "usage: cargo xtask <step>
   check-deps       check the workspace members and dependency direction
   check-docs       check CLAUDE.md, AGENTS.md and docs/guidelines
   export-decider   export decider's prompt layout cases into crates/ardana-core/tests/data/decider
+  export-thx01     export the thx01 package's answers to the request fixtures into
+                   crates/ardana-core/tests/data/thx01
   onnx convert <name>
                    build a library model's browser ONNX (and the GGUF ardana-ai
                    hosts) into tmp/hf and record it in
@@ -76,6 +78,7 @@ fn run() -> Result<()> {
         ["check-deps"] => deps::check_deps(&deps::metadata(root)?)?,
         ["check-docs"] => docs::check_docs(root)?,
         ["export-decider"] => sandbox()?.guarded("export-decider", export::export_decider)?,
+        ["export-thx01"] => sandbox()?.guarded("export-thx01", export::export_thx01)?,
         ["onnx", "convert", name] => {
             sandbox()?.guarded(&format!("onnx convert {name}"), |s| onnx::convert(s, name))?
         }

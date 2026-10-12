@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, ensure};
-use ardana_core::{LoadOptions, LoadedModel, Runtime, Runtimes};
+use ardana_core::{LoadOptions, Loaded, Runtime, Runtimes};
 use ardana_registry::library::{
     DEFAULT_MODEL, LIBRARY_VAR, Library, LibraryClient, LibraryDocument, LibraryPick,
     LibrarySource, MODELS_PAGE, USER_AGENT,
@@ -704,7 +704,7 @@ impl Runtime for AnyWeights {
         true
     }
 
-    fn load(&self, _weights: &Path, _opts: &LoadOptions) -> Result<Box<dyn LoadedModel>> {
+    fn load(&self, _weights: &Path, _opts: &LoadOptions) -> Result<Loaded> {
         anyhow::bail!("this runtime loads nothing")
     }
 }
@@ -898,7 +898,7 @@ impl Runtime for Qwen3Only {
             })
     }
 
-    fn load(&self, _weights: &Path, _opts: &LoadOptions) -> Result<Box<dyn LoadedModel>> {
+    fn load(&self, _weights: &Path, _opts: &LoadOptions) -> Result<Loaded> {
         anyhow::bail!("this runtime loads nothing")
     }
 }

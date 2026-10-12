@@ -242,7 +242,7 @@ pub fn convert(sandbox: &Sandbox, name: &str) -> Result<()> {
     let work = sandbox.tmp().join("onnx").join(&target.name);
     remove_if_present(&work)?;
     std::fs::create_dir_all(&work)?;
-    let python = pinned_venv(sandbox, &root.join(VENV), PYTHON, PACKAGES)?;
+    let python = pinned_venv(sandbox, &root.join(VENV), PYTHON, PACKAGES, None)?;
     let checkpoint = download(sandbox, &target.source)?;
     let license = license(&checkpoint)?;
     let offline = |cmd: &mut std::process::Command| {

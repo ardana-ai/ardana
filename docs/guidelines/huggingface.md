@@ -197,6 +197,13 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   has them, all at one commit, so the chat template sits next to the tokenizer in `snapshots/<commit>/`.
 - `decider_config.json` in the weights repository gives the profile (plain layout); without it the model gets
   `ModelProfile::stock` named after the entry, in the chat layout. `--tokenizer`, `--name` and `--layout` override.
+- A checkpoint with an `rl_agent_config.json` is a THX-01 decision model (`ardana_core::thx01`, `candle.md`): the
+  pull also takes `rl_agent_config.json`, `encoder/config.json`, `tokenizer/tokenizer.json` and
+  `tokenizer/tokenizer_config.json` (one the repository lacks is an error naming it), records
+  `tokenizer/tokenizer.json` as the tokenizer, since the repository has no root `tokenizer.json`, and derives the
+  profile with `ardana_core::from_rl_agent_config` (`ModelProfile::decision`); `--layout` means nothing to it. The
+  pull never writes into the snapshot: the `thx01` package rewrites `tokenizer_config.json` where it loads from, which
+  is why `cargo xtask export-thx01` downloads its own copy outside the cache (`python-tooling.md`).
 - Record snapshot paths and local paths absolute but unresolved (`std::path::absolute`, never `canonicalize`): a
   snapshot path resolves to `blobs/<hash>`, whose directory holds neither the chat template nor `decider_config.json`.
 - A missing repository answers 401 "Authentication required" without a token, like a gated one; report the `hf.co/`

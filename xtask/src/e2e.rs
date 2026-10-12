@@ -39,7 +39,8 @@ pub struct CandleFixture {
     /// The safetensors repository Candle loads.
     pub checkpoint: Pin,
     /// The GGUF repository of the same model and the file in it llama.cpp loads, which the checkpoint's answers are
-    /// compared with.
+    /// compared with; `None` for the THX-01 decision model, whose answers are compared with the `thx01` package's
+    /// goldens in `crates/ardana-core/tests/data/thx01/`.
     pub gguf: Option<(Pin, &'static str)>,
     /// Whether the row also answers a state of more than 4,500 tokens.
     pub long_state: bool,
@@ -196,6 +197,15 @@ pub const CANDLE_FIXTURES: &[CandleFixture] = &[
             "Olmo-3-7B-Instruct-Q8_0.gguf",
         )),
         long_state: true,
+    },
+    CandleFixture {
+        name: "thx-01",
+        checkpoint: Pin {
+            repo: "doofz/THX-01",
+            commit: "bef2e2478be7acd79429324a658558a57552a2e8",
+        },
+        gguf: None,
+        long_state: false,
     },
 ];
 

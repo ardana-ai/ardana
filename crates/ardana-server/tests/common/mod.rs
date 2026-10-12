@@ -8,7 +8,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context, Result, ensure};
-use ardana_core::{LoadOptions, LoadedModel, Runtime, Runtimes};
+use ardana_core::{LoadOptions, Loaded, LoadedModel, Runtime, Runtimes};
 use ardana_registry::library::{Library, LibraryClient, LibrarySource};
 use ardana_registry::{LayoutKind, Registry, ResolvedModel};
 use ardana_server::{ModelOptions, Models};
@@ -128,17 +128,17 @@ impl Runtime for FakeRuntime {
         true
     }
 
-    fn load(&self, weights: &Path, opts: &LoadOptions) -> anyhow::Result<Box<dyn LoadedModel>> {
+    fn load(&self, weights: &Path, opts: &LoadOptions) -> anyhow::Result<Loaded> {
         let loads = self.0.loads.fetch_add(1, Ordering::SeqCst) + 1;
         let resident = loads - self.0.drops.load(Ordering::SeqCst);
         self.0.peak_resident.fetch_max(resident, Ordering::SeqCst);
         self.0.loaded.lock().unwrap().push(weights.to_path_buf());
         self.0.load_gate.pass();
-        Ok(Box::new(FakeModel {
+        Ok(Loaded::Causal(Box::new(FakeModel {
             fake: self.0.clone(),
             weights: weights.to_path_buf(),
             n_ctx: opts.n_ctx as usize,
-        }))
+        })))
     }
 }
 

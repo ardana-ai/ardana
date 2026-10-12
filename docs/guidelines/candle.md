@@ -2,8 +2,9 @@
 
 Covers Candle, Hugging Face's pure-Rust ML library, as used by `crates/ardana-candle`, the only crate that may depend
 on it. `ardana-candle` implements the `ardana-core` traits `Runtime` and `LoadedModel` for safetensors causal LMs
-read from a Hugging Face snapshot directory; the `ardana` binary registers it in `Runtimes` after llama.cpp.
-Tokenization, prompt building and readout stay in `ardana-core` and never call Candle.
+read from a Hugging Face snapshot directory, and `DecisionModel` for the THX-01 decision model ("THX-01, the
+decision model"); the `ardana` binary registers it in `Runtimes` after llama.cpp. Tokenization, prompt and sequence
+building and readout stay in `ardana-core` and never call Candle.
 
 ## Versions
 - `candle-core` 0.11.0, `candle-nn` 0.11.0, `candle-transformers` 0.11.0 — pinned together with `=0.11.0` in
@@ -37,10 +38,11 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - The implementation comes from `config.json#architectures` (`snapshot::architectures`), never from a model name or a
   per-model value in code (Q3). `ardana_candle::ARCHITECTURES` lists the names it implements, one implementation each
   (Q2): `Qwen3ForCausalLM`, `Qwen2ForCausalLM`, `SmolLM3ForCausalLM`, `LlamaForCausalLM`, `Phi3ForCausalLM`,
-  `GraniteForCausalLM`, `Lfm2ForCausalLM`, `Gemma3ForCausalLM`, `Gemma3ForConditionalGeneration` (its text tower) and
-  `Olmo3ForCausalLM`.
+  `GraniteForCausalLM`, `Lfm2ForCausalLM`, `Gemma3ForCausalLM`, `Gemma3ForConditionalGeneration` (its text tower),
+  `Olmo3ForCausalLM`, and `THXDecisionModel`, the one decision model.
   `CandleRuntime::supports` is true for a directory whose `config.json`
   names one of them, so `Runtimes::for_weights` hands a GGUF file to llama.cpp and a snapshot directory to Candle.
+  `CandleRuntime::load` returns a `Loaded::Causal` for a causal LM and a `Loaded::Decision` for `THXDecisionModel`.
 - One architecture is four things in `crates/ardana-candle/src/lib.rs` and nothing else: its name in `ARCHITECTURES`,
   its arm in `configuration`, `impl Architecture` for its configuration type (`shape`: the vocabulary, the hidden
   size, the positions and whether the head is tied; `build`: the decoder from the root `VarBuilder`) and
@@ -116,6 +118,52 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   error. A failure to open Metal is an error, never a silent CPU fallback.
 - `LoadedModel::n_ctx()` is the smaller of `LoadOptions::n_ctx` and `config.json#max_position_embeddings` (Q11): the
   rotary tables end there. The row cap stays the core's (`Limits::context_window`).
+
+### THX-01, the decision model
+- `THXDecisionModel` (`hf.co/doofz/THX-01` at `bef2e2478be7acd79429324a658558a57552a2e8`, `config.json` with
+  `model_type` `thx01`) is the `thx01` 1.0.0 package's `DecisionModel` (`thx01/common.py`): mmBERT-base, a 22-layer
+  ModernBERT encoder (`encoder/config.json`, `ModernBertForMaskedLM`, hidden 768, 12 heads, `intermediate_size` 1152,
+  vocabulary 256,000, `global_attn_every_n_layers` 3, `local_attention` 128), the question type's row of
+  `type_emb.weight` (`[3, 768]`: choice 0, score 1, noul 2) added to every position, two PyTorch
+  `TransformerEncoderLayer(768, 12 heads, 3072, norm_first=True)` (ReLU, every bias on, `head.layers.{0,1}` with
+  the packed `self_attn.in_proj_weight` `[2304, 768]` and `in_proj_bias`, `self_attn.out_proj`, `linear1`,
+  `linear2`, `norm1`, `norm2`) and the scorer (`scorer.0` LayerNorm, `scorer.1` Linear 768→768, GELU, `scorer.3`
+  Linear 768→1) read at the sequence's markers: one logit per option. The checkpoint's 170 tensors are F16;
+  `act_head.*` (the action head, no answer) and `temperature` (a buffer the package never applies) are never read.
+  It lives in `crates/ardana-candle/src/thx01.rs`, not in `CausalLm`: it has no head, no slots and no label logits.
+- The encoder is candle-transformers 0.11.0's `models::modernbert::ModernBert`, unvendored: `ModernBert::load(vb,
+  &Config)` reads `model.embeddings.tok_embeddings`, `model.embeddings.norm`, `model.layers.{i}` (`attn.Wqkv`,
+  `attn.Wo`, `mlp.Wi`, `mlp.Wo`, `attn_norm` where a layer has one, `mlp_norm`) and `model.final_norm` from the root
+  `VarBuilder`, so `thx01::tensor` reads the checkpoint's `encoder.*` under `model.*` (through `read_tensors`, which
+  takes the naming as a closure) and the head's, the scorer's and `type_emb.weight` under their own names;
+  `forward(ids [1, len], mask [1, len])` returns the final-normed states at every position, bidirectional and
+  stateless, with layer `i` local when `i % global_attn_every_n_layers != 0` and masked to `|i - j| <=
+  local_attention / 2`, as transformers masks it. A sequence runs alone (batch 1, a mask of ones): the package pads
+  a request's questions into one batch and masks the padding, which gives the same numbers.
+- `thx01::encoder_config` builds `modernbert::Config` from `encoder/config.json` by hand: candle's `Config` wants
+  `global_rope_theta` and `local_rope_theta`, which mmBERT writes as `rope_parameters.full_attention.rope_theta` and
+  `rope_parameters.sliding_attention.rope_theta` (160,000 both; the flat names are read when the nested ones are
+  absent), and `layer_norm_eps`, read from `norm_eps` (1e-5), else `layer_norm_eps`. candle's layers have no biases
+  and alternate by the count alone, so `norm_bias`, `attention_bias` or `mlp_bias` on, or `layer_types` disagreeing
+  with `global_attn_every_n_layers`, is refused at load. `thx01::Config::new` reads `rl_agent_config.json` beside it:
+  `head_layers` (2) and the temperatures the model applies, `temperature_by_options["<type>:<bucket>"]` (buckets `2`,
+  `3-5`, `6-10`, `11+` by option count: `noul:2` 2.0, `choice:3-5` 2.55, `choice:6-10` 2.3, `score:3-5` 3.05,
+  `choice:11+` 2.55) else `temperature[<type>]` (2.55, 3.05, 2.0), each clamped to [0.5, 5.0] as the package clamps
+  it (`ardana_core::profile::clamp_temperature`). The engine's `softmax(logits, T)` over the marker logits is the
+  probability vector `DecisionModel::decide` returns; the engine assembles it as it assembles a causal model's.
+- Compute (Q5): F32 on every device (`thx01::DTYPE`). `read_tensors` converts the F16 tensors once; on an Apple
+  silicon build `gpu_layers` -1 places them on Metal in F32, never BF16, since candle's ModernBERT adds F32 masks to
+  the scores and the head is written for F32. `gpu_layers` 0 keeps the CPU, below -1 is an error, as for every
+  architecture; `LoadOptions::n_ctx` means nothing to it (the window is the profile's `decision.window`, 1,024, checked
+  by `Decider::plan` before the load; a sequence past `max_position_embeddings`, 8192, is a load-time error too).
+  Not measured on Metal (no Apple machine, 2026-10-12).
+- The sequence format, the head budget and the option cuts are the core's (`ardana_core::thx01`, one sequence per
+  question: `[CLS] <type> question: <instructions> [SEP] [MASK] <option> … [SEP] <state> [SEP]`, `<bos>`, `<eos>` and
+  `<mask>` of the Gemma tokenizer in `tokenizer/`); the state is never cut: a sequence past the window is refused
+  (Q9) where the package truncates, so the two agree token for token inside the window. `cargo xtask e2e candle`
+  holds the row `thx-01` to the `thx01` package's own answers on the ticket, sentiment and score fixtures
+  (`crates/ardana-core/tests/data/thx01/`, `cargo xtask export-thx01`): the golden's choices, every probability
+  within 0.01 and the golden's `input_tokens` (89, 72 and 115).
 
 ### Qwen3 in candle-transformers 0.11.0
 - `models::qwen3::Model::forward(input, offset)` returns the final-normed hidden states at every position (`[1, len,
@@ -357,6 +405,15 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   through `cargo xtask e2e rust` against hf.co/Qwen/Qwen3-1.7B at `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e` and its
   GGUF, hf.co/Qwen/Qwen3-1.7B-GGUF `Qwen3-1.7B-Q8_0.gguf` at `90862c4b9d2787eaed51d12237eafdfe7c5f6077` (Q8), never an
   invented fixture.
+- THX-01 has two plain unit tests in `crates/ardana-candle/src/lib.rs`: "thx01_reads_its_configs" (`encoder_config`
+  from mmBERT's shape and from the flat thetas, the two refusals, the bucket temperatures and the clamp,
+  `thx01::tensor`'s naming) and "thx01_computes_in_f32" (R8.5, R8.6: a model a few values wide over random weights
+  saved as a checkpoint in `$ARDANA_TMP`, `config.json` naming `THXDecisionModel`, the action head and the
+  temperature buffer beside its tensors; `CandleRuntime::supports` is true and `load` gives a `Loaded::Decision` at
+  `gpu_layers` 0 and -1 alike, the tensors F32 both times, one probability per marker summing to 1, the same from
+  the file as in memory and on a second call, the noul bucket at 5.0 flatter than at 0.5, and an empty sequence, a
+  marker past the end and a sequence past the positions errors). "supports_the_architectures_config_json_names"
+  covers the name. The real checkpoint is the suite's.
 - A change a vendored module carries gets a plain unit test over random weights (`candle_nn::VarMap`, a model a few
   values wide built through `configuration` and `Architecture::build`), which pins the change and nothing about a
   real model's answers: "llama_reads_a_written_head_dim" (the projections' shapes, a state at every position, each
@@ -407,7 +464,13 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
   at `bf46152c47f5dd20b896357cb51abc4c03b8ee8c` against ggml-org/gemma-3-4b-it-GGUF `gemma-3-4b-it-Q8_0.gguf` at
   `d0976223747697cb51e056d85c532013931fe52e` (`long_state`), and allenai/Olmo-3-7B-Instruct at
   `6e5971d9eba42665f5bd5a0fcf047f299ce1dccc` against unsloth/Olmo-3-7B-Instruct-GGUF `Olmo-3-7B-Instruct-Q8_0.gguf`
-  at `a2a9ae53f5a95087616b3f45ca96e9d2631344ee` (`long_state`, past its 4,096-token sliding window).
+  at `a2a9ae53f5a95087616b3f45ca96e9d2631344ee` (`long_state`, past its 4,096-token sliding window), and doofz/THX-01
+  at `bef2e2478be7acd79429324a658558a57552a2e8` (`gguf: None`) against the `thx01` package's goldens: the row's pull
+  records runtime `candle` at the pin with the six files, `tokenizer/tokenizer.json` and the kind `decision`;
+  `ardana run --json` answers the three fixtures with the golden's choices, every probability within 0.01 and the
+  golden's `input_tokens`; the ticket's state repeated 300 times is refused naming the 1,024-token window and a
+  25-option choice naming the 24-option limit; `--verbose` prints the model, the tokens and the timings and
+  `ardana list` sizes the entry by `model.safetensors`. The served checks are W9's.
 
 ## Sources
 - https://github.com/huggingface/candle — README: pure-Rust ML framework, backends, feature flags
@@ -423,6 +486,8 @@ Tokenization, prompt building and readout stay in `ardana-core` and never call C
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/lfm2.rs — the file `lfm2.rs` is copied from: `Lfm2Config`, `compute_intermediate_size`, `ShortConv`, `Model::forward` and its last-position narrowing
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/gemma3.rs — the file `gemma3.rs` is copied from: `Config`, `prepare_decoder_attention_mask` and its sliding window, the `1/sqrt(head_dim)` scale, `Model::forward`, its last-position narrowing and its softcapping
 - https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/olmo2.rs — the file `olmo2.rs` is copied from: `Config`, `RotaryEmbedding::new` (one unscaled table), `prepare_decoder_attention_mask` (causal alone), `Attention::forward` and its `kv_cache`, `Model::forward` and its last-position narrowing
+- https://github.com/huggingface/candle/blob/0.11.0/candle-transformers/src/models/modernbert.rs — `Config` (`global_rope_theta`, `local_rope_theta`, `layer_norm_eps`), `ModernBert::load` and its `model.*` names, `forward` and its F32 masks, `get_local_attention_mask`
+- https://huggingface.co/docs/transformers/model_doc/modernbert — `ModernBertConfig`: `global_attn_every_n_layers`, `local_attention`, `norm_eps`, `norm_bias`, `attention_bias`, `mlp_bias`, `rope_parameters`
 - https://github.com/huggingface/candle/blob/0.11.0/candle-nn/src/kv_cache.rs — `RotatingCache::append`: the whole source returned when one pass exceeds the window
 - https://github.com/huggingface/candle/blob/0.11.0/LICENSE-APACHE — the license the vendored files are taken under
 - https://huggingface.co/docs/transformers/internal/rope_utils — `longrope`, `llama3` and `yarn` rope scaling: `short_factor`, `long_factor`, `original_max_position_embeddings`, `attention_factor`, `beta_fast`, `beta_slow`

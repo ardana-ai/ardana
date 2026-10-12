@@ -3,7 +3,7 @@
 Ardana is a local-first tool that pulls and runs open System 1 decision models (decider-style one-pass readouts) the
 way Ollama does, from one `ardana` Rust binary that serves them over an HTTP API (compatible with Jev and TypeSafe
 clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime` abstraction (GGUF
-files) and Candle the second (safetensors causal LMs); Qwen3.5 is the first model family. Planning documents live in
+files) and Candle the second (safetensors causal LMs, and the THX-01 decision model); Qwen3.5 is the first model family. Planning documents live in
 gitignored `*-prd/` folders; when one is present locally, its Decisions and Contracts are binding (as its Amendments
 change them) and its Requirements are the definition of done.
 
@@ -13,9 +13,9 @@ change them) and its Requirements are the definition of done.
 |-------|------|----------------------------------|
 | `crates/ardana` | binary, wires runtimes into registry and server | any |
 | `crates/ardana-api` | Jev wire types and error bodies, compiles for `wasm32-unknown-unknown` | none |
-| `crates/ardana-core` | prompts, tokenizer, readout, runtime traits, safetensors snapshot files | `ardana-api` |
+| `crates/ardana-core` | prompts, tokenizer, readout, runtime traits (causal and decision models), THX-01's sequences, safetensors snapshot files | `ardana-api` |
 | `crates/ardana-llama` | llama.cpp runtime | `ardana-core` |
-| `crates/ardana-candle` | Candle runtime for safetensors causal LMs, by `config.json#architectures` | `ardana-core` |
+| `crates/ardana-candle` | Candle runtime for safetensors causal LMs and THX-01, by `config.json#architectures` | `ardana-core` |
 | `crates/ardana-registry` | refs, the model library, `models.toml`, HF and Ollama resolution | `ardana-core` |
 | `crates/ardana-server` | axum server, model lifecycle, embedded playground | anything but the runtimes (`ardana-llama`, `ardana-candle`) |
 | `crates/ardana-playground` | Leptos CSR playground built by trunk, running browser models in the tab (onnxruntime-web) | `ardana-api` |
@@ -71,6 +71,11 @@ change them) and its Requirements are the definition of done.
 - `cargo xtask check-deps`, `cargo xtask check-docs` check the workspace shape and these documents.
 - `cargo xtask export-decider` regenerates the vendored decider prompt goldens in
   `crates/ardana-core/tests/data/decider/` by running decider@23579f7 from `tmp/src/decider`.
+- `cargo xtask export-thx01` regenerates the THX-01 goldens in `crates/ardana-core/tests/data/thx01/`
+  (`{ticket,sentiment,score}.json`, the `thx01` 1.0.0 package's `system_one` answers to the three request fixtures on
+  the CPU, with its license) in the uv venv `tmp/py/thx01-export` (CPU torch from PyTorch's index); it downloads the
+  checkpoint's six files at the pinned commit into `tmp/thx01-export`, which it removes when done. Never hand-edit a
+  golden.
 - `cargo xtask onnx convert <name>` (a name meaning a size's default quant, `decider:0.8b`; another quant is refused)
   builds a library size's browser variant from the checkpoint its size in the library document,
   `../ardana-landing/src/lib/data/models.json` (the landing checkout beside this one; both steps stop naming it when it
@@ -150,8 +155,8 @@ change them) and its Requirements are the definition of done.
   (`cargo xtask e2e candle`: each `xtask/src/e2e.rs#CANDLE_FIXTURES` row in turn, Qwen/Qwen2.5-1.5B-Instruct,
   HuggingFaceTB/SmolLM3-3B, unsloth/Llama-3.2-1B-Instruct, openbmb/MiniCPM5-1B, microsoft/Phi-4-mini-instruct,
   ibm-granite/granite-4.2-3b, LiquidAI/LFM2.5-1.2B-Instruct, unsloth/gemma-3-1b-it, unsloth/gemma-3-4b-it (a
-  multimodal checkpoint, its text tower alone) then allenai/Olmo-3-7B-Instruct, with the release binary on a home of
-  the row's own.
+  multimodal checkpoint, its text tower alone), allenai/Olmo-3-7B-Instruct, then the decision model doofz/THX-01,
+  with the release binary on a home of the row's own.
   It pulls the safetensors checkpoint and the Q8_0 GGUF of the same model (the checkpoint repository as
   `--tokenizer`, `--layout chat`) from the Hub into `tmp/hf`, about 5 GB, 9.5 GB, 3.8 GB, 3.3 GB, 11.8 GB, 11.2 GB,
   3.6 GB, 3.1 GB, 12.8 GB and 22.4 GB, and checks each against the commit the row pins and the checkpoint's runtime,
@@ -160,7 +165,13 @@ change them) and its Requirements are the definition of done.
   --json` answers `tests/fixtures/requests/ticket.json`, `sentiment.json` and `score.json` through both, Candle's
   answers with the GGUF's choices and noul sides and every probability within 0.1; one `ardana serve` answers the
   three through Candle and the first again with identical probabilities; a `long_state` row (Qwen2.5, Phi-4-mini,
-  LFM2.5, both Gemma 3, Olmo 3) also answers the ticket's state repeated past 4,500 tokens through both. Then, also when a
+  LFM2.5, both Gemma 3, Olmo 3) also answers the ticket's state repeated past 4,500 tokens through both. The `thx-01`
+  row (no GGUF, 644 MB) pulls `hf.co/doofz/THX-01` as it is, checks the pin, runtime `candle`, the six files in its
+  snapshot, `tokenizer/tokenizer.json` as the tokenizer and `ardana show`'s kind `decision`, answers the three
+  fixtures with the `thx01` package's goldens (`crates/ardana-core/tests/data/thx01/`: the golden's choices, every
+  probability within 0.01, the golden's `input_tokens`), is refused on the ticket's state repeated 300 times (naming
+  the 1,024-token window) and on a 25-option choice (naming the 24-option limit), prints the model, tokens and timings
+  under `--verbose` and is listed by its `model.safetensors`; it is not served (W9). Then, also when a
   check failed,
   the row's registry entries and every file it added under `tmp/hf/hub` are removed, the files that were there
   before staying, and after the last row the suite runs `cargo clean`: no `target/` is left, and the next cargo
@@ -196,7 +207,17 @@ change them) and its Requirements are the definition of done.
   `SmolLM3ForCausalLM`, `LlamaForCausalLM`, `Phi3ForCausalLM`, `GraniteForCausalLM`, `Lfm2ForCausalLM`,
   `Gemma3ForCausalLM`, `Gemma3ForConditionalGeneration` as its text tower alone, read from `text_config` and the
   `language_model.` tensors, and `Olmo3ForCausalLM` with its sliding layers and YaRN rope scaling), and refused
-  naming the architectures before any weight file when none does; `list` sizes it by its safetensors files. Downloads
+  naming the architectures before any weight file when none does; `list` sizes it by its safetensors files. A
+  checkpoint with an `rl_agent_config.json` is a THX-01 decision model (`THXDecisionModel`, `hf.co/doofz/THX-01`,
+  never in the library): the pull takes its `config.json`, `rl_agent_config.json`, `encoder/config.json`,
+  `tokenizer/tokenizer.json`, `tokenizer/tokenizer_config.json` and `model.safetensors`, records
+  `tokenizer/tokenizer.json` as the tokenizer and the profile from `rl_agent_config.json` (`decision`: the 1,024-token
+  window, the 24-option limit and the head budget; the clamped base temperatures), and `ardana show` prints the kind
+  `decision`. Such a model answers one sequence per question in the `thx01` package's format, every probability
+  within 0.01 of the package's (its goldens, `cargo xtask export-thx01`); a question whose sequence would exceed the
+  window is refused as too large naming the window, never truncated, and a choice question above 24 options as
+  invalid naming the limit; its `number` and `excerpt` questions, `action` output and tournament are not implemented.
+  Downloads
   go to the
   standard HF cache (`$HF_HOME/hub`); `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list`
   (`ls`: name, size, pull date, source), `ardana show <name> [--json]` (Model, Calibration and Files sections; a

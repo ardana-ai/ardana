@@ -1,6 +1,7 @@
 //! `cargo xtask e2e candle`: each row of [`crate::e2e::CANDLE_FIXTURES`] in turn, with the release `ardana`. A row
 //! pulls a safetensors checkpoint and the GGUF of the same model from the Hub into `tmp/hf`, checks that Candle
-//! answers as llama.cpp does, and removes what it pulled before the next row starts; the suite ends with
+//! answers as llama.cpp does, and removes what it pulled before the next row starts; a row without a GGUF (the THX-01
+//! decision model) checks the checkpoint against the `thx01` package's goldens instead. The suite ends with
 //! `cargo clean`. The disk holds neither every row's weights at once nor a row's beside a full `target/`.
 
 use std::collections::BTreeSet;
@@ -19,6 +20,21 @@ use crate::serve::{Server, build_ardana};
 const REQUESTS: [&str; 3] = ["ticket.json", "sentiment.json", "score.json"];
 /// How far a probability through Candle may be from the GGUF's.
 const TOLERANCE: f64 = 0.1;
+/// How far a decision model's probability may be from the package's golden (Q11).
+const DECISION_TOLERANCE: f64 = 0.01;
+/// The goldens a row without a GGUF is compared with, one per request fixture.
+const GOLDENS: &str = "crates/ardana-core/tests/data/thx01";
+/// The files a THX-01 pull records in its snapshot (R8.1).
+const DECISION_FILES: [&str; 6] = [
+    "config.json",
+    "rl_agent_config.json",
+    "encoder/config.json",
+    "tokenizer/tokenizer.json",
+    "tokenizer/tokenizer_config.json",
+    "model.safetensors",
+];
+/// Options a decision model's choice question is refused above (Q10).
+const DECISION_MAX_OPTIONS: usize = 24;
 /// How often a `long_state` row repeats the ticket's state (18 tokens a time in Qwen2.5's tokenizer).
 const LONG_STATE_REPEATS: usize = 300;
 /// The tokens a long state must exceed.
@@ -61,14 +77,14 @@ pub fn candle(sandbox: &Sandbox, fixtures: &[CandleFixture]) -> Result<()> {
 /// One row: its checks, then, whatever they found, its registry entries and every file it added to the hub cache
 /// removed.
 fn row(sandbox: &Sandbox, ardana: &Path, fixture: &CandleFixture) -> Result<()> {
-    let Some((gguf, file)) = &fixture.gguf else {
-        bail!("the row names no GGUF, and the suite has nothing else to compare a checkpoint with");
-    };
     let hub = sandbox.tmp().join("hf/hub");
     let before = paths(&hub)?;
     let cli = Cli::new(sandbox, ardana, fixture.name)?;
     let mut pulled = Vec::new();
-    let checked = check(&cli, fixture, gguf, file, &mut pulled);
+    let checked = match &fixture.gguf {
+        Some((gguf, file)) => check(&cli, fixture, gguf, file, &mut pulled),
+        None => check_decision(&cli, fixture, &mut pulled),
+    };
     let removed = cli
         .remove(&pulled)
         .and(remove_added(&hub, &before))
@@ -128,6 +144,162 @@ fn check(
     Ok(())
 }
 
+/// R8.1, R8.3, R8.4 and R8.5 for a decision-model row: the pull records runtime `candle` at the pin with the six
+/// files in its snapshot, `tokenizer/tokenizer.json` as the tokenizer and the kind `decision`; `ardana run --json`
+/// gives each fixture the golden's choices, every probability within [`DECISION_TOLERANCE`] and the golden's
+/// `input_tokens`; a state past the window and a choice of 25 options are refused naming the window and the limit;
+/// `--verbose` prints the model, the tokens and the timings, and `ardana list` sizes the entry by its safetensors.
+fn check_decision(cli: &Cli, fixture: &CandleFixture, pulled: &mut Vec<String>) -> Result<()> {
+    let name = fixture.name.to_string();
+    let checkpoint = format!("hf.co/{}", fixture.checkpoint.repo);
+    cli.pull(&[&checkpoint, "--name", &name])?;
+    pulled.push(name.clone());
+    let entry = cli.pinned(&name, "candle", &fixture.checkpoint)?;
+    let weights = Path::new(entry["weights"].as_str().context("weights")?);
+    for file in DECISION_FILES {
+        ensure!(
+            weights.join(file).is_file(),
+            "the pull left {file} out of {}",
+            weights.display()
+        );
+    }
+    ensure!(
+        Path::new(entry["tokenizer"].as_str().context("tokenizer")?)
+            == weights.join("tokenizer/tokenizer.json"),
+        "the tokenizer is {}, not the snapshot's tokenizer/tokenizer.json",
+        entry["tokenizer"]
+    );
+    ensure!(
+        entry["profile"]["decision"].is_object(),
+        "the profile carries no decision format: {}",
+        entry["profile"]
+    );
+    let shown = run_stdout(cli.command().args(["show", &name]))?;
+    let kind = shown
+        .lines()
+        .find(|line| line.trim_start().starts_with("kind "))
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .with_context(|| format!("ardana show {name} prints no kind:\n{shown}"))?;
+    ensure!(
+        kind.contains("decision"),
+        "ardana show {name} prints `{kind}`, not the kind decision"
+    );
+    println!(
+        "e2e candle {name}: pulled at {} with the six files, {kind}",
+        fixture.checkpoint.commit
+    );
+
+    let root = cli.sandbox.repo_root();
+    let requests = root.join("tests/fixtures/requests");
+    let goldens = root.join(GOLDENS);
+    for request in REQUESTS {
+        let path = requests.join(request);
+        let want = read_json(&goldens.join(request))?;
+        let (got, took) = cli.answer(&name, &path)?;
+        let gap = same_answers(&got, &want, DECISION_TOLERANCE).with_context(|| {
+            format!("{request}: Candle answered {got}, the thx01 package {want}")
+        })?;
+        let tokens = |response: &Value| response["usage"]["input_tokens"].as_u64();
+        ensure!(
+            tokens(&got) == tokens(&want),
+            "{request}: Candle reports {:?} input tokens, the thx01 package {:?}",
+            tokens(&got),
+            tokens(&want)
+        );
+        println!(
+            "e2e candle {name} {request}: {} (thx01: {}), probabilities within {gap:.4}, {} tokens; Candle {}",
+            summary(&got),
+            summary(&want),
+            got["usage"]["input_tokens"],
+            seconds(took)
+        );
+    }
+
+    let ticket = read_json(&requests.join(REQUESTS[0]))?;
+    let mut long = ticket.clone();
+    let state = long["state"].as_str().context("the ticket's state")?;
+    long["state"] = vec![state; LONG_STATE_REPEATS].join(" ").into();
+    let window = entry["profile"]["decision"]["window"]
+        .as_u64()
+        .context("the window")?;
+    let refused = cli.refused(&name, "long-state.json", &long)?;
+    ensure!(
+        refused.contains("request too large") && refused.contains(&format!("{window} tokens")),
+        "a state past the window was refused with `{refused}`, not naming the {window}-token window"
+    );
+    let mut wide = ticket.clone();
+    let options: Vec<String> = (0..=DECISION_MAX_OPTIONS)
+        .map(|i| format!("team{i}"))
+        .collect();
+    wide["questions"]["department"]["criteria"] = options.into();
+    let refused = cli.refused(&name, "wide-choice.json", &wide)?;
+    ensure!(
+        refused.contains("invalid request") && refused.contains(&DECISION_MAX_OPTIONS.to_string()),
+        "a choice of {} options was refused with `{refused}`, not naming the {DECISION_MAX_OPTIONS}-option limit",
+        DECISION_MAX_OPTIONS + 1
+    );
+    println!(
+        "e2e candle {name}: a state past the {window}-token window and a choice of {} options refused",
+        DECISION_MAX_OPTIONS + 1
+    );
+
+    let output = cli
+        .command()
+        .args(["run", &name, "--request"])
+        .arg(requests.join(REQUESTS[0]))
+        .args(["--json", "--verbose"])
+        .output()
+        .context("running ardana run --verbose")?;
+    ensure!(
+        output.status.success(),
+        "ardana run --verbose failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let verbose = String::from_utf8_lossy(&output.stderr);
+    let golden = read_json(&goldens.join(REQUESTS[0]))?;
+    for line in [
+        format!("model: {}", golden["model"].as_str().unwrap_or_default()),
+        format!("input tokens: {}", golden["usage"]["input_tokens"]),
+        "load duration:".to_string(),
+        "answer duration:".to_string(),
+    ] {
+        ensure!(
+            verbose.lines().any(|l| l
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .starts_with(&line)),
+            "ardana run --verbose printed no `{line}` line:
+{verbose}"
+        );
+    }
+    let listed = run_stdout(cli.command().arg("list"))?;
+    let row = listed
+        .lines()
+        .find(|line| line.starts_with(&format!("{name} ")))
+        .with_context(|| {
+            format!(
+                "ardana list has no row {name}:
+{listed}"
+            )
+        })?;
+    let cells: Vec<&str> = row.split_whitespace().collect();
+    let bytes = std::fs::metadata(weights.join("model.safetensors"))?.len() as f64;
+    let (size, unit) = (
+        cells.get(1).and_then(|s| s.parse::<f64>().ok()),
+        cells.get(2).copied(),
+    );
+    ensure!(
+        unit == Some("MB") && size.is_some_and(|size| (size - bytes / 1e6).abs() <= 0.05),
+        "ardana list sizes {name} as `{row}`, not by its {bytes}-byte model.safetensors"
+    );
+    println!(
+        "e2e candle {name}: --verbose prints the model, tokens and timings; listed at {} {}",
+        cells[1], cells[2]
+    );
+    Ok(())
+}
+
 /// R3.3: one `ardana serve` on the row's home answers the fixtures in turn through Candle, each as the GGUF answered
 /// it, then the first one again with the very answers it gave before: no prompt leaves anything to the next.
 fn served(cli: &Cli, candle: &str, answered: &[(&str, PathBuf, Value, Value)]) -> Result<()> {
@@ -153,7 +325,8 @@ fn served(cli: &Cli, candle: &str, answered: &[(&str, PathBuf, Value, Value)]) -
         );
         let got: Value = serde_json::from_slice(&output.stdout)
             .with_context(|| format!("parsing the server's answer to {request}"))?;
-        same_answers(&got, want).with_context(|| format!("{request} from the server: {got}"))?;
+        same_answers(&got, want, TOLERANCE)
+            .with_context(|| format!("{request} from the server: {got}"))?;
         answers.push(got["answers"].clone());
     }
     server.stop()?;
@@ -236,8 +409,9 @@ impl<'a> Cli<'a> {
     }
 
     /// Checks that the entry `name` runs through `runtime` and that its weights are `pin`'s commit: a pull reads a
-    /// repository at `main`, so one that moved since the row was written fails here.
-    fn pinned(&self, name: &str, runtime: &str, pin: &Pin) -> Result<()> {
+    /// repository at `main`, so one that moved since the row was written fails here. Returns the entry as
+    /// `ardana show --json` prints it.
+    fn pinned(&self, name: &str, runtime: &str, pin: &Pin) -> Result<Value> {
         let entry: Value =
             serde_json::from_str(&run_stdout(self.command().args(["show", name, "--json"]))?)
                 .with_context(|| format!("parsing ardana show {name} --json"))?;
@@ -262,7 +436,29 @@ impl<'a> Cli<'a> {
             snapshot.display(),
             pin.commit
         );
-        Ok(())
+        Ok(entry)
+    }
+
+    /// `ardana run <name> --request <request>` of `body`, written to `<file>` beside the home, which must fail:
+    /// returns its stderr.
+    fn refused(&self, name: &str, file: &str, body: &Value) -> Result<String> {
+        let path = self.home.with_file_name(file);
+        std::fs::write(&path, body.to_string())
+            .with_context(|| format!("writing {}", path.display()))?;
+        let output = self
+            .command()
+            .args(["run", name, "--request"])
+            .arg(&path)
+            .arg("--json")
+            .output()
+            .context("running ardana run")?;
+        ensure!(
+            !output.status.success(),
+            "{name} answered {} instead of refusing it: {}",
+            path.display(),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        Ok(String::from_utf8_lossy(&output.stderr).trim().to_string())
     }
 
     /// `ardana run <name> --request <request> --json`: the response, and how long the command took.
@@ -291,7 +487,7 @@ impl<'a> Cli<'a> {
     ) -> Result<(Value, Value)> {
         let (want, llama_took) = self.answer(llama, request)?;
         let (got, candle_took) = self.answer(candle, request)?;
-        let gap = same_answers(&got, &want)
+        let gap = same_answers(&got, &want, TOLERANCE)
             .with_context(|| format!("{label}: Candle answered {got}, llama.cpp {want}"))?;
         println!(
             "e2e candle {row} {label}: {} (llama.cpp: {}), probabilities within {gap:.4}; Candle {}, llama.cpp {}",
@@ -313,9 +509,9 @@ impl<'a> Cli<'a> {
 }
 
 /// Checks that `got` answers every question of `want` alike: the same choice, the same side of 0.5 for a noul, and
-/// every probability (a noul's, each option's, each score level's) within [`TOLERANCE`]. Returns the widest gap
+/// every probability (a noul's, each option's, each score level's) within `tolerance`. Returns the widest gap
 /// between two probabilities.
-fn same_answers(got: &Value, want: &Value) -> Result<f64> {
+fn same_answers(got: &Value, want: &Value, tolerance: f64) -> Result<f64> {
     let answers = want["answers"].as_object().context("answers")?;
     ensure!(!answers.is_empty(), "no answers in {want}");
     let mut widest = 0.0_f64;
@@ -352,8 +548,8 @@ fn same_answers(got: &Value, want: &Value) -> Result<f64> {
                 .map(|(g, w)| (g - w).abs())
                 .with_context(|| format!("{key}: {g} and {w} are not two probabilities"))?;
             ensure!(
-                gap <= TOLERANCE,
-                "{key}: {g} and {w} differ by more than {TOLERANCE}"
+                gap <= tolerance,
+                "{key}: {g} and {w} differ by more than {tolerance}"
             );
             widest = widest.max(gap);
         }
@@ -448,8 +644,15 @@ mod tests {
     #[test]
     fn same_answers_within_the_tolerance() {
         let want = response(0.9, 0.8, 0.7);
-        let gap = same_answers(&response(0.85, 0.82, 0.61), &want).unwrap();
+        let gap = same_answers(&response(0.85, 0.82, 0.61), &want, TOLERANCE).unwrap();
         assert!((gap - 0.09).abs() < 1e-9, "{gap}");
+        let err = same_answers(&response(0.85, 0.82, 0.61), &want, DECISION_TOLERANCE).unwrap_err();
+        assert!(
+            err.to_string().contains("differ by more than 0.01"),
+            "{err:#}"
+        );
+        let gap = same_answers(&response(0.895, 0.8, 0.7), &want, DECISION_TOLERANCE).unwrap();
+        assert!((gap - 0.005).abs() < 1e-9, "{gap}");
         for (other, problem) in [
             (response(0.45, 0.8, 0.7), "chose"),
             (response(0.9, 0.45, 0.7), "not on the side"),
@@ -458,10 +661,10 @@ mod tests {
             (response(0.9, 0.8, 0.55), "differ by more"),
             (json!({"answers": {}}), "chose null"),
         ] {
-            let err = same_answers(&other, &want).unwrap_err();
+            let err = same_answers(&other, &want, TOLERANCE).unwrap_err();
             assert!(err.to_string().contains(problem), "{other}: {err:#}");
         }
-        assert!(same_answers(&want, &json!({"answers": {}})).is_err());
+        assert!(same_answers(&want, &json!({"answers": {}}), TOLERANCE).is_err());
         assert_eq!(
             summary(&want),
             "department billing, refund 0.8, charges 1.0"

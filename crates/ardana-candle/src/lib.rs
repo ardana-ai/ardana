@@ -10,6 +10,10 @@
 //! candle-transformers' Llama, Phi-3, Granite, LFM2, Gemma 3 and OLMo 2 narrow to the last position inside the model,
 //! so [`llama`], [`phi3`], [`granite`], [`lfm2`], [`gemma3`] and [`olmo2`] (Olmo 3) are its 0.11.0 files, copied and
 //! changed as each one's header lists.
+//!
+//! One architecture is no causal LM: [`thx01`] (`THXDecisionModel`) is the THX-01 decision model, candle-transformers'
+//! ModernBERT under the `thx01` package's decision head, loaded as a [`ardana_core::runtime::DecisionModel`] in F32 on
+//! every device.
 
 mod gemma3;
 mod granite;
@@ -17,12 +21,13 @@ mod lfm2;
 mod llama;
 mod olmo2;
 mod phi3;
+pub mod thx01;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
-use ardana_core::runtime::{LoadOptions, LoadedModel, Runtime};
+use ardana_core::runtime::{LoadOptions, Loaded, LoadedModel, Runtime};
 use ardana_core::snapshot;
 use candle_core::safetensors::MmapedSafetensors;
 use candle_core::{DType, Device, Tensor};
@@ -31,8 +36,8 @@ use candle_transformers::models::smol::smollm3;
 use candle_transformers::models::{qwen2, qwen3};
 use serde_json::Value;
 
-/// The `config.json#architectures` names this runtime implements.
-pub const ARCHITECTURES: [&str; 10] = [
+/// The `config.json#architectures` names this runtime implements: the causal LMs, then the decision model.
+pub const ARCHITECTURES: [&str; 11] = [
     "Qwen3ForCausalLM",
     "Qwen2ForCausalLM",
     "SmolLM3ForCausalLM",
@@ -43,6 +48,7 @@ pub const ARCHITECTURES: [&str; 10] = [
     "Gemma3ForCausalLM",
     "Gemma3ForConditionalGeneration",
     "Olmo3ForCausalLM",
+    thx01::ARCHITECTURE,
 ];
 
 /// Candle for safetensors snapshots, on Metal by default on Apple silicon.
@@ -59,7 +65,9 @@ impl Runtime for CandleRuntime {
         read_config(weights).is_ok_and(|config| architecture(&config).is_some())
     }
 
-    fn load(&self, weights: &Path, opts: &LoadOptions) -> Result<Box<dyn LoadedModel>> {
+    /// A causal LM as a [`Loaded::Causal`] in the device's precision; THX-01 as a [`Loaded::Decision`] in F32
+    /// ([`thx01::DTYPE`]) on the same device.
+    fn load(&self, weights: &Path, opts: &LoadOptions) -> Result<Loaded> {
         let config = read_config(weights)?;
         let Some(architecture) = architecture(&config) else {
             bail!(
@@ -70,8 +78,13 @@ impl Runtime for CandleRuntime {
             );
         };
         let (device, dtype) = device(opts.gpu_layers)?;
+        if architecture == thx01::ARCHITECTURE {
+            return Ok(Loaded::Decision(Box::new(thx01::Thx01::load(
+                weights, &device,
+            )?)));
+        }
         let model = CausalLm::load(weights, architecture, &config, opts, &device, dtype)?;
-        Ok(Box::new(model))
+        Ok(Loaded::Causal(Box::new(model)))
     }
 }
 
@@ -111,12 +124,12 @@ fn gpu() -> Result<(Device, DType)> {
     Ok((Device::Cpu, DType::F32))
 }
 
-/// Every tensor of `files` that `architecture` reads ([`Architecture::tensor`]), under the name it reads it by, on
-/// `device` in `dtype`, each converted once, so a tied head shares its embedding's storage; a tensor it never reads
-/// (a multimodal checkpoint's vision tower) stays in the mapping.
+/// Every tensor of `files` that `tensor` names (an architecture's [`Architecture::tensor`], or [`thx01::tensor`]),
+/// under the name it reads it by, on `device` in `dtype`, each converted once, so a tied head shares its embedding's
+/// storage; a tensor it never reads (a multimodal checkpoint's vision tower, THX-01's action head) stays in the mapping.
 fn read_tensors(
     files: &[PathBuf],
-    architecture: &dyn Architecture,
+    tensor: impl Fn(&str) -> Option<String>,
     device: &Device,
     dtype: DType,
 ) -> Result<HashMap<String, Tensor>> {
@@ -127,14 +140,14 @@ fn read_tensors(
         .with_context(|| format!("mapping {}", display(files)))?;
     let mut tensors = HashMap::new();
     for (name, _) in mapped.tensors() {
-        let Some(read_as) = architecture.tensor(&name) else {
+        let Some(read_as) = tensor(&name) else {
             continue;
         };
         let tensor = mapped
             .load(&name, device)
             .and_then(|tensor| tensor.to_dtype(dtype))
             .with_context(|| format!("reading the tensor {name}"))?;
-        tensors.insert(read_as.to_string(), tensor);
+        tensors.insert(read_as, tensor);
     }
     Ok(tensors)
 }
@@ -656,7 +669,12 @@ impl CausalLm {
         })?;
         let shape = configuration.shape();
         let files = snapshot::weight_files(dir).map_err(anyhow::Error::msg)?;
-        let tensors = read_tensors(&files, configuration.as_ref(), device, dtype)?;
+        let tensors = read_tensors(
+            &files,
+            |name| configuration.tensor(name).map(str::to_string),
+            device,
+            dtype,
+        )?;
         let vb = VarBuilder::from_tensors(tensors, dtype, device);
         let decoder = configuration
             .build(vb.clone())
@@ -795,6 +813,7 @@ mod tests {
             "Gemma3ForCausalLM",
             "Gemma3ForConditionalGeneration",
             "Olmo3ForCausalLM",
+            "THXDecisionModel",
         ] {
             assert!(ARCHITECTURES.contains(&architecture));
             assert!(runtime.supports(&write(architecture, json!([architecture]))));
@@ -814,7 +833,7 @@ mod tests {
             err.to_string().contains(
                 "[\"MambaForCausalLM\"]; candle implements Qwen3ForCausalLM, Qwen2ForCausalLM, SmolLM3ForCausalLM, \
                  LlamaForCausalLM, Phi3ForCausalLM, GraniteForCausalLM, Lfm2ForCausalLM, Gemma3ForCausalLM, \
-                 Gemma3ForConditionalGeneration, Olmo3ForCausalLM"
+                 Gemma3ForConditionalGeneration, Olmo3ForCausalLM, THXDecisionModel"
             ),
             "{err:#}"
         );
@@ -1349,7 +1368,7 @@ mod tests {
         candle_core::safetensors::save(&values, &file).unwrap();
         let tensors = read_tensors(
             std::slice::from_ref(&file),
-            tower.as_ref(),
+            |name| tower.tensor(name).map(str::to_string),
             &Device::Cpu,
             DType::F32,
         )
@@ -1361,7 +1380,13 @@ mod tests {
             .unwrap();
         assert_eq!(embedding, [0.0]);
         let every = configuration("Gemma3ForCausalLM", &text_config).unwrap();
-        let tensors = read_tensors(&[file], every.as_ref(), &Device::Cpu, DType::F32).unwrap();
+        let tensors = read_tensors(
+            &[file],
+            |name| every.tensor(name).map(str::to_string),
+            &Device::Cpu,
+            DType::F32,
+        )
+        .unwrap();
         assert_eq!(tensors.len(), 883);
     }
 
@@ -1558,6 +1583,261 @@ mod tests {
         assert!(device(-2).is_err());
     }
 
+    /// A THX-01 `encoder/config.json` a few values wide, in mmBERT's shape: the rotary thetas under
+    /// `rope_parameters`, `layer_types` agreeing with `global_attn_every_n_layers` (2), every bias off.
+    fn thx01_encoder_json() -> Value {
+        json!({
+            "architectures": ["ModernBertForMaskedLM"],
+            "vocab_size": 20,
+            "hidden_size": 16,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "intermediate_size": 8,
+            "max_position_embeddings": 64,
+            "norm_eps": 1e-5,
+            "layer_norm_eps": 1e-5,
+            "pad_token_id": 0,
+            "global_attn_every_n_layers": 2,
+            "local_attention": 4,
+            "norm_bias": false,
+            "attention_bias": false,
+            "mlp_bias": false,
+            "layer_types": ["full_attention", "sliding_attention"],
+            "rope_parameters": {
+                "full_attention": {"rope_theta": 160000, "rope_type": "default"},
+                "sliding_attention": {"rope_theta": 10000, "rope_type": "default"},
+            },
+        })
+    }
+
+    /// An `rl_agent_config.json` with THX-01's base triple and two buckets, one below the clamp.
+    fn thx01_decision_json() -> Value {
+        json!({
+            "head_layers": 2,
+            "max_len": 64,
+            "head_max_len": 16,
+            "tournament_above": 24,
+            "temperature": [2.55, 3.05, 2.0],
+            "temperature_by_options": {"noul:2": 5.0, "choice:3-5": 0.1},
+        })
+    }
+
+    /// `encoder/config.json` as candle's ModernBERT configuration: the nested thetas, else the flat ones; a bias on, or
+    /// `layer_types` that disagree with `global_attn_every_n_layers`, is refused. `rl_agent_config.json`'s
+    /// temperatures: a bucket's, clamped to [0.5, 5.0], else the type's base one.
+    #[test]
+    fn thx01_reads_its_configs() {
+        let encoder = thx01::encoder_config(&thx01_encoder_json()).unwrap();
+        assert_eq!(
+            (encoder.global_rope_theta, encoder.local_rope_theta),
+            (160000.0, 10000.0)
+        );
+        assert_eq!((encoder.hidden_size, encoder.local_attention), (16, 4));
+        let mut flat = thx01_encoder_json();
+        flat.as_object_mut().unwrap().remove("rope_parameters");
+        flat["global_rope_theta"] = json!(1000.0);
+        flat["local_rope_theta"] = json!(100.0);
+        let flat = thx01::encoder_config(&flat).unwrap();
+        assert_eq!(
+            (flat.global_rope_theta, flat.local_rope_theta),
+            (1000.0, 100.0)
+        );
+        let mut biased = thx01_encoder_json();
+        biased["mlp_bias"] = json!(true);
+        let err = thx01::encoder_config(&biased).unwrap_err();
+        assert!(err.to_string().contains("mlp_bias"), "{err:#}");
+        let mut swapped = thx01_encoder_json();
+        swapped["layer_types"] = json!(["sliding_attention", "full_attention"]);
+        let err = thx01::encoder_config(&swapped).unwrap_err();
+        assert!(err.to_string().contains("layer_types[0]"), "{err:#}");
+
+        let config = thx01::Config::new(encoder, &thx01_decision_json()).unwrap();
+        assert_eq!(config.head_layers, 2);
+        let t = &config.temperatures;
+        assert_eq!(t.of(ardana_core::AnswerType::Noul, 2), 5.0);
+        assert_eq!(t.of(ardana_core::AnswerType::Choice, 3), 0.5);
+        assert_eq!(t.of(ardana_core::AnswerType::Choice, 5), 0.5);
+        assert_eq!(t.of(ardana_core::AnswerType::Choice, 11), 2.55);
+        assert_eq!(t.of(ardana_core::AnswerType::Score, 4), 3.05);
+        assert_eq!(t.of(ardana_core::AnswerType::Noul, 3), 2.0);
+
+        assert_eq!(
+            thx01::tensor("encoder.layers.0.attn.Wqkv.weight").as_deref(),
+            Some("model.layers.0.attn.Wqkv.weight")
+        );
+        assert_eq!(
+            thx01::tensor("head.layers.1.self_attn.in_proj_weight").as_deref(),
+            Some("head.layers.1.self_attn.in_proj_weight")
+        );
+        assert_eq!(
+            thx01::tensor("scorer.3.bias").as_deref(),
+            Some("scorer.3.bias")
+        );
+        assert_eq!(
+            thx01::tensor("type_emb.weight").as_deref(),
+            Some("type_emb.weight")
+        );
+        assert_eq!(thx01::tensor("act_head.0.weight"), None);
+        assert_eq!(thx01::tensor("temperature"), None);
+    }
+
+    /// A sequence of `len` tokens with markers at `markers`, of `kind`.
+    fn sequence(
+        len: usize,
+        markers: &[usize],
+        kind: ardana_core::AnswerType,
+    ) -> ardana_core::DecisionSequence {
+        ardana_core::DecisionSequence {
+            ids: (0..len).map(|i| (i * 7 + 3) as u32 % 20).collect(),
+            markers: markers.to_vec(),
+            kind,
+        }
+    }
+
+    /// R8.5, R8.6: THX-01 over random weights, saved as a checkpoint (`config.json` naming `THXDecisionModel`,
+    /// `encoder/config.json`, `rl_agent_config.json`, the tensors under the checkpoint's names with the action head
+    /// and the temperature buffer beside them): `CandleRuntime` supports the directory and loads it as a
+    /// `Loaded::Decision`; the model's tensors are F32 at `gpu_layers` 0 and at the default -1 alike; every sequence
+    /// gets one probability per marker, summing to 1, the same from the saved checkpoint as from the model in memory
+    /// and the same on a second call; the bucket temperature flattens the answer (`noul:2` at 5.0 against 0.5); an
+    /// empty sequence, a marker past the end and a sequence past the encoder's positions are errors.
+    #[test]
+    fn thx01_computes_in_f32() {
+        use ardana_core::AnswerType::{Choice, Noul};
+        use ardana_core::DecisionModel;
+
+        let decision = thx01_decision_json();
+        let config = thx01::Config::new(
+            thx01::encoder_config(&thx01_encoder_json()).unwrap(),
+            &decision,
+        )
+        .unwrap();
+        let mut varmap = candle_nn::VarMap::new();
+        let vb = VarBuilder::from_varmap(&varmap, DType::F32, &Device::Cpu);
+        let mut in_memory = thx01::Thx01::build(&config, vb).unwrap();
+        let mut weights: HashMap<String, Tensor> = {
+            let data = varmap.data().lock().unwrap();
+            data.iter()
+                .map(|(name, var)| (name.clone(), var.as_tensor().clone()))
+                .collect()
+        };
+        // A `VarMap` starts the type embedding at zero: give it values, in memory and in the file alike.
+        let type_emb = Tensor::randn(0f32, 1., (3, 16), &Device::Cpu).unwrap();
+        varmap.set_one("type_emb.weight", &type_emb).unwrap();
+        weights.insert("type_emb.weight".into(), type_emb);
+
+        let dir = scratch("candle-thx01");
+        std::fs::create_dir_all(dir.join("encoder")).unwrap();
+        std::fs::write(
+            dir.join(snapshot::CONFIG),
+            json!({"architectures": ["THXDecisionModel"], "model_type": "thx01"}).to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(ardana_core::thx01::ENCODER_CONFIG),
+            thx01_encoder_json().to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(ardana_core::thx01::DECISION_CONFIG),
+            decision.to_string(),
+        )
+        .unwrap();
+        let mut saved: HashMap<String, Tensor> = weights
+            .iter()
+            .map(|(name, tensor)| {
+                let name = match name.strip_prefix("model.") {
+                    Some(rest) => format!("encoder.{rest}"),
+                    None => name.clone(),
+                };
+                (name, tensor.clone())
+            })
+            .collect();
+        saved.insert(
+            "act_head.0.weight".into(),
+            Tensor::zeros((256, 20), DType::F32, &Device::Cpu).unwrap(),
+        );
+        saved.insert(
+            "temperature".into(),
+            Tensor::ones(3, DType::F32, &Device::Cpu).unwrap(),
+        );
+        candle_core::safetensors::save(&saved, dir.join(snapshot::SINGLE)).unwrap();
+        for (name, tensor) in &saved {
+            assert_eq!(
+                thx01::tensor(name).is_some(),
+                !name.starts_with("act_head.") && name != "temperature",
+                "{name}"
+            );
+            assert_eq!(tensor.dtype(), DType::F32);
+        }
+
+        let runtime = CandleRuntime;
+        assert!(runtime.supports(&dir));
+        let sequences = [
+            sequence(12, &[3, 6, 9], Choice),
+            sequence(9, &[2, 5], Noul),
+            sequence(12, &[3, 6, 9], Choice),
+        ];
+        let expected = in_memory.decide(&sequences).unwrap();
+        assert_eq!(expected[0], expected[2]);
+        for (probs, seq) in expected.iter().zip(&sequences) {
+            assert_eq!(probs.len(), seq.markers.len());
+            assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6, "{probs:?}");
+        }
+        for gpu_layers in [0, -1] {
+            let opts = LoadOptions {
+                gpu_layers,
+                ..LoadOptions::default()
+            };
+            let mut loaded = match runtime.load(&dir, &opts).unwrap() {
+                Loaded::Decision(model) => model,
+                Loaded::Causal(_) => panic!("THX-01 loaded as a causal model"),
+            };
+            let model = thx01::Thx01::load(&dir, &device(gpu_layers).unwrap().0).unwrap();
+            assert_eq!(model.dtype(), DType::F32);
+            assert_eq!(thx01::DTYPE, DType::F32);
+            let got = loaded.decide(&sequences).unwrap();
+            for (got, want) in got.iter().zip(&expected) {
+                assert_eq!(got.len(), want.len());
+                assert!(widest_gap_f64(got, want) < 1e-5, "{got:?} and {want:?}");
+            }
+            assert_eq!(loaded.decide(&sequences).unwrap(), got);
+        }
+
+        // The noul bucket at 5.0 flattens the answer the same weights give at 0.5.
+        let mut sharp = decision.clone();
+        sharp["temperature_by_options"]["noul:2"] = json!(0.5);
+        let sharp = thx01::Config::new(
+            thx01::encoder_config(&thx01_encoder_json()).unwrap(),
+            &sharp,
+        )
+        .unwrap();
+        let vb = VarBuilder::from_tensors(weights.clone(), DType::F32, &Device::Cpu);
+        let mut sharp = thx01::Thx01::build(&sharp, vb).unwrap();
+        let noul = &sequences[1..2];
+        let (flat, peaked) = (
+            in_memory.decide(noul).unwrap().remove(0),
+            sharp.decide(noul).unwrap().remove(0),
+        );
+        let top = |p: &[f64]| p.iter().copied().fold(0.0, f64::max);
+        assert!(top(&flat) < top(&peaked), "{flat:?} against {peaked:?}");
+        assert!(top(&peaked) > 0.5 + 1e-9, "{peaked:?}");
+
+        assert!(in_memory.decide(&[sequence(0, &[], Choice)]).is_err());
+        assert!(in_memory.decide(&[sequence(12, &[12], Choice)]).is_err());
+        assert!(in_memory.decide(&[sequence(12, &[], Choice)]).is_err());
+        assert!(in_memory.decide(&[sequence(65, &[1, 2], Choice)]).is_err());
+        assert!(in_memory.decide(&[sequence(64, &[1, 2], Choice)]).is_ok());
+    }
+
+    /// The widest gap between two probability vectors.
+    fn widest_gap_f64(a: &[f64], b: &[f64]) -> f64 {
+        a.iter()
+            .zip(b)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0f64, f64::max)
+    }
+
     /// Q11 and the one-prompt contract on the real checkpoint: the window is the smaller of the option and
     /// `max_position_embeddings`; a prompt decodes alone (the same prompt answers the same after another), and an
     /// empty prompt, a slot past the prompt, a label past the vocabulary and a prompt past the window are errors.
@@ -1575,6 +1855,10 @@ mod tests {
                     },
                 )
                 .unwrap()
+        };
+        let load = |n_ctx| match load(n_ctx) {
+            Loaded::Causal(model) => model,
+            Loaded::Decision(_) => panic!("Qwen3 loaded as a decision model"),
         };
         assert_eq!(load(100_000).n_ctx(), 40_960);
         let mut model = load(64);
