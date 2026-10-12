@@ -328,7 +328,7 @@ fn a_failed_lookup_is_an_error() -> Result<()> {
 /// R1.4: a copy the installer placed at an old version becomes the real latest release, receipt included.
 #[cfg(unix)]
 #[test]
-#[ignore = "e2e: network, GitHub Releases"]
+#[ignore = "e2e: cargo xtask e2e rust, row update"]
 fn latest_release_is_installed() -> Result<()> {
     let scratch = common::scratch("update-latest-release")?;
     let (bin, config) = (scratch.join("bin"), scratch.join("config"));
@@ -549,7 +549,7 @@ fn an_installed_version_is_no_news() -> Result<()> {
 /// R2.6: `run` prints the notice from the file after its answers, as its last stderr line; a lookup that does not
 /// answer is not waited for.
 #[test]
-#[ignore = "e2e: decider-2b Q4_K_M GGUF and files in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row decider:2b"]
 fn run_says_a_newer_release() -> Result<()> {
     let ardana = Ardana::new("update-run-newer")?;
     let receipts = own_receipt(&ardana)?;

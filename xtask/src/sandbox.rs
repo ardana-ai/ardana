@@ -46,13 +46,9 @@ const IMPECCABLE_FLAGS: &[&str] = &[
     "IMPECCABLE_NO_TELEMETRY",
 ];
 
-/// Toolchain and model-store locations that stay in the real home: `HOME`
-/// moves into `tmp/`, so these are pinned explicitly.
-const REAL_HOME_VARS: &[(&str, &str)] = &[
-    ("RUSTUP_HOME", ".rustup"),
-    ("CARGO_HOME", ".cargo"),
-    ("OLLAMA_MODELS", ".ollama/models"),
-];
+/// Toolchain locations that stay in the real home: `HOME` moves into `tmp/`,
+/// so these are pinned explicitly.
+const REAL_HOME_VARS: &[(&str, &str)] = &[("RUSTUP_HOME", ".rustup"), ("CARGO_HOME", ".cargo")];
 
 #[derive(Debug)]
 pub struct Sandbox {

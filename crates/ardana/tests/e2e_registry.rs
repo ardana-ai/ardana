@@ -1,11 +1,11 @@
 //! R4.1 to R4.3 and R4.7: `ardana pull` records `hf.co/` and `ollama:` models in `$ARDANA_HOME/models.toml` from
-//! the files `cargo xtask fetch` put into `tmp/hf` (offline) and the local Ollama store, and `ardana run <name>`
-//! answers with each of them. A safetensors checkpoint is pulled through a stand-in of the Hub and answers through
-//! Candle as its GGUF answers through llama.cpp.
+//! the files in `tmp/hf` (offline) and an Ollama store the test builds around one of those GGUFs, and
+//! `ardana run <name>` answers with each of them. A safetensors checkpoint is pulled through a stand-in of the Hub and
+//! answers through Candle as its GGUF answers through llama.cpp.
 
 mod common;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use common::{Ardana, HubStandIn, Served};
@@ -28,14 +28,16 @@ const SMOLLM3_PULL: [&str; 6] = [
     "--name",
     "smollm3:3b",
 ];
-const LLAMA32_PULL: [&str; 4] = [
+/// The model the `ollama:` tests read from an Ollama store: qwen3.5:0.8b's GGUF under a name of the store's own.
+const OLLAMA_NAME: &str = "qwen-ollama";
+const OLLAMA_GGUF: (&str, &str) = ("ggml-org/Qwen3.5-0.8B-GGUF", "Qwen3.5-0.8B-Q4_0.gguf");
+const OLLAMA_TOKENIZER: &str = "Qwen/Qwen3.5-0.8B";
+const OLLAMA_PULL: [&str; 4] = [
     "pull",
-    "ollama:llama3.2",
+    "ollama:qwen-ollama",
     "--tokenizer",
-    "hf.co/meta-llama/Llama-3.2-3B-Instruct",
+    "hf.co/Qwen/Qwen3.5-0.8B",
 ];
-/// The size of Ollama's `llama3.2:latest` model blob.
-const LLAMA32_BLOB_BYTES: u64 = 2_019_377_376;
 
 fn str_of<'a>(table: &'a toml::Table, key: &str) -> Result<&'a str> {
     table
@@ -98,16 +100,23 @@ fn check_stock_chat(entry: &toml::Table, name: &str) -> Result<()> {
     check_pulled_at(entry)
 }
 
-/// The Ollama store `ardana` reads: `$OLLAMA_MODELS`, else `~/.ollama/models`.
-fn ollama_models() -> Result<PathBuf> {
-    match std::env::var_os("OLLAMA_MODELS") {
-        Some(dir) => Ok(PathBuf::from(dir)),
-        None => Ok(PathBuf::from(std::env::var_os("HOME").context("HOME")?).join(".ollama/models")),
-    }
+/// An Ollama store beside `ardana`'s home holding `ollama:qwen-ollama` as Ollama stores a model: the manifest, and
+/// the blob it names by its sha256, here a link to qwen3.5:0.8b's GGUF in `tmp/hf` (the Hub names an LFS blob by the
+/// same digest), so no weights are copied. Returns the store and the GGUF.
+fn ollama_store(ardana: &Ardana) -> Result<(PathBuf, PathBuf)> {
+    let gguf = std::fs::canonicalize(common::hf_file(OLLAMA_GGUF.0, OLLAMA_GGUF.1)?)?;
+    let hex = gguf
+        .file_name()
+        .and_then(|name| name.to_str())
+        .context("the GGUF's blob name")?;
+    let store = ardana.home.with_file_name("ollama");
+    let blob = common::ollama_model(&store, OLLAMA_NAME, hex, std::fs::metadata(&gguf)?.len())?;
+    std::os::unix::fs::symlink(&gguf, &blob)?;
+    Ok((store, gguf))
 }
 
 #[test]
-#[ignore = "e2e: decider-2b Q4_K_M GGUF and files in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row decider:2b"]
 fn pull_decider() -> Result<()> {
     let ardana = Ardana::new("e2e-registry-pull-decider")?;
     // The endpoint is unreachable: with HF_HUB_OFFLINE=1 the pull never calls it.
@@ -171,7 +180,7 @@ fn pull_decider() -> Result<()> {
 }
 
 #[test]
-#[ignore = "e2e: Qwen3.5-0.8B and SmolLM3-3B GGUFs and tokenizers in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row library"]
 fn pull_stock() -> Result<()> {
     let ardana = Ardana::new("e2e-registry-pull-stock")?;
     ardana.ok(QWEN35_PULL)?;
@@ -204,13 +213,11 @@ fn pull_stock() -> Result<()> {
 }
 
 #[test]
-#[ignore = "e2e: Ollama llama3.2 in the local store, Llama 3.2 tokenizer in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row qwen3.5:0.8b"]
 fn pull_ollama() -> Result<()> {
-    let store = ollama_models()?;
-    let manifest = store.join("manifests/registry.ollama.ai/library/llama3.2/latest");
-    assert!(manifest.is_file(), "{} is missing", manifest.display());
     let ardana = Ardana::new("e2e-registry-pull-ollama")?;
-    let mut cmd = ardana.command(LLAMA32_PULL);
+    let (store, gguf) = ollama_store(&ardana)?;
+    let mut cmd = ardana.command(OLLAMA_PULL);
     cmd.env("OLLAMA_MODELS", &store);
     let output = cmd.output()?;
     assert!(
@@ -218,8 +225,8 @@ fn pull_ollama() -> Result<()> {
         "{cmd:?}: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let entry = ardana.entry("llama3.2")?;
-    assert_eq!(str_of(&entry, "source")?, "ollama:llama3.2");
+    let entry = ardana.entry(OLLAMA_NAME)?;
+    assert_eq!(str_of(&entry, "source")?, "ollama:qwen-ollama");
     // The blob is read in place: a sha256 blob of the store, never a copy.
     let weights = path_of(&entry, "weights")?;
     assert_eq!(weights.parent(), Some(store.join("blobs").as_path()));
@@ -228,7 +235,10 @@ fn pull_ollama() -> Result<()> {
             .file_name()
             .is_some_and(|n| n.to_string_lossy().starts_with("sha256-"))
     );
-    assert_eq!(std::fs::metadata(&weights)?.len(), LLAMA32_BLOB_BYTES);
+    assert_eq!(
+        std::fs::metadata(&weights)?.len(),
+        std::fs::metadata(&gguf)?.len()
+    );
     let copies = std::fs::read_dir(&ardana.home)?
         .filter_map(Result::ok)
         .filter(|e| e.file_name() != "models.toml")
@@ -236,33 +246,20 @@ fn pull_ollama() -> Result<()> {
     assert_eq!(copies, 0, "the home holds only models.toml");
     assert_eq!(
         path_of(&entry, "tokenizer")?,
-        common::hf_file("meta-llama/Llama-3.2-3B-Instruct", "tokenizer.json")?
+        common::hf_file(OLLAMA_TOKENIZER, "tokenizer.json")?
     );
-    check_stock_chat(&entry, "llama3.2")?;
-    // One <|begin_of_text|> (128000) opens the head (R3.3).
-    let head = profile(&entry)?["layout"]["head"]
-        .as_array()
-        .context("head")?
-        .clone();
-    assert_eq!(head.first(), Some(&Value::Integer(128_000)));
-    assert_eq!(
-        head.iter()
-            .filter(|&id| id == &Value::Integer(128_000))
-            .count(),
-        1
-    );
-    Ok(())
+    check_stock_chat(&entry, OLLAMA_NAME)
 }
 
 #[test]
-#[ignore = "e2e: decider-2b, Qwen3.5-0.8B, SmolLM3-3B in tmp/hf and Ollama llama3.2, loaded through llama.cpp"]
+#[ignore = "e2e: cargo xtask e2e rust, row library"]
 fn run_by_name() -> Result<()> {
     let ardana = Ardana::new("e2e-registry-run-by-name")?;
     ardana.ok(["pull", "hf.co/Mapika/decider-2b-GGUF:Q4_K_M"])?;
     ardana.ok(QWEN35_PULL)?;
     ardana.ok(SMOLLM3_PULL)?;
-    let mut cmd = ardana.command(LLAMA32_PULL);
-    cmd.env("OLLAMA_MODELS", ollama_models()?);
+    let mut cmd = ardana.command(OLLAMA_PULL);
+    cmd.env("OLLAMA_MODELS", ollama_store(&ardana)?.0);
     assert!(cmd.status()?.success(), "{cmd:?} failed");
     let list = ardana.ok(["list"])?;
     println!("{list}");
@@ -274,7 +271,7 @@ fn run_by_name() -> Result<()> {
     assert_eq!(metal, cpu, "the CPU run has the same argmaxes");
 
     let sentiment = common::request("sentiment.json");
-    for name in ["qwen3.5:0.8b", "smollm3:3b", "llama3.2"] {
+    for name in ["qwen3.5:0.8b", "smollm3:3b", OLLAMA_NAME] {
         let resp = ardana.run_named(name, &sentiment, &[])?;
         assert_eq!(resp["model"], name, "a stock model reports its entry name");
         common::check_sentiment(&resp).with_context(|| format!("{name}: {resp}"))?;
@@ -284,7 +281,7 @@ fn run_by_name() -> Result<()> {
 
 /// A local GGUF path: read in place, with `decider_config.json` and `tokenizer.json` from beside it.
 #[test]
-#[ignore = "e2e: decider-2b Q4_K_M GGUF and files in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row decider:2b"]
 fn pull_local() -> Result<()> {
     let ardana = Ardana::new("e2e-registry-pull-local")?;
     let weights = common::hf_file(DECIDER_2B, "decider-2b-v11-Q4_K_M.gguf")?;
@@ -334,10 +331,10 @@ const QWEN3_SHARDS: [&str; 2] = [
     "model-00002-of-00002.safetensors",
 ];
 
-/// `ardana pull hf.co/Qwen/Qwen3-1.7B --name q3-st` online, against a [`HubStandIn`] listing the repository's files,
-/// through a hub cache of the test's own (`<home>/../hub`) that holds the pinned blobs; returns the stand-in and the
-/// cache.
-fn pull_qwen3(ardana: &Ardana) -> Result<(HubStandIn, PathBuf)> {
+/// `ardana pull hf.co/Qwen/Qwen3-1.7B --name q3-st` (with `--tokenizer <tokenizer>` when given) online, against a
+/// [`HubStandIn`] listing the repository's files, through a hub cache of the test's own (`<home>/../hub`) that holds
+/// the pinned blobs; returns the stand-in and the cache.
+fn pull_qwen3(ardana: &Ardana, tokenizer: Option<&Path>) -> Result<(HubStandIn, PathBuf)> {
     let hub = HubStandIn::start(QWEN3, &QWEN3_LISTING)?;
     let cache = ardana
         .home
@@ -346,6 +343,9 @@ fn pull_qwen3(ardana: &Ardana) -> Result<(HubStandIn, PathBuf)> {
         .join("hub");
     HubStandIn::cache_with_blobs(&cache, QWEN3)?;
     let mut cmd = ardana.command(["pull", "hf.co/Qwen/Qwen3-1.7B", "--name", "q3-st"]);
+    if let Some(tokenizer) = tokenizer {
+        cmd.arg("--tokenizer").arg(tokenizer);
+    }
     cmd.env_remove("HF_HUB_OFFLINE")
         .env("HF_HUB_CACHE", &cache)
         .env("HF_ENDPOINT", &hub.endpoint);
@@ -368,10 +368,10 @@ fn pull_qwen3(ardana: &Ardana) -> Result<(HubStandIn, PathBuf)> {
 /// records runtime `candle`, the snapshot directory as its weights and the source as typed, `ardana show` prints the
 /// runtime and `ardana list` the shards' bytes as the size.
 #[test]
-#[ignore = "e2e: Qwen3-1.7B safetensors and tokenizer in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row qwen3:1.7b"]
 fn pull_safetensors() -> Result<()> {
     let ardana = Ardana::new("e2e-registry-pull-safetensors")?;
-    let (hub, cache) = pull_qwen3(&ardana)?;
+    let (hub, cache) = pull_qwen3(&ardana, None)?;
     let commit = common::hf_snapshot(QWEN3)?
         .file_name()
         .context("a commit")?
@@ -430,14 +430,37 @@ fn pull_safetensors() -> Result<()> {
     Ok(())
 }
 
+/// A pull with `--tokenizer` asks the Hub for the weights alone: the repository's own tokenizer files are never
+/// requested, and the entry records the tokenizer named.
+#[test]
+#[ignore = "e2e: cargo xtask e2e rust, row qwen3:1.7b"]
+fn pull_with_a_tokenizer_asks_for_no_other() -> Result<()> {
+    let ardana = Ardana::new("e2e-registry-pull-tokenizer")?;
+    let tokenizer = common::hf_snapshot(QWEN3)?.join("tokenizer.json");
+    let (hub, _) = pull_qwen3(&ardana, Some(&tokenizer))?;
+    assert_eq!(
+        hub.files(),
+        [
+            "config.json",
+            "model.safetensors.index.json",
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors",
+        ],
+        "{:?}",
+        hub.requests()
+    );
+    assert_eq!(path_of(&ardana.entry("q3-st")?, "tokenizer")?, tokenizer);
+    Ok(())
+}
+
 /// R1.2: Candle answers the ticket and sentiment fixtures with the top choice and the noul side the GGUF of the same
 /// model gives through llama.cpp, every probability within 0.1, through `ardana run` (also at `--gpu-layers 0`) and
 /// through `ardana serve`.
 #[test]
-#[ignore = "e2e: Qwen3-1.7B safetensors and Q8_0 GGUF in tmp/hf, loaded through Candle and llama.cpp"]
+#[ignore = "e2e: cargo xtask e2e rust, row qwen3:1.7b"]
 fn candle_answers_like_the_gguf() -> Result<()> {
     let ardana = Ardana::new("e2e-registry-candle-like-gguf")?;
-    pull_qwen3(&ardana)?;
+    pull_qwen3(&ardana, None)?;
     ardana.ok(QWEN3_GGUF_PULL)?;
     let served = Served::start(&ardana, &[], &[])?;
     for fixture in ["ticket.json", "sentiment.json"] {

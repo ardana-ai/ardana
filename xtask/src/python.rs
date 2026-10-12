@@ -19,12 +19,14 @@ pub fn uv(sandbox: &Sandbox) -> Command {
 }
 
 /// A step's own venv: created at `venv` on the uv-managed `python` unless it already runs a uv-managed interpreter,
-/// then given exactly `packages` (`<name>==<version>` pins); returns its interpreter.
+/// then given exactly `packages` (`<name>==<version>` pins) from PyPI and, when `extra_index_url` names one, that
+/// index too (PyTorch's CPU wheels); returns its interpreter.
 pub fn pinned_venv(
     sandbox: &Sandbox,
     venv: &Path,
     python: &str,
     packages: &[&str],
+    extra_index_url: Option<&str>,
 ) -> Result<PathBuf> {
     if !managed_venv(sandbox, venv) {
         run(uv(sandbox)
@@ -32,10 +34,14 @@ pub fn pinned_venv(
             .arg(venv))?;
     }
     let interpreter = venv.join("bin/python");
-    run(uv(sandbox)
+    let mut install = uv(sandbox);
+    install
         .args(["pip", "install", "--quiet", "--python"])
-        .arg(&interpreter)
-        .args(packages))?;
+        .arg(&interpreter);
+    if let Some(url) = extra_index_url {
+        install.args(["--extra-index-url", url]);
+    }
+    run(install.args(packages))?;
     Ok(interpreter)
 }
 

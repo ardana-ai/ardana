@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use ardana_api::{SystemOneRequest, SystemOneResponse, human_size};
-use ardana_core::{DecideError, Decider, Layout, Limits, LoadOptions, LoadedModel, Runtimes};
+use ardana_core::{DecideError, Decider, Layout, Limits, LoadOptions, Loaded, Runtimes};
 use ardana_registry::library::{
     DEFAULT_MODEL, LibraryClient, LibraryPick, LibrarySource, MODELS_PAGE,
 };
@@ -439,8 +439,21 @@ fn show_pulled(model: &ResolvedModel) -> String {
         ("source", model.source.clone()),
         ("size", size(model)),
         ("profile", profile.name.clone()),
-        ("layout", layout.to_string()),
     ];
+    // A decision model reads one sequence per question in its own format; the prompt layout is a causal model's.
+    match profile.decision {
+        Some(decision) => about.push((
+            "kind",
+            format!(
+                "decision (one sequence per question, up to {} tokens, up to {} options)",
+                decision.window, decision.max_options
+            ),
+        )),
+        None => about.extend([
+            ("kind", "causal".to_string()),
+            ("layout", layout.to_string()),
+        ]),
+    }
     if let Some(date) = &profile.release_date {
         about.push(("released", date.clone()));
     }
@@ -731,13 +744,14 @@ fn run_files(args: &RunArgs, request: &SystemOneRequest) -> Result<Answered> {
     })
 }
 
-/// Plans the request (refusing invalid and oversized ones before any load), loads the model and answers.
+/// Plans the request (refusing invalid and oversized ones before any load), loads the model, of either kind, and
+/// answers.
 fn decide(
     tokenizer: Tokenizer,
     profile: ardana_core::ModelProfile,
     args: &RunArgs,
     request: &SystemOneRequest,
-    load: impl FnOnce(&LoadOptions) -> Result<Box<dyn LoadedModel>>,
+    load: impl FnOnce(&LoadOptions) -> Result<Loaded>,
 ) -> Result<Answered> {
     let limits = Limits {
         context_window: Some(args.n_ctx as usize),
@@ -754,7 +768,7 @@ fn decide(
     })?;
     let load = loading.elapsed();
     let answering = Instant::now();
-    let response = decider.run(model.as_mut(), &plan).map_err(describe)?;
+    let response = decider.answer(&mut model, &plan).map_err(describe)?;
     Ok(Answered {
         response,
         load,

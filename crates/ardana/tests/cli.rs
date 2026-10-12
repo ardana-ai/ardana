@@ -4,8 +4,6 @@
 
 mod common;
 
-use std::path::Path;
-
 use anyhow::{Context, Result, ensure};
 use common::{Ardana, LibraryServer};
 
@@ -27,27 +25,6 @@ fn gguf(tensors: u64, kv: &[(&str, &str)]) -> Vec<u8> {
     out
 }
 
-/// Writes `ollama:library/<name>:latest` into the fake store `store` with `blob` as its model layer.
-fn fake_ollama_model(store: &Path, name: &str, hex: &str, blob: &[u8]) -> Result<()> {
-    let manifest_dir = store
-        .join("manifests/registry.ollama.ai/library")
-        .join(name);
-    std::fs::create_dir_all(&manifest_dir)?;
-    std::fs::create_dir_all(store.join("blobs"))?;
-    std::fs::write(store.join("blobs").join(format!("sha256-{hex}")), blob)?;
-    let manifest = serde_json::json!({
-        "schemaVersion": 2,
-        "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-        "layers": [{
-            "mediaType": "application/vnd.ollama.image.model",
-            "digest": format!("sha256:{hex}"),
-            "size": blob.len(),
-        }],
-    });
-    std::fs::write(manifest_dir.join("latest"), manifest.to_string())?;
-    Ok(())
-}
-
 /// A blob with the GGUF magic that llama.cpp refuses: loading it must fail cleanly (exit 1, no abort) with a message
 /// naming the `ollama:` ref and suggesting an `hf.co/` source.
 #[test]
@@ -66,7 +43,10 @@ fn unloadable_ollama_blob() -> Result<()> {
     ];
     for (i, (name, blob)) in blobs.iter().enumerate() {
         let hex = format!("{i:064x}");
-        fake_ollama_model(&store, name, &hex, blob)?;
+        std::fs::write(
+            common::ollama_model(&store, name, &hex, blob.len() as u64)?,
+            blob,
+        )?;
         let reference = format!("ollama:{name}");
         let mut pull = ardana.command([
             "pull",
@@ -116,7 +96,7 @@ fn rows(list: &str) -> Vec<Vec<&str>> {
 /// shows the same entry, and `show decider:2b-q8_0`, not pulled, prints that name, its file's reference and its bytes;
 /// `rm` takes a name as `list` prints it.
 #[test]
-#[ignore = "e2e: decider-2b and Qwen3.5-0.8B GGUFs and tokenizers in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row library"]
 fn list_show_rm() -> Result<()> {
     let ardana = Ardana::new("cli-list-show-rm")?;
     let empty = ardana.ok(["list"])?;
@@ -235,7 +215,7 @@ fn list_show_rm() -> Result<()> {
 /// list fails with Q12's text and pulls nothing; a size without a `decider_config.json` gets the stock profile named
 /// canonically (Q17).
 #[test]
-#[ignore = "e2e: decider-2b Q4_K_M and Qwen3.5-0.8B in tmp/hf (cargo xtask fetch), loaded through llama.cpp"]
+#[ignore = "e2e: cargo xtask e2e rust, row library"]
 fn library_names_are_spellings() -> Result<()> {
     let ardana = Ardana::new("cli-library-spellings")?;
     let library = LibraryServer::start(&common::snapshot_bytes()?)?;
@@ -363,7 +343,7 @@ fn guidance_without_a_model() -> Result<()> {
 /// `ardana run` with its questions on the command line and the state piped in, on decider:2b: each answer under its
 /// question, the answer marked, and `--json` the same answers as `q1`, `q2`, `q3` in the order asked.
 #[test]
-#[ignore = "e2e: decider-2b Q4_K_M GGUF and files in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row decider:2b"]
 fn run_inline_questions() -> Result<()> {
     let ardana = Ardana::new("cli-run-inline")?;
     ardana.ok(["pull", "decider"])?;
@@ -490,7 +470,7 @@ fn the_binary_holds_no_library() -> Result<()> {
     }
     assert!(checked >= 15, "{checked} references checked");
     let sizes = common::snapshot_names()?;
-    assert_eq!(sizes.len(), 12);
+    assert_eq!(sizes.len(), 45);
     assert_eq!(named_in(&binary, &sizes), [] as [&str; 0]);
 
     let ardana = Ardana::new("cli-binary-holds-no-library")?;

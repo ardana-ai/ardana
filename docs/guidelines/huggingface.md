@@ -4,7 +4,7 @@ Covers the Hugging Face side of Ardana: the `tokenizers` crate (`tokenizer.json`
 and in the wasm32 build of the playground's engine module (`crates/ardana-engine`), chat template rendering with
 `minijinja` and `minijinja-contrib` in `crates/ardana-core/src/chat.rs`, the `hf-hub` client and the Hub cache layout
 in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants `ardana serve` pulls), and the
-`tmp/hf` model store that `cargo xtask fetch` fills from `xtask/fetch.toml`.
+`tmp/hf` model store that `cargo xtask fetch` and the end-to-end suites fill from `xtask/fetch.toml`.
 
 ## Versions
 - `tokenizers` 0.23.2 — loads each model's HF `tokenizer.json`; the single source of prompt token ids (Q2).
@@ -27,17 +27,20 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   `HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, `HF_HOME`, `XDG_CACHE_HOME` and `HOME` is set; every variable keeps its
   precedence. The Ardana home and the Ollama store fall back to `home_dir()` the same way.
 - `HFClient` wraps an `Arc` and is `Clone + Send + Sync`: build one per process and clone it; never rebuild per file.
-- Only `cargo xtask fetch` reads the real `~/.cache/huggingface/hub`, and only for `[[hf_local]]` entries it copies
-  read-only into `tmp/hf/hub`: it resolves `snapshots/<revision>/<file>` to its blob, copies the blob into
-  `tmp/hf/hub/.../blobs/`, verifies it against its name (git blob id, or LFS sha256 for 64-hex names), links the
-  snapshot and writes `refs/main`. Ardana itself never reads or writes the user's real HF cache. The one other read
-  of the real cache is `cargo xtask onnx publish`'s, of `~/.cache/huggingface/token` (`onnx.md`).
-- `cargo xtask fetch --tests` installs only the files plain `cargo test` reads: every `[[hf]]` file (the library's
-  models, and the Candle runtime's Qwen3-1.7B checkpoint and its GGUF) but the weights (`.gguf`, `.onnx`,
-  `.onnx.data`, `.safetensors`), which needs no token, so CI runs it. Plain tests use only those models
-  (decider, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8, Qwen3-1.7B); a test that needs the gated `[[hf_local]]` Llama 3.2
-  tokenizer is a real-model test (`#[ignore = "e2e: ..."]`), like those on Ollama's `llama3.2`.
-- `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`. `cargo xtask fetch` lists
+- Nothing reads the real `~/.cache/huggingface/hub`: no xtask step copies from it, and under cargo Ardana never
+  reads or writes the user's real HF cache. The one read of the real cache directory is `cargo xtask onnx publish`'s,
+  of `~/.cache/huggingface/token` (`onnx.md`).
+- Of the Hub, `cargo xtask fetch` installs only the files plain `cargo test` reads: every `[[hf]]` file but the
+  weights (`.gguf`, `.onnx`, `.onnx.data`, `.safetensors`), which needs no token; `cargo xtask fetch --tests`
+  installs those files without the tools, so CI runs it, and `fetch --check` verifies the same files. Plain tests
+  use only them: the tokenizers, configs and chat templates of decider, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8,
+  Qwen3-1.7B and Llama 3.2.
+- The weights of an `[[hf]]` entry are in `tmp/hf` only while an end-to-end suite that names its repository runs
+  (`RUST_FIXTURES` and the weight lists in `xtask/src/e2e.rs`). `hub::with_weights` (`xtask/src/hub.rs`) lists the
+  cache, downloads the entries whole with the downloader below, runs the suite and deletes every path the cache
+  gained, whatever the suite returned: what the cache held before stays, a repository's text files included.
+- `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`, weights included: the one
+  table of commits and file lists. The downloader (`fetch::Hf::install`) lists
   the revision through `https://huggingface.co/api/models/<repo>/revision/<rev>?blobs=true`, downloads each file from
   `resolve/<rev>/<file>` with `curl` into `blobs/<LFS sha256 or git blob id>`, verifies that hash (`shasum -a 256`,
   `git hash-object`), links `snapshots/<rev>/<file>` relatively and writes `refs/main` with the pinned revision, so an
@@ -197,6 +200,13 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   has them, all at one commit, so the chat template sits next to the tokenizer in `snapshots/<commit>/`.
 - `decider_config.json` in the weights repository gives the profile (plain layout); without it the model gets
   `ModelProfile::stock` named after the entry, in the chat layout. `--tokenizer`, `--name` and `--layout` override.
+- A checkpoint with an `rl_agent_config.json` is a THX-01 decision model (`ardana_core::thx01`, `candle.md`): the
+  pull also takes `rl_agent_config.json`, `encoder/config.json`, `tokenizer/tokenizer.json` and
+  `tokenizer/tokenizer_config.json` (one the repository lacks is an error naming it), records
+  `tokenizer/tokenizer.json` as the tokenizer, since the repository has no root `tokenizer.json`, and derives the
+  profile with `ardana_core::from_rl_agent_config` (`ModelProfile::decision`); `--layout` means nothing to it. The
+  pull never writes into the snapshot: the `thx01` package rewrites `tokenizer_config.json` where it loads from, which
+  is why `cargo xtask export-thx01` downloads its own copy outside the cache (`python-tooling.md`).
 - Record snapshot paths and local paths absolute but unresolved (`std::path::absolute`, never `canonicalize`): a
   snapshot path resolves to `blobs/<hash>`, whose directory holds neither the chat template nor `decider_config.json`.
 - A missing repository answers 401 "Authentication required" without a token, like a gated one; report the `hf.co/`
@@ -211,24 +221,42 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 - The layout under `tmp/hf/hub` is the official one: `models--<org>--<repo>/` holding `blobs/<hash>` (file bodies),
   `snapshots/<commit>/<path>` (symlinks into `blobs/`) and `refs/<revision>` (a text file with the commit id, e.g.
   `refs/main`). Python tooling may also add `.no_exist/` and `trees/`; ignore them.
-- Any code that writes into the cache without `hf-hub` (the `[[hf_local]]` copy for Q18, the repositories
+- Any code that writes into the cache without `hf-hub` (xtask's downloader, the repositories
   `cargo xtask onnx convert` builds before they are published) must produce exactly this shape, including `refs/main`
   holding the snapshot commit, so a `main` lookup resolves offline. A repository that exists only locally gets a local
   commit id (`onnx.md`, "Repositories and the cache layout").
 - Treat everything in the cache as read-only once written; a changed file means a new commit, never an edit.
+- A download through `hf-hub` with a commit as its revision, which every `hub::Hub::file` is, writes no `refs/` file
+  and changes no file the cache holds: it adds blobs, the `snapshots/<commit>/` links to them and one lock file per
+  blob under `.locks/models--<org>--<repo>/`, which stays behind. The suites remove their downloads on that ground
+  (`hub::paths`, `hub::remove_added`): `cargo xtask e2e candle` lists the cache before a row and deletes every path
+  added since, also inside a repository `cargo xtask fetch` installed in part (HuggingFaceTB/SmolLM3-3B's tokenizer
+  files stay, its shards go), and `hub::with_weights` does the same around every other suite.
 
 ### Gated repositories (Q18)
-- Never download from a gated repo (meta-llama/*): the Hub requires an approved access request and an authenticated
-  token. The `meta-llama/Llama-3.2-3B-Instruct` tokenizer files come only from the user's existing HF cache via the
-  `[[hf_local]]` entry, copied read-only into `tmp/hf/hub`, and `ardana pull` resolves them with
-  `local_files_only(true)`.
+- Never depend on a gated repo (meta-llama/*): the Hub requires an approved access request and an authenticated
+  token, and nothing is copied from the user's own HF cache. Llama 3.2's tokenizer and chat template come from the
+  ungated mirror the library reads llama-3.2:3b from, unsloth/Llama-3.2-3B-Instruct at
+  `006f5dcd1393c3add266de40994ba96225e9689d`, an ordinary `[[hf]]` entry. Compared on 2026-10-12 with the gated
+  repository's two files (alpindale/Llama-3.2-3B-Instruct carries them under meta-llama's git blob ids,
+  `5cc5f00a` and `4ff488a1` at `0cb88a4f`): the mirror's `chat_template.jinja` is the `chat_template` of
+  `tokenizer_config.json` character for character, and its `tokenizer.json` is the same JSON but for the merges,
+  the same 280,147 written as pairs instead of strings.
 - Prefer ungated sources for any new target (ggml-org GGUFs, Qwen/Qwen3.5-0.8B, HuggingFaceTB/SmolLM3-3B tokenizers).
 - A stock model joins the library only after its tokenizer and chat template pass `chat::chat_layout` and
   `LabelTable::new`, and its GGUF answers the ticket and sentiment fixtures through `ardana run <name>`. Screened on
-  2026-10-03 and left out: gpt-oss (its template calls `strftime_now("%Y-%m-%d")`, a directive the formatter lacks,
-  and opens a Harmony channel the answer prefix does not follow), NVIDIA Nemotron 3.5 (its template takes the length
-  of an undefined value) and Ministral 3 (its template puts a long default system prompt with unfilled `{today}`
-  placeholders before the state).
+  2026-10-11 (every default quant of the document's 45 sizes passed both fixtures on the release binary) and left
+  out: gpt-oss (its Harmony template opens an analysis channel the answer prefix does not follow: the choices come
+  out right but the yes/no probabilities sit near 0.5), Ministral 3 and Mistral Small 3.2 (their templates put a
+  ~500-token default system prompt with unfilled `{today}` placeholders before the state, and the 3B answers the
+  refund question wrong), Ternary Bonsai (prism-ml's `PQ2_0`/`PTQ1_0` quants need their llama.cpp fork), K2-Horizon
+  (an architecture the bundled llama.cpp predates), Qwen2.5 (official GGUFs above 3B are split files, which a pull
+  reads one of) and the small System One checkpoints whose readout is their own (OpenThai-SystemOne's separate
+  decision head, Jev-Style's `Answer:` letter prompt), which load but answer near chance under the decider layout.
+  Prefer the vendor's own GGUF repository (Qwen, ggml-org, LiquidAI, openbmb, ibm-granite, nvidia, XHToken,
+  ornith-ai, alibiserikbay); bartowski and unsloth stand in where the vendor publishes none (Llama 3.x, Qwen3.5
+  sizes, Phi-4-mini, Olmo 3, Apertus), and the unsloth mirrors give the tokenizer where the vendor's repository is
+  gated (Gemma 3, Llama).
 
 ### Tokenizers
 - Depend on `tokenizers` with `default-features = false` and one regex backend per target: `ardana-core` takes
@@ -269,13 +297,19 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 - Register `raise_exception(msg)` as a function that returns a minijinja error carrying `msg`.
 - Register `strftime_now(format)` on the fixed date 2024-07-26 (`ardana_core::chat::TEMPLATE_DATE`), never the
   clock, so every head is identical every day (R3.3): Llama 3.2 renders "26 Jul 2024" (its own fallback date), and
-  SmolLM3, whose template calls `strftime_now` unguarded, renders "26 July 2024". The formatter supports `%d`, `%b`,
-  `%B`, `%Y` and `%%`; any other directive is a render error naming it, so a new template using one needs a test.
+  SmolLM3, whose template calls `strftime_now` unguarded, renders "26 July 2024", and Apertus (`%Y-%m-%d`)
+  "2024-07-26". The formatter supports `%d`, `%m`, `%b`, `%B`, `%Y` and `%%`; any other directive is a render error
+  naming it, so a new template using one needs a test.
 - Keep the default `UndefinedBehavior::Lenient` (undefined prints empty and is falsy), which matches how HF templates
-  probe optional variables.
+  probe optional variables. Two of minijinja's built-ins diverge from Jinja2 on the values templates probe and are
+  overridden in `ardana_core::chat::render`: the `iterable` test is false for `none` (minijinja iterates `none` and
+  undefined as empty; Python's `None` is not iterable, so Granite 4.2's `tools is iterable and tools | length > 0`
+  guard failed on the length of none) and the `length` filter gives 0 for an undefined value (Jinja2's `Undefined`
+  iterates as empty; minijinja refuses it, which left Nemotron 3.5's template out).
 - Render one user message holding the sentinel with `add_generation_prompt=true`, `tools` and `documents` set to
   `none` (as `apply_chat_template` passes them), `bos_token`/`eos_token` only when set (a `null` token stays
-  undefined, as in transformers' `special_tokens_map`); pass `enable_thinking=false` only when the template text
+  undefined, as in transformers' `special_tokens_map`; a token saved as an `{"__type": "AddedToken", "content": ...}`
+  object, Spark X2.5's `tokenizer_config.json`, is read by its `content` as transformers reads it); pass `enable_thinking=false` only when the template text
   mentions it (decider `ChatTemplate`).
 - transformers' `{% generation %}` .. `{% endgeneration %}` tag (SmolLM3's template) only marks assistant text and
   renders its body; minijinja has no custom tags, so `ardana_core::chat` rewrites each into `{% if true %}` ..

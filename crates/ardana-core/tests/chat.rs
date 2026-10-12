@@ -13,7 +13,9 @@ const SMOLLM3: &str = "HuggingFaceTB/SmolLM3-3B";
 const GEMMA4_E2B: &str = "google/gemma-4-E2B-it";
 const GEMMA4_12B: &str = "google/gemma-4-12B-it";
 const QWEN38: &str = "Qwen/Qwen3.8-27B";
-const LLAMA32: &str = "meta-llama/Llama-3.2-3B-Instruct";
+/// The ungated mirror the library reads llama-3.2:3b's tokenizer from: meta-llama/Llama-3.2-3B-Instruct's vocabulary
+/// and its chat template, character for character.
+const LLAMA32: &str = "unsloth/Llama-3.2-3B-Instruct";
 
 /// The chat layout of the tokenizer and template files of `repo`'s pinned snapshot.
 fn layout(repo: &str) -> Result<(Tokenizer, Vec<u32>, Vec<u32>)> {
@@ -103,7 +105,6 @@ fn qwen38_layout() -> Result<()> {
 /// Llama 3.2's template prints `bos_token` once and takes its date from `strftime_now`, which formats the fixed
 /// template date, so the head is the same on every day.
 #[test]
-#[ignore = "e2e: the gated Llama 3.2 tokenizer, copied into tmp/hf from the local Hub cache (cargo xtask fetch)"]
 fn llama32_layout() -> Result<()> {
     let (tok, head, tail) = layout(LLAMA32)?;
     let want_head = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n";

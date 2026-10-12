@@ -95,7 +95,9 @@ from memory with `memory-serve`, and serving library models' browser variants fr
 ## Inference off the async runtime
 - Never call `LoadedModel::slot_logits`, `Runtime::load` or tokenizer-heavy planning inline in a handler; they block
   for milliseconds to seconds and starve the runtime.
-- Give each loaded model one dedicated `std::thread` that owns the `Box<dyn LoadedModel>` (`Send`, needs `&mut`). Jobs
+- Give each loaded model one dedicated `std::thread` that owns its `Loaded` (a causal `Box<dyn LoadedModel>` or a
+  `Box<dyn DecisionModel>`, both `Send`, both needing `&mut`) and answers through `Decider::answer`, so the queue,
+  the admission, the eviction and the keep-alive below are one code path for both kinds. Jobs
   go in over a bounded `tokio::sync::mpsc` channel (FIFO, capacity `--max-queued-rows`) received with
   `blocking_recv`; each job carries a `tokio::sync::oneshot` sender for its `Result<SystemOneResponse, DecideError>`.
   `blocking_recv` panics inside async code, so it runs only on that worker thread. The worker runs each job under
@@ -229,11 +231,23 @@ from memory with `memory-serve`, and serving library models' browser variants fr
   and call `app.clone().oneshot(Request::builder()...body(Body::empty())?)` from `tower::ServiceExt`; read bodies
   with `axum::body::to_bytes(body, usize::MAX)`. The fake runtime (`tests/common/mod.rs`) counts loads and drops and
   can hold loads and decodes; requests are read with decider:2b's real tokenizer and profile from `tmp/hf`.
+- The same fake loads a weights file named `<name>.decision` as a decision model (`Loaded::Decision`: equal
+  probabilities for every option, each sequence it was asked recorded beside the prompt rows).
+  `common::decision_entry` is its registry entry: a profile read by `from_rl_agent_config` from THX-01's limits (a
+  1,024-token window, 24 options) and a base triple one value of which the profile clamps, over Gemma 4 E2B's real
+  tokenizer from `tmp/hf`, which names `<bos>`, `<eos>` and `<mask>` as THX-01's Gemma tokenizer does and which
+  `cargo xtask fetch` already installs (THX-01's own tokenizer is not in `xtask/fetch.toml`).
+  `common::models_with_decision` serves it after the causal entries. `tests/http.rs` holds its three tests:
+  "a_decision_model_is_served" (the `/v1/models` row, no load before the first request, the sequences of the entry's
+  own `Decider::plan` asked of the model, `/health`'s `x_loaded` and the profile's temperatures),
+  "a_decision_model_refuses_like_the_others" (an invalid question's 422 body for body as a causal entry's, the 413
+  naming the profile's window, the 422 naming its option limit, the fake's load count 0 after each) and
+  "a_decision_model_unloads" (keep-alive, and eviction both ways with a causal entry at one loaded model).
 - Assert status, headers (`Retry-After`, `Content-Type`) and the exact JSON shape of every error body, including
   that no bad-input case returns 5xx.
 - `tests/browser.rs`: `browser_routes` (plain) checks `x_browser` in `/v1/models`, the 404s and 405s of `/v1/browser`
-  and the Q13 headers on every kind of response; `browser_files` (`#[ignore]`d: it reads the ONNX repositories
-  `cargo xtask onnx convert` writes into `tmp/hf`, which CI does not fetch) checks one shared pull, the three files
+  and the Q13 headers on every kind of response; `browser_files` (`#[ignore]`d: it reads decider:0.8b's ONNX
+  repository, which the `decider:0.8b` row of `cargo xtask e2e rust` downloads into `tmp/hf` and CI does not fetch) checks one shared pull, the three files
   byte for byte, uncompressed with their length under `Accept-Encoding: br`, the `ETag`, byte ranges of the graph and
   the weights (each part byte for byte, `If-Range`, the whole file for another version or several ranges, the 416) and
   the profiles of decider:0.8b and qwen3.5:0.8b. `browser.rs`'s unit test reads every kind of `Range` and `If-Range`

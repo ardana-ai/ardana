@@ -1,6 +1,7 @@
 //! A running `ardana serve` for the end-to-end suites: the release binary serving decider:2b, pulled offline from
-//! `tmp/hf` into its own `ARDANA_HOME` under `tmp/e2e/<suite>` (or with that home empty, so the first request pulls
-//! it, over an empty Hub cache of its own when asked), on a free port of 127.0.0.1. Dropping it stops the server.
+//! `tmp/hf` (where the suite put its weights, [`crate::hub::with_weights`]) into its own `ARDANA_HOME` under
+//! `tmp/e2e/<suite>` (or with that home empty, so the first request pulls it, over an empty Hub cache of its own when
+//! asked; or on a home a suite filled itself), on a free port of 127.0.0.1. Dropping it stops the server.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -81,6 +82,13 @@ impl Server {
         Server::launch(sandbox, ardana, name, Mode::Empty { own_cache: true })
     }
 
+    /// Starts `ardana serve` on `home`, an `ARDANA_HOME` that holds the models to serve, as it is; the log is
+    /// `serve.log` beside it.
+    pub fn start_on(sandbox: &Sandbox, ardana: &Path, home: &Path) -> Result<Server> {
+        let dir = home.parent().context("the home has no parent directory")?;
+        Server::spawn(sandbox, ardana_command(sandbox, ardana, home), dir, home)
+    }
+
     fn launch(sandbox: &Sandbox, ardana: &Path, name: &str, mode: Mode) -> Result<Server> {
         let dir = sandbox.tmp().join("e2e").join(name);
         if dir.exists() {
@@ -88,36 +96,17 @@ impl Server {
         }
         let home = dir.join("home");
         std::fs::create_dir_all(&home)?;
-        let ardana_command = || {
-            let mut cmd = sandbox.command(ardana);
-            if let Some(dir) = ardana.parent() {
-                cmd.current_dir(dir);
-            }
-            cmd.env("ARDANA_HOME", &home)
-                .env("HF_HUB_OFFLINE", "1")
-                .env_remove("ARDANA_API_KEY");
-            cmd
-        };
         if let Mode::Pulled(_) = mode {
-            let pulled = ardana_command()
+            let pulled = ardana_command(sandbox, ardana, &home)
                 .args(["pull", MODEL])
                 .status()
                 .context("running ardana pull")?;
             if !pulled.success() {
-                bail!("ardana pull {MODEL} failed ({pulled}); run `cargo xtask fetch`");
+                bail!("ardana pull {MODEL} failed ({pulled})");
             }
         }
 
-        let port = std::net::TcpListener::bind("127.0.0.1:0")?
-            .local_addr()?
-            .port();
-        let log = dir.join("serve.log");
-        let out = File::create(&log)?;
-        let mut serve = ardana_command();
-        serve
-            .args(["serve", "--port", &port.to_string()])
-            .stdout(out.try_clone()?)
-            .stderr(out);
+        let mut serve = ardana_command(sandbox, ardana, &home);
         let own_cache = match mode {
             Mode::Pulled(key) => {
                 if let Some(key) = key {
@@ -132,12 +121,28 @@ impl Server {
             std::fs::create_dir_all(&cache)?;
             serve.env("HF_HOME", cache);
         }
-        let child = serve.spawn().context("starting ardana serve")?;
+        Server::spawn(sandbox, serve, &dir, &home)
+    }
+
+    /// Runs `ardana serve` with `ardana`, a command on `home`, on a free port, logging into `<dir>/serve.log`;
+    /// returns once `/health` answers.
+    fn spawn(sandbox: &Sandbox, mut ardana: Command, dir: &Path, home: &Path) -> Result<Server> {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")?
+            .local_addr()?
+            .port();
+        let log = dir.join("serve.log");
+        let out = File::create(&log)?;
+        let child = ardana
+            .args(["serve", "--port", &port.to_string()])
+            .stdout(out.try_clone()?)
+            .stderr(out)
+            .spawn()
+            .context("starting ardana serve")?;
         let mut server = Server {
             child,
             url: format!("http://127.0.0.1:{port}"),
             log,
-            home,
+            home: home.to_path_buf(),
         };
         server.wait_ready(sandbox)?;
         println!(
@@ -213,4 +218,16 @@ impl Drop for Server {
             let _ = self.child.wait();
         }
     }
+}
+
+/// `ardana` on `home` (run from the binary's own directory), reading the Hub cache alone and without an API key.
+fn ardana_command(sandbox: &Sandbox, ardana: &Path, home: &Path) -> Command {
+    let mut cmd = sandbox.command(ardana);
+    if let Some(dir) = ardana.parent() {
+        cmd.current_dir(dir);
+    }
+    cmd.env("ARDANA_HOME", home)
+        .env("HF_HUB_OFFLINE", "1")
+        .env_remove("ARDANA_API_KEY");
+    cmd
 }

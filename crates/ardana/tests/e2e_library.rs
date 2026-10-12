@@ -1,4 +1,4 @@
-//! The model library end to end, offline from the files `cargo xtask fetch` put into `tmp/hf`: `ardana pull <name>`
+//! The model library end to end, offline from the files in `tmp/hf` (`cargo xtask e2e rust`): `ardana pull <name>`
 //! recording a size under its canonical name with the file its quant names (Q14), `ardana run <name>` and `ardana
 //! serve` pulling a library model on first use (the default one for `jev-latest` and requests without a model), `serve`
 //! picking up a model `ardana pull` adds while it runs, and a pull online, against a stand-in of Hugging Face serving
@@ -45,7 +45,7 @@ fn snapshot_size(name: &str) -> Result<(Value, Value)> {
 /// R2.4: a library pull records the size under its canonical name with the file its quant names at `gguf.commit`
 /// (Q14), its tokenizer read at the tokenizer's commit and its layout the family's.
 #[test]
-#[ignore = "e2e: decider-2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B and gemma-4-E2B GGUFs and tokenizers in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row library"]
 fn pull_library_names() -> Result<()> {
     let ardana = Ardana::new("e2e-library-pull")?;
     let pull = |name: &str| {
@@ -148,7 +148,7 @@ fn pull_library_names() -> Result<()> {
 }
 
 #[test]
-#[ignore = "e2e: decider-2b Q4_K_M GGUF in tmp/hf (cargo xtask fetch), loaded through llama.cpp"]
+#[ignore = "e2e: cargo xtask e2e rust, row decider:2b"]
 fn run_pulls_a_library_model_first() -> Result<()> {
     let ardana = Ardana::new("e2e-library-run")?;
     let mut cmd = ardana.command(["run", "decider:2b", "--json", "--request"]);
@@ -208,7 +208,7 @@ fn run_pulls_a_library_model_first() -> Result<()> {
 /// pulled pulls it first, concurrent requests under every spelling of it (Q10) sharing the one pull of its canonical
 /// name, which `/health` and `ardana ps` print; the index answered the names, so no manifest was asked for.
 #[test]
-#[ignore = "e2e: decider-2b Q4_K_M GGUF in tmp/hf (cargo xtask fetch), loaded through llama.cpp"]
+#[ignore = "e2e: cargo xtask e2e rust, row decider:2b"]
 fn serve_pulls_the_default_model_on_first_use() -> Result<()> {
     let ardana = Ardana::new("e2e-library-serve")?;
     let library = LibraryServer::start(&common::snapshot_bytes()?)?;
@@ -288,7 +288,7 @@ fn serve_pulls_the_default_model_on_first_use() -> Result<()> {
 }
 
 #[test]
-#[ignore = "e2e: Qwen3.5-0.8B GGUF and tokenizer in tmp/hf (cargo xtask fetch), loaded through llama.cpp"]
+#[ignore = "e2e: cargo xtask e2e rust, row qwen3.5:0.8b"]
 fn serve_picks_up_models_pulled_while_it_runs() -> Result<()> {
     let ardana = Ardana::new("e2e-library-serve-live")?;
     let server = Served::start(&ardana, &[], &[NO_HUB])?;
@@ -454,7 +454,7 @@ fn serve(hub: &Path, mut stream: std::net::TcpStream, seen: &Mutex<Vec<String>>)
 /// `gguf.commit`, the tokenizer repository at `tokenizer.commit`, through a stand-in of the Hub (`HF_ENDPOINT`) serving
 /// `tmp/hf`, each into an empty hub cache.
 #[test]
-#[ignore = "e2e: Qwen3.5-0.8B and gemma-4-E2B GGUFs and tokenizers in tmp/hf (cargo xtask fetch), served by a stand-in of the Hub"]
+#[ignore = "e2e: cargo xtask e2e rust, row library"]
 fn pull_reads_the_pinned_commit() -> Result<()> {
     let fetched =
         PathBuf::from(std::env::var_os("HF_HOME").context("HF_HOME is not set")?).join("hub");
@@ -540,6 +540,8 @@ fn pull_reads_the_pinned_commit() -> Result<()> {
             pulled["tokenizer"].as_str().map(PathBuf::from),
             Some(snapshot(&tokenizer, tokenizer_commit).join("tokenizer.json"))
         );
+        // The pull copied the weights into this cache; they go with its checks.
+        std::fs::remove_dir_all(&cache)?;
     }
     Ok(())
 }

@@ -35,27 +35,13 @@ fn pull_local(ardana: &Ardana) -> Result<()> {
         .parent()
         .context("the home has a parent")?
         .join("ollama");
-    let manifests = store.join("manifests/registry.ollama.ai/library/local");
-    std::fs::create_dir_all(&manifests)?;
-    std::fs::create_dir_all(store.join("blobs"))?;
-    let hex = "0".repeat(64);
     let mut blob = b"GGUF".to_vec();
     blob.extend(3u32.to_le_bytes());
     blob.extend(0u64.to_le_bytes());
     blob.extend(0u64.to_le_bytes());
-    std::fs::write(store.join("blobs").join(format!("sha256-{hex}")), &blob)?;
     std::fs::write(
-        manifests.join("latest"),
-        json!({
-            "schemaVersion": 2,
-            "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-            "layers": [{
-                "mediaType": "application/vnd.ollama.image.model",
-                "digest": format!("sha256:{hex}"),
-                "size": blob.len(),
-            }],
-        })
-        .to_string(),
+        common::ollama_model(&store, "local", &"0".repeat(64), blob.len() as u64)?,
+        &blob,
     )?;
     let mut pull = ardana.command([
         "pull",
@@ -100,23 +86,7 @@ fn serve_binds_localhost_and_reads_the_key_from_the_environment() -> Result<()> 
     let listed: Value = serde_json::from_str(&body)?;
     let models = listed["models"].as_array().context("models")?;
     let names: Vec<&str> = models.iter().filter_map(|m| m["name"].as_str()).collect();
-    assert_eq!(
-        names,
-        [
-            "decider:0.8b",
-            "decider:2b",
-            "decider:4b",
-            "gemma-4:e2b",
-            "gemma-4:e4b",
-            "gemma-4:12b",
-            "gemma-4:26b-a4b",
-            "gemma-4:31b",
-            "qwen3.5:0.8b",
-            "qwen3.6:35b-a3b",
-            "qwen3.8:27b",
-            "smollm3:3b"
-        ]
-    );
+    assert_eq!(names, common::snapshot_names()?);
     assert!(models.iter().all(|m| m["x_pulled"] == false), "{body}");
     assert_eq!(models[1]["x_default"], true, "{body}");
     Ok(())

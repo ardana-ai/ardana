@@ -1,7 +1,7 @@
 //! The llama.cpp runtime behind `ardana-core`'s runtime traits.
 //!
 //! A loaded model lives on its own worker thread, which owns the `LlamaModel` and the one `LlamaContext` borrowing it
-//! (the context is `!Send`). [`LlamaModelHandle`] is the `Send` side: it sends one prompt per job over a channel and
+//! (the two cannot share a struct). [`LlamaModelHandle`] is the `Send` side: it sends one prompt per job over a channel and
 //! waits for the label logits, so no `unsafe` is needed to satisfy `LoadedModel: Send`.
 
 use std::num::NonZeroU32;
@@ -11,7 +11,7 @@ use std::sync::{Mutex, OnceLock};
 use std::thread::JoinHandle;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use ardana_core::runtime::{LoadOptions, LoadedModel, Runtime};
+use ardana_core::runtime::{LoadOptions, Loaded, LoadedModel, Runtime};
 use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
@@ -59,8 +59,10 @@ impl Runtime for LlamaRuntime {
             .is_ok_and(|()| &magic == b"GGUF")
     }
 
-    fn load(&self, weights: &Path, opts: &LoadOptions) -> Result<Box<dyn LoadedModel>> {
-        Ok(Box::new(LlamaModelHandle::load(weights, opts)?))
+    fn load(&self, weights: &Path, opts: &LoadOptions) -> Result<Loaded> {
+        Ok(Loaded::Causal(Box::new(LlamaModelHandle::load(
+            weights, opts,
+        )?)))
     }
 }
 

@@ -14,8 +14,10 @@
 //! files ([`Models::browser`]).
 //!
 //! Every model reads its requests through a [`Decider`] (tokenizer and profile, built on the first request and kept
-//! while its registry entry is unchanged), so a request is validated and sized before any weights load. Loaded weights live on one worker thread per model
-//! that decodes one request at a time from a FIFO channel. At most `max_loaded_models` hold weights at once, counting
+//! while its registry entry is unchanged), so a request is validated and sized before any weights load (a decision
+//! model's window and option limit included, `Decider::plan`). Loaded weights, of either kind ([`Loaded`]), live on
+//! one worker thread per model that answers one request at a time from a FIFO channel through `Decider::answer`. At
+//! most `max_loaded_models` hold weights at once, counting
 //! models still loading and unloaded ones still answering their queue; loading one more evicts the least recently
 //! used and waits until its weights are dropped, and a model idle for `keep_alive` is unloaded. Unloading closes the
 //! worker's channel, so the worker finishes the requests it already has before it drops the model. A load holds only
@@ -32,7 +34,7 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::{Duration, Instant, SystemTime};
 
 use ardana_api::{ModelInfo, ModelsResponse, SystemOneRequest, SystemOneResponse};
-use ardana_core::{DecideError, Decider, Limits, LoadOptions, LoadedModel, Plan, Runtimes};
+use ardana_core::{DecideError, Decider, Limits, LoadOptions, Loaded, Plan, Runtimes};
 use ardana_registry::library::{Library, LibraryClient, LibraryPick, LibrarySource, library_name};
 use ardana_registry::{
     BrowserCache, BrowserModel, Named, PullOptions, Registry, RegistryError, ResolvedModel,
@@ -879,7 +881,7 @@ struct Job {
     admission: Admission,
 }
 
-/// A loaded model: the channel to the thread that owns it.
+/// A loaded model of either kind: the channel to the thread that owns it.
 struct Worker {
     /// The registry entry it was loaded from.
     model: ResolvedModel,
@@ -895,7 +897,7 @@ impl Worker {
     fn start(
         model: &ResolvedModel,
         decider: Arc<Decider>,
-        mut weights: Box<dyn LoadedModel>,
+        mut weights: Loaded,
         residence: Residence,
         capacity: usize,
     ) -> Result<Arc<Worker>, ApiError> {
@@ -911,7 +913,7 @@ impl Worker {
                 }) = rx.blocking_recv()
                 {
                     let answer =
-                        catch_unwind(AssertUnwindSafe(|| decider.run(weights.as_mut(), &plan)));
+                        catch_unwind(AssertUnwindSafe(|| decider.answer(&mut weights, &plan)));
                     let panicked = answer.is_err();
                     let answer = answer.unwrap_or_else(|_| {
                         Err(DecideError::Runtime(anyhow::anyhow!(

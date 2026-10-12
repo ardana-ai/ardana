@@ -1,0 +1,29 @@
+# Weekly dependency updates: one pull request per ecosystem carries the minor and patch updates, a major update
+# arrives as its own. `release.yml` is generated (`tmp/bin/dist generate`), so an action bump in it goes through
+# `dist-workspace.toml` and `.github/build-setup.yml`.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: npm
+    directory: /e2e/playground
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

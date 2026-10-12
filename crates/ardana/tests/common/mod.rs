@@ -1,6 +1,7 @@
-//! Shared helpers of the `ardana` end-to-end tests: the Hub files `cargo xtask fetch` put into `tmp/hf`, the request
-//! fixtures, the library snapshot and a loopback server publishing it, `ardana` in its own home, and the R2.7 and R3.5
-//! answer checks.
+//! Shared helpers of the `ardana` end-to-end tests: the Hub files in `tmp/hf` (the text files `cargo xtask fetch`
+//! installs, and the weights `cargo xtask e2e rust` downloads for the row a test is in), the request fixtures, the
+//! library snapshot and a loopback server publishing it, an Ollama-layout store, `ardana` in its own home, and the
+//! R2.7 and R3.5 answer checks.
 #![allow(dead_code, reason = "each test file uses a different subset")]
 
 use std::ffi::OsStr;
@@ -29,7 +30,7 @@ pub fn hf_file(repo: &str, name: &str) -> Result<PathBuf> {
     let path = dir.join("snapshots").join(rev.trim()).join(name);
     ensure!(
         path.is_file(),
-        "{} is missing; run `cargo xtask fetch`",
+        "{} is missing; `cargo xtask fetch` installs a repository's text files, `cargo xtask e2e rust` its weights",
         path.display()
     );
     Ok(path)
@@ -134,6 +135,28 @@ pub fn snapshot_with(size: &str) -> Result<Vec<u8>> {
     added.as_object_mut().context("a size")?.remove("browser");
     sizes.push(added);
     Ok(serde_json::to_vec_pretty(&document)?)
+}
+
+/// Writes `ollama:<name>` (`library/<name>:latest`) into the Ollama-layout store `store`, as `ardana-registry` reads
+/// one: a manifest whose model layer is `size` bytes at `blobs/sha256-<hex>`. Returns that blob's path, for the
+/// caller to write or to link to a GGUF.
+pub fn ollama_model(store: &Path, name: &str, hex: &str, size: u64) -> Result<PathBuf> {
+    let manifests = store
+        .join("manifests/registry.ollama.ai/library")
+        .join(name);
+    std::fs::create_dir_all(&manifests)?;
+    std::fs::create_dir_all(store.join("blobs"))?;
+    let manifest = json!({
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+        "layers": [{
+            "mediaType": "application/vnd.ollama.image.model",
+            "digest": format!("sha256:{hex}"),
+            "size": size,
+        }],
+    });
+    std::fs::write(manifests.join("latest"), manifest.to_string())?;
+    Ok(store.join("blobs").join(format!("sha256-{hex}")))
 }
 
 /// `$ARDANA_TMP/<name>`, emptied: each test's own scratch directory.

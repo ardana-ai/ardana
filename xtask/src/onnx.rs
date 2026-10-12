@@ -242,7 +242,7 @@ pub fn convert(sandbox: &Sandbox, name: &str) -> Result<()> {
     let work = sandbox.tmp().join("onnx").join(&target.name);
     remove_if_present(&work)?;
     std::fs::create_dir_all(&work)?;
-    let python = pinned_venv(sandbox, &root.join(VENV), PYTHON, PACKAGES)?;
+    let python = pinned_venv(sandbox, &root.join(VENV), PYTHON, PACKAGES, None)?;
     let checkpoint = download(sandbox, &target.source)?;
     let license = license(&checkpoint)?;
     let offline = |cmd: &mut std::process::Command| {
@@ -1372,8 +1372,9 @@ mod tests {
         );
         assert_eq!(
             refused("nomodel:1b"),
-            "no library model nomodel:1b; the library's families are decider, gemma-4, qwen3.5, qwen3.6, qwen3.8, \
-             smollm3"
+            "no library model nomodel:1b; the library's families are decider, apertus, gemma-3, gemma-4, \
+             granite-4.2, jevk5, lfm2.5, ling-3.0, llama-3.1, llama-3.2, minicpm5, nemotron-3-nano, olmo-3, \
+             ornith-1.5, phi-4, qwen3, qwen3.5, qwen3.6, qwen3.8, smollm3, spark-x2.5"
         );
     }
 
@@ -1439,7 +1440,7 @@ mod tests {
     fn pins_hub_entries() {
         let fetch = "[[tool]]\nname = \"x\"\n\n[[hf]]\nrepo = \"o/a\"\nrevision = \"1\"\nfiles = [\"a\"]\n\n\
                      [[hf]]\nrepo = \"ardana-ai/b\"\nrevision = \"2\"\nfiles = [\"b\"]\n\n\
-                     [[hf_local]]\nrepo = \"o/c\"\nrevision = \"3\"\nfiles = [\"c\"]\n";
+                     [[tool]]\nname = \"y\"\n";
         let pin = |repo: &str| Hf {
             repo: repo.into(),
             revision: "9".repeat(40),
@@ -1461,8 +1462,8 @@ mod tests {
         assert_eq!(
             pin_entry(fetch, &pin("ardana-ai/new")),
             fetch.replace(
-                "\n[[hf_local]]",
-                &format!("\n{}\n[[hf_local]]", entry("ardana-ai/new"))
+                "\n[[tool]]\nname = \"y\"",
+                &format!("\n{}\n[[tool]]\nname = \"y\"", entry("ardana-ai/new"))
             )
         );
     }

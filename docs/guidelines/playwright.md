@@ -35,6 +35,9 @@ share-link decoding.
 - Run Playwright only through `cargo xtask e2e playground` (guarded) or, when iterating, `npx playwright test` in a
   shell that has evaluated `cargo xtask env`. Never from a shell with the real `HOME` caches.
 - Run end-to-end requirements against the real `ardana` server and a real model (decider:2b Q4_K_M from `tmp/hf`).
+  `cargo xtask e2e playground`, `standalone` and `design` download the weights they read (decider:2b, decider:0.8b
+  and qwen3.5:0.8b's GGUFs and the library's three browser variants, `BROWSER_WEIGHTS` in `xtask/src/e2e.rs`) into
+  `tmp/hf` before the suite and remove them after it.
   Use `page.route` / `route.fulfill` only in clearly separate unit-ish specs (e.g. a stub `422` body to exercise
   rendering) and name them so; never let a routed spec satisfy an R6.x/R7.x case.
 - Bind the server to `127.0.0.1` on an explicit port and point `use.baseURL` at `http://127.0.0.1:<port>`; tests call

@@ -3,7 +3,8 @@
 Covers the Python side of Ardana's evaluation harnesses: uv, the uv-managed Python interpreter, the jevcompat uv tool,
 the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs and `cargo xtask e2e jevcompat`,
 `e2e sdk` and `e2e jevbench` run against `ardana serve`. It also covers the decider research clone in
-`tmp/src/decider` that W2 runs to export goldens, and the `tmp/py/onnx` venv in which `cargo xtask onnx` exports the
+`tmp/src/decider` that W2 runs to export goldens, the `tmp/py/thx01-export` venv in which `cargo xtask export-thx01`
+runs the `thx01` package for the THX-01 goldens, and the `tmp/py/onnx` venv in which `cargo xtask onnx` exports the
 browser variants (its pins and recipe live in `onnx.md`). Ardana itself ships no Python; nothing here is a runtime
 dependency.
 
@@ -14,6 +15,10 @@ dependency.
 - `python` 3.10 — minimum interpreter for jevcompat and `typesafe-sdk`; a uv-managed CPython under `UV_PYTHON_INSTALL_DIR`.
 - JevBench `fd54ea7` — a source clone in `tmp/src/jevbench` (`fstandhartinger/jevbench@fd54ea7`, MIT); it declares no
   dependencies and runs on the standard library, so `tmp/py/jevbench` holds only the interpreter; R5.3.
+- `thx01` 1.0.0 — the THX-01 package (PyPI, Apache-2.0), the reference `cargo xtask export-thx01` runs for the goldens
+  of `crates/ardana-core/tests/data/thx01/`, in `tmp/py/thx01-export` on CPython 3.12 with `torch` 2.14.0+cpu (from
+  `https://download.pytorch.org/whl/cpu`; the PyPI wheel carries CUDA), `transformers` 5.17.0, `numpy` 1.26.4,
+  `safetensors` 0.8.0 and `huggingface-hub` 1.33.0; R8.2.
 
 ## Rules
 
@@ -52,6 +57,9 @@ dependency.
 - `cargo xtask e2e jevcompat` runs `jevcompat test <url> --json tmp/evals/jevcompat/<run>.json` twice, against an
   open server and against one started with `ARDANA_API_KEY` (the key reaches jevcompat through `--key-env`, never
   argv), so both conditional auth MUSTs are tested; each run must be conformant (every applicable MUST passes).
+- `cargo xtask e2e jevcompat`, `sdk` and `jevbench` serve decider:2b, whose GGUF is not in `tmp/hf` beforehand: each
+  suite downloads it at its `[[hf]]` pin, pulls it offline into its server's home and removes it from `tmp/hf` when it
+  ends (`hub::with_weights`).
 
 ### Venvs (`source = "uv-venv"`)
 - One venv per harness under `tmp/py/<name>`: `tmp/py/sdk` for `typesafe-sdk`, `tmp/py/jevbench` for JevBench's
@@ -89,11 +97,21 @@ dependency.
   `xtask/scripts/decider_layout_cases.py` against `tmp/src/decider` offline, and recreates the venv whenever
   `pyvenv.cfg` points outside `tmp/uv/python`. decider itself is imported from the clone, never installed into it.
 - A step that needs its own venv outside `fetch.toml` creates it with `python::pinned_venv` (a managed CPython, exact
-  `<name>==<version>` pins, recreated when `pyvenv.cfg` points outside `tmp/uv/python`): `export-decider`, and
+  `<name>==<version>` pins, an `--extra-index-url` when a pin lives on another index, recreated when `pyvenv.cfg`
+  points outside `tmp/uv/python`): `export-decider`, `export-thx01`, and
   `cargo xtask onnx convert`, which creates `tmp/py/onnx` on CPython 3.12, downloads checkpoints with its `hf` CLI,
   then runs `xtask/scripts/onnx_export.py` and the llama.cpp clone's `convert_hf_to_gguf.py` (with the clone's
   `gguf-py`, never installed) offline. Its `hf` sees no token in the sandbox; only `cargo xtask onnx publish` hands it
   the user's, as `HF_TOKEN`.
+- `cargo xtask export-thx01` creates `tmp/py/thx01-export` with the pins above (`torch==2.14.0+cpu` resolves on the
+  CPU index alone, so the extra index adds no ambiguity) and runs `xtask/scripts/thx01_goldens.py`, which downloads
+  the six files of `doofz/THX-01` at the commit the `thx-01` suite row pins with `huggingface_hub.snapshot_download`
+  into `tmp/thx01-export/checkpoint` (`local_dir`, not the hub cache: `thx01.Agent` rewrites
+  `tokenizer/tokenizer_config.json` in place where it loads from, and the cache is read-only, `huggingface.md`),
+  answers `tests/fixtures/requests/{ticket,sentiment,score}.json` with `Agent.system_one` on the CPU in float32 and
+  writes each answer, under the run's provenance, with the package's LICENSE; the step removes `tmp/thx01-export`
+  whether or not the script succeeded, so the 644 MB stay only while the goldens are written. Two runs write the same
+  bytes. The venv stays, like `tmp/py/decider-export`.
 
 ### Checks
 - `cargo xtask fetch --check` must fail, naming the entry, when a tool is missing from `tmp/bin`, a venv lacks its
@@ -110,5 +128,6 @@ dependency.
 - https://docs.astral.sh/uv/reference/cli/ — `uv venv --seed`, `uv pip install --python`, `uv tool install --force`
 - https://github.com/astral-sh/uv/releases/tag/0.7.3 — the pinned uv release
 - https://github.com/astral-sh/uv/releases/tag/0.8.0 — `uv python install` links executables into `~/.local/bin` by default
+- https://docs.astral.sh/uv/pip/compatibility/ — `--extra-index-url` and the index strategy a pinned `+cpu` version resolves under
 - https://pip.pypa.io/en/stable/topics/caching/ — pip's default macOS cache and `PIP_CACHE_DIR`
 - https://docs.python.org/3/library/venv.html — venvs are disposable, not relocatable, not committed; run without activation

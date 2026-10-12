@@ -1,0 +1,37 @@
+{
+ "generated_by": "xtask/scripts/thx01_goldens.py (cargo xtask export-thx01)",
+ "thx01": "1.0.0",
+ "checkpoint": "doofz/THX-01@bef2e2478be7acd79429324a658558a57552a2e8",
+ "device": "cpu",
+ "torch": "2.14.0+cpu",
+ "transformers": "5.17.0",
+ "request": "tests/fixtures/requests/ticket.json",
+ "model": "THX-01",
+ "answers": {
+  "department": {
+   "type": "choice",
+   "choice": "billing",
+   "probabilities": {
+    "billing": 0.8467,
+    "technical": 0.0176,
+    "sales": 0.1358
+   },
+   "confidence": 0.5604,
+   "action": {
+    "act_probability": 1.0
+   }
+  },
+  "refund": {
+   "type": "noul",
+   "noul": 0.9883,
+   "confidence": 0.9883,
+   "action": {
+    "act_probability": 1.0
+   }
+  }
+ },
+ "usage": {
+  "input_tokens": 89,
+  "output_tokens": 0
+ }
+}

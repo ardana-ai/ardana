@@ -1,7 +1,7 @@
 //! R2.1: the browser variants of library models behind `GET /v1/browser/<name>/<file>`, `x_browser` in `/v1/models`,
 //! and the cross-origin isolation headers (Q13) on every response; R3.4: a variant is read at the commit its library
-//! entry names. `browser_routes` needs no browser files; `browser_files` serves the real ones `cargo xtask onnx
-//! convert` builds into `tmp/hf`.
+//! entry names. `browser_routes` needs no browser files; `browser_files` serves decider:0.8b's real ones, which its
+//! row of `cargo xtask e2e rust` downloads into `tmp/hf`.
 
 mod common;
 
@@ -94,23 +94,24 @@ async fn browser_routes() -> Result<()> {
             )
         })
         .collect();
+    let mut expected = vec![
+        ("decider:2b".to_string(), Some(1_121_602_009)),
+        ("stock".to_string(), None),
+    ];
+    expected.extend(
+        common::library()?
+            .sizes()
+            .iter()
+            .filter(|pick| pick.name() != "decider:2b")
+            .map(|pick| (pick.name(), pick.size.browser.as_ref().map(|b| b.bytes))),
+    );
+    assert_eq!(expected[2], ("decider:0.8b".to_string(), Some(467_748_928)));
     assert_eq!(
-        browser,
-        [
-            ("decider:2b", Some(1_121_602_009)),
-            ("stock", None),
-            ("decider:0.8b", Some(467_748_928)),
-            ("decider:4b", None),
-            ("gemma-4:e2b", None),
-            ("gemma-4:e4b", None),
-            ("gemma-4:12b", None),
-            ("gemma-4:26b-a4b", None),
-            ("gemma-4:31b", None),
-            ("qwen3.5:0.8b", Some(904_574_185)),
-            ("qwen3.6:35b-a3b", None),
-            ("qwen3.8:27b", None),
-            ("smollm3:3b", None),
-        ]
+        browser
+            .iter()
+            .map(|b| (b.0.to_string(), b.1))
+            .collect::<Vec<_>>(),
+        expected
     );
 
     // R3.4: the cache holds a variant only at the commit the library names; a document naming one it lacks lists every
@@ -226,10 +227,10 @@ async fn browser_routes() -> Result<()> {
     Ok(())
 }
 
-/// The cache path of a file of the browser variant `repo` (`ardana-ai/<name>-ONNX`), which `cargo xtask onnx convert`
-/// writes into `tmp/hf`.
+/// The cache path of a file of the browser variant `repo` (`ardana-ai/<name>-ONNX`), which the test's row of
+/// `cargo xtask e2e rust` downloads into `tmp/hf`.
 fn browser_file(repo: &str, name: &str) -> Result<PathBuf> {
-    hf_file(repo, name).with_context(|| format!("{repo}: run `cargo xtask onnx convert` for it"))
+    hf_file(repo, name).with_context(|| format!("{repo}: `cargo xtask e2e rust` downloads it"))
 }
 
 /// Reads `body` frame by frame and checks it equals the file at `path`, never holding more than a frame.
@@ -261,7 +262,7 @@ async fn same_bytes(body: Body, path: &Path) -> Result<u64> {
 }
 
 #[tokio::test]
-#[ignore = "e2e: the browser variants `cargo xtask onnx convert` builds into tmp/hf"]
+#[ignore = "e2e: cargo xtask e2e rust, row decider:0.8b"]
 async fn browser_files() -> Result<()> {
     let repo = "ardana-ai/decider-0.8b-ONNX";
     let (_, models) = models("browser-files", &["decider:2b"], ModelOptions::default())?;

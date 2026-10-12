@@ -18,7 +18,7 @@ variants").
   `transformers` 5.18.0, `tokenizers` 0.23.2, `safetensors` 0.8.0, `huggingface-hub` 1.33.0 (its `hf` CLI downloads
   checkpoints and uploads repositories), `numpy` 2.5.3, `ml-dtypes` 0.6.0, `protobuf` 7.36.2 (`xtask/src/onnx.rs`
   `PACKAGES`).
-- llama.cpp `b11074` (`26394b4e6749a41c3633db040e0987500a5f7013`) — the release `llama-cpp-sys-2` 0.1.157 bundles, a
+- llama.cpp `b11074` (`26394b4e6749a41c3633db040e0987500a5f7013`) — the release `llama-cpp-sys-2` 0.1.159 bundles, a
   research clone in `tmp/src/llama.cpp` (`xtask/fetch.toml`) for its `convert_hf_to_gguf.py`, `conversion/` package
   and `gguf-py`, which the crate's copy lacks.
 
@@ -177,7 +177,8 @@ variants").
 - After an upload, `publish` pins `[[hf]]` (`repo`, the Hub commit `hf upload` prints, every file but `README.md` and
   `LICENSE`) in `xtask/fetch.toml`, replacing an older pin of the repository, and the same commit in the document and
   the snapshot: the browser table's `commit` for the ONNX repository, the size's `gguf.commit` for the GGUF one.
-  `cargo xtask fetch --tests` leaves out `.onnx`, `.onnx.data` and `.gguf` files, so CI downloads no weights.
+  `cargo xtask fetch` leaves out `.onnx`, `.onnx.data` and `.gguf` files, so neither it nor CI downloads weights: the
+  end-to-end suite that reads a repository downloads them and removes them again (`huggingface.md`).
 
 ## Sources
 - https://onnxruntime.ai/docs/genai/howto/build-model.html — the model builder: inputs, precisions, execution providers

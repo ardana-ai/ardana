@@ -1,8 +1,9 @@
 //! `cargo xtask fetch [--check]`: installs, or verifies, every entry of
-//! `xtask/fetch.toml` inside `tmp/`: `[[tool]]` entries, `[[hf]]` model
-//! repositories and `[[hf_local]]` copies from the user's own Hub cache.
-//! `cargo xtask fetch --tests` installs only the Hub files plain `cargo test`
-//! reads ([`fetch_tests`]).
+//! `xtask/fetch.toml` inside `tmp/`: `[[tool]]` entries and the `[[hf]]` model
+//! repositories without their weights, the Hub files plain `cargo test` reads.
+//! `cargo xtask fetch --tests` installs those Hub files alone ([`fetch_tests`]).
+//! A repository's weights come and go with the end-to-end suite that reads
+//! them ([`crate::hub::with_weights`]).
 
 use std::path::{Path, PathBuf};
 
@@ -19,9 +20,6 @@ pub struct Manifest {
     pub tool: Vec<Tool>,
     #[serde(default)]
     pub hf: Vec<Hf>,
-    /// Gated repositories (Q18): copied read-only from the real home's Hub cache.
-    #[serde(default)]
-    pub hf_local: Vec<Hf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,7 +82,7 @@ impl Manifest {
     }
 }
 
-/// Installs every entry that does not pass its check yet.
+/// Installs every tool that does not pass its check yet, then the Hub files of [`fetch_tests`].
 pub fn fetch(sandbox: &Sandbox) -> Result<()> {
     let manifest = Manifest::load(sandbox.repo_root())?;
     for tool in &manifest.tool {
@@ -96,49 +94,20 @@ pub fn fetch(sandbox: &Sandbox) -> Result<()> {
         tool.install(sandbox, &version)?;
         tool.check(sandbox, &version)?;
     }
-    for repo in &manifest.hf {
-        if repo.check(sandbox).is_ok() {
-            continue;
-        }
-        println!("fetch: downloading {}@{}", repo.repo, repo.revision);
-        repo.install(sandbox)?;
-        repo.check(sandbox)?;
-    }
-    for repo in &manifest.hf_local {
-        if repo.check(sandbox).is_ok() {
-            continue;
-        }
-        println!(
-            "fetch: copying {}@{} from {}",
-            repo.repo,
-            repo.revision,
-            repo.local_dir(sandbox).display()
-        );
-        repo.install_local(sandbox)?;
-        repo.check(sandbox)?;
-    }
-    Ok(())
+    fetch_tests(sandbox)
 }
 
-/// Installs only what plain `cargo test` reads: the files of every `[[hf]]`
-/// repository (the library's models) but the weights, GGUF and ONNX. Gated
-/// `[[hf_local]]` repositories serve only the `#[ignore]`d real-model tests and
-/// stay with `fetch`.
+/// Installs what plain `cargo test` reads: the files of every `[[hf]]`
+/// repository but its weights, GGUF, ONNX and safetensors.
 pub fn fetch_tests(sandbox: &Sandbox) -> Result<()> {
     let manifest = Manifest::load(sandbox.repo_root())?;
     for repo in &manifest.hf {
-        let repo = repo.without_weights();
-        if repo.check(sandbox).is_ok() {
-            continue;
-        }
-        println!("fetch: downloading {}@{}", repo.repo, repo.revision);
-        repo.install(sandbox)?;
-        repo.check(sandbox)?;
+        repo.without_weights().ensure(sandbox)?;
     }
     Ok(())
 }
 
-/// Fails naming every entry that is missing or differs from `fetch.toml`.
+/// Fails naming every entry that is missing or differs from `fetch.toml`: a tool, or a file [`fetch_tests`] installs.
 pub fn check(sandbox: &Sandbox) -> Result<()> {
     let manifest = Manifest::load(sandbox.repo_root())?;
     let mut missing = Vec::new();
@@ -155,13 +124,8 @@ pub fn check(sandbox: &Sandbox) -> Result<()> {
         }
     }
     for repo in &manifest.hf {
-        if let Err(err) = repo.check(sandbox) {
+        if let Err(err) = repo.without_weights().check(sandbox) {
             missing.push(format!("hf {}@{}: {err:#}", repo.repo, repo.revision));
-        }
-    }
-    for repo in &manifest.hf_local {
-        if let Err(err) = repo.check(sandbox) {
-            missing.push(format!("hf_local {}@{}: {err:#}", repo.repo, repo.revision));
         }
     }
     if !missing.is_empty() {
@@ -550,9 +514,8 @@ impl Tool {
 }
 
 /// A Hugging Face model repository pinned at a commit; `files` are downloaded
-/// (`[[hf]]`) or copied from the real home's Hub cache (`[[hf_local]]`) into
-/// `tmp/hf/hub` in the official cache layout.
-#[derive(Debug, Deserialize)]
+/// into `tmp/hf/hub` in the official cache layout.
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Hf {
     /// `org/name`.
@@ -570,7 +533,8 @@ struct HubFile {
     size: u64,
 }
 
-/// The weight files `fetch --tests` leaves out, by suffix: GGUF, an ONNX graph with its external data, and safetensors.
+/// The weight files `fetch` leaves to the suite that reads them, by suffix: GGUF, an ONNX graph with its external data,
+/// and safetensors.
 const WEIGHTS: [&str; 4] = [".gguf", ".onnx", ".onnx.data", ".safetensors"];
 
 impl Hf {
@@ -595,14 +559,6 @@ impl Hf {
     /// `tmp/hf/hub/models--<org>--<name>`.
     pub fn repo_dir(&self, sandbox: &Sandbox) -> PathBuf {
         sandbox.tmp().join("hf/hub").join(self.cache_name())
-    }
-
-    /// The repo in the real home's Hub cache, the source of `[[hf_local]]`.
-    pub fn local_dir(&self, sandbox: &Sandbox) -> PathBuf {
-        sandbox
-            .real_home()
-            .join(".cache/huggingface/hub")
-            .join(self.cache_name())
     }
 
     fn validate(&self) -> Result<()> {
@@ -646,6 +602,16 @@ impl Hf {
         Ok(())
     }
 
+    /// Installs the files unless they pass [`Hf::check`] already.
+    pub(crate) fn ensure(&self, sandbox: &Sandbox) -> Result<()> {
+        if self.check(sandbox).is_ok() {
+            return Ok(());
+        }
+        println!("fetch: downloading {}@{}", self.repo, self.revision);
+        self.install(sandbox)?;
+        self.check(sandbox)
+    }
+
     /// Downloads every file of the pinned revision into `blobs/`, verifying
     /// the LFS sha256 or the git blob id, links it from `snapshots/` and writes
     /// `refs/main`, the layout `huggingface_hub` and `hf-hub` read.
@@ -675,53 +641,6 @@ impl Hf {
                     .with_context(|| format!("verifying {file} of {}", self.repo))?;
                 std::fs::rename(&partial, &blob)?;
             }
-            link_snapshot(&snapshot, file, &meta.blob)?;
-        }
-        std::fs::create_dir_all(dir.join("refs"))?;
-        std::fs::write(dir.join("refs/main"), &self.revision)?;
-        Ok(())
-    }
-
-    /// Copies every file of the pinned snapshot from the real home's Hub
-    /// cache, reading it only: the blob named by the snapshot link is copied
-    /// into `blobs/`, verified against that name (a git blob id or an LFS
-    /// sha256), linked from `snapshots/` and `refs/main` is written.
-    fn install_local(&self, sandbox: &Sandbox) -> Result<()> {
-        self.validate()?;
-        let source = self
-            .local_dir(sandbox)
-            .join("snapshots")
-            .join(&self.revision);
-        let dir = self.repo_dir(sandbox);
-        let blobs = dir.join("blobs");
-        let snapshot = dir.join("snapshots").join(&self.revision);
-        std::fs::create_dir_all(&blobs)?;
-        for file in &self.files {
-            let link = source.join(file);
-            let resolved = std::fs::canonicalize(&link).with_context(|| {
-                format!(
-                    "{} is missing; the Hub cache of this machine must hold {}@{}",
-                    link.display(),
-                    self.repo,
-                    self.revision
-                )
-            })?;
-            let blob = resolved
-                .file_name()
-                .and_then(|name| name.to_str())
-                .with_context(|| format!("{} has no blob name", resolved.display()))?
-                .to_string();
-            let meta = HubFile {
-                lfs: blob.len() == 64,
-                size: std::fs::metadata(&resolved)?.len(),
-                blob,
-            };
-            let partial = blobs.join(format!("{}.incomplete", meta.blob));
-            std::fs::copy(&resolved, &partial)
-                .with_context(|| format!("copying {}", resolved.display()))?;
-            verify_blob(sandbox, &partial, &meta)
-                .with_context(|| format!("verifying {file} of {}", self.repo))?;
-            std::fs::rename(&partial, blobs.join(&meta.blob))?;
             link_snapshot(&snapshot, file, &meta.blob)?;
         }
         std::fs::create_dir_all(dir.join("refs"))?;
