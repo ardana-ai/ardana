@@ -43,7 +43,7 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - Current third-party pins: `anyhow` 1, `thiserror` 2 (library error enums), `indexmap` 2 with `serde` (ordered wire
   maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts) and
   `float_roundtrip` (floats parse to the exact `f64` Python's `json.loads` gives, which prompts re-render), `clap` 4
-  with `derive` (the `ardana` CLI), `sha2` 0.10 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
+  with `derive` (the `ardana` CLI), `sha2` 0.11 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
   `tokio` 1 (the `ardana` binary runs `pull` and `update` on a current-thread runtime and `serve` on a multi-thread one;
   `ardana-server` adds `sync`, `signal`, `macros`, `fs` and `io-util`; `ardana-registry` takes `rt` for its unit
   tests only, and xtask for `build-playground`: a current-thread runtime under its async Hub lookups), `reqwest`

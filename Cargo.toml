@@ -45,7 +45,7 @@ indexmap = { version = "2", features = ["serde"] }
 llama-cpp-2 = { version = "=0.1.159", default-features = false }
 minijinja = { version = "3.0.0", features = ["loop_controls"] }
 minijinja-contrib = { version = "3.0.0", features = ["pycompat"] }
-sha2 = "0.10"
+sha2 = "0.11"
 thiserror = "2"
 tokenizers = { version = "=0.23.2", default-features = false }
 js-sys = "0.3"
