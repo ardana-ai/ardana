@@ -9,6 +9,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use minijinja::syntax::SyntaxConfig;
 use minijinja::value::ValueKind;
 use minijinja::{Environment, ErrorKind, Value};
 use serde_json::Value as Json;
@@ -208,8 +209,12 @@ pub fn chat_layout(
 /// `enable_thinking=False` only when the template mentions it (decider).
 fn render(template: &str, specials: &TemplateSpecials) -> Result<String, ChatTemplateError> {
     let mut env = Environment::new();
-    env.set_trim_blocks(true);
-    env.set_lstrip_blocks(true);
+    let syntax = SyntaxConfig::builder()
+        .trim_blocks(true)
+        .lstrip_blocks(true)
+        .build()
+        .map_err(ChatTemplateError::Render)?;
+    env.set_syntax(syntax);
     env.set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
     env.add_function(
         "raise_exception",
@@ -242,7 +247,7 @@ fn render(template: &str, specials: &TemplateSpecials) -> Result<String, ChatTem
 
     let user = BTreeMap::from([("role", "user"), ("content", SENTINEL)]);
     let mut ctx = BTreeMap::from([
-        ("messages", Value::from_serialize([user])),
+        ("messages", Value::from(vec![Value::from(user)])),
         ("tools", Value::from(())),
         ("documents", Value::from(())),
         ("add_generation_prompt", Value::from(true)),

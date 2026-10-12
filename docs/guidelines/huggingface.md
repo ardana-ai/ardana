@@ -11,8 +11,8 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 - `hf-hub` 1.0.0 — async Hub client used by `ardana pull` and registry resolution; reads the standard hub cache.
 - `reqwest` 0.13.5 — the library document's GETs in `ardana-registry`, at the version hf-hub resolves with the
   features it enables (its defaults, rustls), so the lock gains no crate (Q22).
-- `minijinja` 2.24.0 — renders HF chat templates (Jinja2 syntax) to derive chat-layout head and tail ids (W3).
-- `minijinja-contrib` 2.24.0 — `pycompat` feature only, for the Python string/dict methods HF templates call.
+- `minijinja` 3.0.0 — renders HF chat templates (Jinja2 syntax) to derive chat-layout head and tail ids (W3).
+- `minijinja-contrib` 3.0.0 — `pycompat` feature only, for the Python string/dict methods HF templates call.
 
 ## Rules
 
@@ -288,8 +288,9 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   error (R3.4). A list-valued `chat_template` (named templates) is an error naming the file.
 - Read `bos_token` and `eos_token` from `tokenizer_config.json` into `TemplateSpecials`; fail clearly when a value is
   not a string instead of rendering an empty token.
-- Render with a `minijinja::Environment::new()` configured like transformers' sandbox: `set_trim_blocks(true)`,
-  `set_lstrip_blocks(true)`, the minijinja `loop_controls` feature enabled (for `{% break %}`/`{% continue %}`), and
+- Render with a `minijinja::Environment::new()` configured like transformers' sandbox: `trim_blocks(true)` and
+  `lstrip_blocks(true)` on a `SyntaxConfig::builder()` handed to `set_syntax`, the minijinja `loop_controls` feature
+  enabled (for `{% break %}`/`{% continue %}`), and
   `env.set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback)`.
 - `pycompat` supplies str `strip`, `lstrip`, `rstrip`, `startswith`, `endswith`, `split`, `replace`, `lower`,
   `upper`, `format` and more, dict `get`, `items`, `keys`, `values`, and list `count`; a template calling anything
@@ -342,7 +343,7 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 - https://huggingface.co/docs/transformers/chat_templating_writing — `chat_template.jinja` vs `tokenizer_config.json`, `raise_exception`, `strftime_now`
 - https://github.com/huggingface/transformers/blob/main/src/transformers/utils/chat_template_utils.py — trim_blocks, lstrip_blocks, loopcontrols
 - https://docs.rs/minijinja/latest/minijinja/ — crate overview and feature list (`loop_controls`, `json`)
-- https://docs.rs/minijinja/2.24.0/minijinja/struct.Environment.html — `set_unknown_method_callback`, trim/lstrip defaults, `add_function`
-- https://docs.rs/minijinja/2.24.0/minijinja/enum.UndefinedBehavior.html — Lenient default semantics
-- https://docs.rs/minijinja/2.24.0/minijinja/filters/fn.tojson.html — `json` feature, HTML-safe escaping
-- https://docs.rs/minijinja-contrib/2.24.0/minijinja_contrib/pycompat/fn.unknown_method_callback.html — pycompat registration and method list
+- https://docs.rs/minijinja/3.0.0/minijinja/struct.Environment.html — `set_unknown_method_callback`, trim/lstrip defaults, `add_function`
+- https://docs.rs/minijinja/3.0.0/minijinja/enum.UndefinedBehavior.html — Lenient default semantics
+- https://docs.rs/minijinja/3.0.0/minijinja/filters/fn.tojson.html — `json` feature, HTML-safe escaping
+- https://docs.rs/minijinja-contrib/3.0.0/minijinja_contrib/pycompat/fn.unknown_method_callback.html — pycompat registration and method list
