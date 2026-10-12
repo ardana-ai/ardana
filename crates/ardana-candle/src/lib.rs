@@ -1784,7 +1784,10 @@ mod tests {
             assert_eq!(probs.len(), seq.markers.len());
             assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6, "{probs:?}");
         }
-        for gpu_layers in [0, -1] {
+        // An Apple silicon build opens Metal at -1, which no plain test does (`gpu_layers_pick_the_device`); the
+        // precision there is the same constant.
+        let metal = cfg!(all(target_os = "macos", target_arch = "aarch64"));
+        for gpu_layers in [0, -1].into_iter().filter(|&n| n == 0 || !metal) {
             let opts = LoadOptions {
                 gpu_layers,
                 ..LoadOptions::default()

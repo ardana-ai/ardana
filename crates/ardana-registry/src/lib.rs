@@ -514,10 +514,9 @@ async fn pull_ref(
                 } else {
                     None
                 };
-                let tokenizer = if snapshot.has(TOKENIZER_FILE) {
-                    Some(hf_tokenizer(&hub, &snapshot).await?)
-                } else {
-                    None
+                let tokenizer = match (&opts.tokenizer, snapshot.has(TOKENIZER_FILE)) {
+                    (None, true) => Some(hf_tokenizer(&hub, &snapshot).await?),
+                    _ => None,
                 };
                 (config, tokenizer)
             };
