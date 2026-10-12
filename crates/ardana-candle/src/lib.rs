@@ -1845,7 +1845,7 @@ mod tests {
     /// `max_position_embeddings`; a prompt decodes alone (the same prompt answers the same after another), and an
     /// empty prompt, a slot past the prompt, a label past the vocabulary and a prompt past the window are errors.
     #[test]
-    #[ignore = "e2e: Qwen3-1.7B safetensors in tmp/hf (cargo xtask fetch), loaded through Candle"]
+    #[ignore = "e2e: cargo xtask e2e rust, row qwen3:1.7b"]
     fn qwen3_decodes_each_prompt_alone() {
         let dir = qwen3_snapshot();
         let load = |n_ctx| {

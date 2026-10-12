@@ -28,14 +28,16 @@ change them) and its Requirements are the definition of done.
 
 - `cargo xtask env` prints the sandbox environment as shell exports; `cargo xtask env --claude` writes it (all but
   `HOME`) into `.claude/settings.local.json` `env`.
-- `cargo xtask fetch` installs every `xtask/fetch.toml` entry into `tmp/` (tools, research clones in `tmp/src`
+- `cargo xtask fetch` installs the `xtask/fetch.toml` entries into `tmp/` (tools, research clones in `tmp/src`
   (decider, jevcompat, JevBench, llama.cpp b11074), the jevcompat uv tool, the `tmp/py/sdk` and `tmp/py/jevbench`
-  venvs, Hub models in `tmp/hf/hub`, `[[hf_local]]` copies of gated repos from the real `~/.cache/huggingface/hub`);
+  venvs, and of every `[[hf]]` repository the files that are no weights, in `tmp/hf/hub`);
   `cargo xtask fetch --check` verifies them. It also runs `npm ci` in `e2e/playground` (`@playwright/test`,
-  `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it before `cargo test`: plain tests read the library models' (decider:2b,
-  Qwen3.5, SmolLM3, Gemma 4, Qwen3.8) tokenizers, configs and chat templates, and Qwen3-1.7B's, from `tmp/hf`. `cargo xtask fetch --tests` installs only
-  those files (every `[[hf]]` file but the GGUF, ONNX and safetensors weights, no token), which is what CI runs; the gated Llama 3.2
-  tokenizer serves only the `#[ignore]`d real-model tests, next to Ollama's `llama3.2`.
+  `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it
+  before `cargo test`: plain tests read the library models' (decider:2b, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8,
+  Llama 3.2) tokenizers, configs and chat templates, and Qwen3-1.7B's, from `tmp/hf`. `cargo xtask fetch --tests`
+  installs only those files (every `[[hf]]` file but the GGUF, ONNX and safetensors weights, no token), which is what
+  CI runs. No fetch installs weights: `[[hf]]` pins them, and the `cargo xtask e2e` suite that reads them downloads
+  them into `tmp/hf` and removes them when it ends (`xtask/src/hub.rs`).
 - CI (`.github/workflows/ci.yml`) checks every pull request and push to `main`: `cargo fmt --check`, clippy with
   `-D warnings` and a wasm check of `ardana-api`/`ardana-playground`/`ardana-engine`, `check-deps`, `check-docs`,
   `dist generate --check` and `dist plan`, `cargo test --workspace` on Linux and macOS (after `fetch --tests`; no
@@ -91,9 +93,16 @@ change them) and its Requirements are the definition of done.
   the user's token (`HF_TOKEN`, else the real `~/.cache/huggingface/token`) and pins them in `xtask/fetch.toml`, the
   document and the snapshot; a failed upload exits non-zero and changes nothing. Both run by hand only, never in CI
   (`docs/guidelines/onnx.md`).
-- `cargo xtask e2e <suite>` runs an end-to-end suite: `smoke`, `rust` (`cargo test --workspace --
-  --include-ignored`, the real-model tests included), or one of the API suites against a release `ardana serve` on
-  decider:2b: `jevcompat` (jevcompat 0.1.0, open and with a key, every MUST must pass), `sdk` (typesafe-sdk 0.7.2
+- `cargo xtask e2e <suite>` runs an end-to-end suite, which needs no model on the machine beforehand: each downloads
+  the weights it reads into `tmp/hf` at their `[[hf]]` pins and removes every path it added under `tmp/hf/hub` when
+  it ends, also when it fails. The suites: `smoke`, `rust` (`cargo test --workspace` once, then each
+  `xtask/src/e2e.rs#RUST_FIXTURES` row in turn: `decider:2b`, `qwen3.5:0.8b`, `smollm3:3b`, `gemma-4:e2b`, `library`
+  (those four in one registry, and the `ollama:` reference on an Ollama store the test builds around qwen3.5:0.8b's
+  GGUF, no Ollama install), `qwen3:1.7b` (the Candle checkpoint and its GGUF), `decider:0.8b` (the browser variant) and `update` (the GitHub
+  Release, no weights); a row downloads its weights, runs the `#[ignore]`d tests it lists and removes the weights
+  before the next, a failed row does not stop the others, and the suite fails before any download when an
+  `#[ignore]`d test of the workspace is in no row or a row lists a test that does not exist), or one of the API
+  suites against a release `ardana serve` on decider:2b: `jevcompat` (jevcompat 0.1.0, open and with a key, every MUST must pass), `sdk` (typesafe-sdk 0.7.2
   parses `ticket.json`) and `jevbench` (231 public items, zero failed requests; output in `tmp/evals/jevbench/`); the browser suites
   `playground` (Playwright on the installed Chrome against the built binary copied alone into `tmp/`, plus the
   placeholder build; the W6 cases, then the builder, state modes, the 17 docs.typesafe.ai share links in
@@ -297,7 +306,8 @@ change them) and its Requirements are the definition of done.
 - Running Ardana by hand: under `cargo run` (and `cargo test`), `.cargo/config.toml` puts `ARDANA_HOME` in
   `tmp/ardana`, `HF_HOME` in `tmp/hf` and `ARDANA_LIBRARY` at the library snapshot, so `cargo xtask build` then
   `cargo run --release -p ardana -- serve` serves the sandbox: its playground opens on decider:0.8b's "In browser" row while nothing is pulled, and an API request
-  pulls decider:2b (from `tmp/hf` when `cargo xtask fetch` has put it there).
+  pulls decider:2b from the Hub into `tmp/hf`, where it stays until removed by hand (no xtask step keeps weights
+  there).
   The release binary run directly (`target/release/ardana serve`) uses `~/.ardana`, the standard HF cache
   (`$HF_HOME`, else `~/.cache/huggingface`) and the published library at ardana.ai, like any installed tool; do not do
   that from an agent session.
@@ -308,7 +318,9 @@ change them) and its Requirements are the definition of done.
 
 - Every download, cache, model, tool, venv, clone and temp file of builds, tests, evals and agent commands stays in
   the gitignored `tmp/` at the repo root (plus the gitignored `e2e/playground/node_modules`); `rm -rf tmp
-  e2e/playground/node_modules` fully resets. Nothing is written elsewhere under the home directory.
+  e2e/playground/node_modules` fully resets. Nothing is written elsewhere under the home directory, and no test
+  or suite reads a model from it: no Ollama store, no Hugging Face cache. Model weights are in `tmp/hf` only while
+  the suite that downloaded them runs.
 - `.cargo/config.toml` `[env]` forces `HF_HOME`, `ARDANA_HOME`, `ARDANA_TMP` and `TMPDIR` into `tmp/` for every
   cargo-run process, including tests, and points `ARDANA_LIBRARY` at the library snapshot
   (`crates/ardana-registry/tests/data/models.json`, a byte-for-byte copy of the landing's `src/lib/data/models.json`),
@@ -340,10 +352,10 @@ change them) and its Requirements are the definition of done.
 ## End-to-end verification
 
 - Every work item is verified end to end on real open models: official Hugging Face sources
-  (Mapika/decider-2b-GGUF Q4_K_M, ggml-org/Qwen3.5-0.8B-GGUF, ggml-org/SmolLM3-3B-GGUF, ggml-org/gemma-4-E2B-it-GGUF,
-  and for Candle Qwen/Qwen3-1.7B against Qwen/Qwen3-1.7B-GGUF Q8_0) or the local Ollama store
-  (`llama3.2`), fetched into `tmp/hf` by `cargo xtask fetch`; the `candle` suite pulls its own checkpoints and GGUFs
-  from the Hub and removes them. Never replace a real model with an invented fixture, never
+  (Mapika/decider-2b-GGUF Q4_K_M, ggml-org/Qwen3.5-0.8B-GGUF, ggml-org/SmolLM3-3B-GGUF, ggml-org/gemma-4-E2B-it-GGUF, and
+  for Candle Qwen/Qwen3-1.7B against Qwen/Qwen3-1.7B-GGUF Q8_0), downloaded into `tmp/hf` by the `cargo xtask e2e`
+  suite that reads them and removed when it ends; the `candle` suite pulls its own checkpoints and GGUFs from the Hub
+  through `ardana` and removes them. Never replace a real model with an invented fixture, never
   assert against a mock for an end-to-end requirement, never report a check you did not run.
 
 ## Guidelines

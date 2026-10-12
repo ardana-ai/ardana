@@ -164,7 +164,7 @@ model in your browser tab.
 Ardana is written in Rust. llama.cpp runs the models.
 
 ```shell
-cargo xtask fetch    # tools and test models, into tmp/
+cargo xtask fetch    # tools and the tokenizers the tests read, into tmp/
 cargo xtask build    # the playground, then target/release/ardana
 cargo test --workspace
 ```

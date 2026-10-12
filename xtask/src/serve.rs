@@ -1,7 +1,7 @@
 //! A running `ardana serve` for the end-to-end suites: the release binary serving decider:2b, pulled offline from
-//! `tmp/hf` into its own `ARDANA_HOME` under `tmp/e2e/<suite>` (or with that home empty, so the first request pulls
-//! it, over an empty Hub cache of its own when asked; or on a home a suite filled itself), on a free port of
-//! 127.0.0.1. Dropping it stops the server.
+//! `tmp/hf` (where the suite put its weights, [`crate::hub::with_weights`]) into its own `ARDANA_HOME` under
+//! `tmp/e2e/<suite>` (or with that home empty, so the first request pulls it, over an empty Hub cache of its own when
+//! asked; or on a home a suite filled itself), on a free port of 127.0.0.1. Dropping it stops the server.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -102,7 +102,7 @@ impl Server {
                 .status()
                 .context("running ardana pull")?;
             if !pulled.success() {
-                bail!("ardana pull {MODEL} failed ({pulled}); run `cargo xtask fetch`");
+                bail!("ardana pull {MODEL} failed ({pulled})");
             }
         }
 

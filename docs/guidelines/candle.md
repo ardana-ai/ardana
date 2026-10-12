@@ -400,10 +400,11 @@ building and readout stay in `ardana-core` and never call Candle.
   the GGUF's 0.99).
 
 ## Testing
-- `cargo test -p ardana-candle` reads only Qwen3-1.7B's `config.json` from `tmp/hf` (`cargo xtask fetch --tests`
-  installs it, leaving out `.safetensors`); the tests that load the checkpoint are `#[ignore = "e2e: ..."]` and run
-  through `cargo xtask e2e rust` against hf.co/Qwen/Qwen3-1.7B at `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e` and its
-  GGUF, hf.co/Qwen/Qwen3-1.7B-GGUF `Qwen3-1.7B-Q8_0.gguf` at `90862c4b9d2787eaed51d12237eafdfe7c5f6077` (Q8), never an
+- `cargo test -p ardana-candle` reads only Qwen3-1.7B's `config.json` from `tmp/hf` (`cargo xtask fetch` installs
+  it, leaving out `.safetensors`); the tests that load the checkpoint are `#[ignore]`d and run in the `qwen3:1.7b`
+  row of `cargo xtask e2e rust`, which downloads hf.co/Qwen/Qwen3-1.7B at
+  `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e` and its GGUF, hf.co/Qwen/Qwen3-1.7B-GGUF `Qwen3-1.7B-Q8_0.gguf` at
+  `90862c4b9d2787eaed51d12237eafdfe7c5f6077` (Q8), into `tmp/hf` and removes both after the row's tests, never an
   invented fixture.
 - THX-01 has two plain unit tests in `crates/ardana-candle/src/lib.rs`: "thx01_reads_its_configs" (`encoder_config`
   from mmBERT's shape and from the flat thetas, the two refusals, the bucket temperatures and the clamp,
@@ -435,12 +436,13 @@ building and readout stay in `ardana-core` and never call Candle.
   read with `vb.get` at zero (LFM2's convolution kernel, Gemma 3's norms, which multiply by `1 + weight`): give it
   random values before a test relies on it. The real checkpoints stay the suite's.
 - `crates/ardana/tests/e2e_registry.rs` pulls the checkpoint online from a loopback stand-in of the Hub
-  (`common::HubStandIn`) that records each file asked for, over a hub cache holding links to the fetched blobs, so the
+  (`common::HubStandIn`) that records each file asked for, over a hub cache holding links to the row's blobs, so the
   pull is checked file by file without copying weights.
 - Every other architecture is verified by `cargo xtask e2e candle` (`xtask/src/candle.rs`) on one row of
-  `xtask/src/e2e.rs#CANDLE_FIXTURES`: a checkpoint and the GGUF of the same model, each pinned to a commit. `cargo
-  xtask fetch` installs neither; the suite pulls a row from the Hub, checks it and removes its files before the next
-  (the disk does not hold them all), so these checkpoints have no `#[ignore]`d test. A row passes when the pull
+  `xtask/src/e2e.rs#CANDLE_FIXTURES`: a checkpoint and the GGUF of the same model, each pinned to a commit. `xtask/fetch.toml`
+  pins neither; the suite pulls a row from the Hub through the release `ardana`, checks it and removes its files
+  before the next (`hub::remove_added`, the removal every suite shares; the disk does not hold them all), so these
+  checkpoints have no `#[ignore]`d test. A row passes when the pull
   records runtime `candle` at the pinned commit, `ardana run --json` answers `ticket.json`, `sentiment.json` and
   `score.json` like the GGUF (the same choices and noul sides, every probability within 0.1), and one `ardana serve`
   answers the three and then the first again with identical probabilities; a `long_state` row also answers the

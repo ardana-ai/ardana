@@ -5,7 +5,6 @@
 //! checkpoint answers through `ardana run` and through one `ardana serve`. The suite ends with `cargo clean`. The
 //! disk holds neither every row's weights at once nor a row's beside a full `target/`.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -14,6 +13,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 
 use crate::e2e::{CandleFixture, Pin, read_json};
+use crate::hub;
 use crate::sandbox::{Sandbox, cargo, run, run_stdout};
 use crate::serve::{Server, build_ardana};
 
@@ -78,8 +78,8 @@ pub fn candle(sandbox: &Sandbox, fixtures: &[CandleFixture]) -> Result<()> {
 /// One row: its checks, then, whatever they found, its registry entries and every file it added to the hub cache
 /// removed.
 fn row(sandbox: &Sandbox, ardana: &Path, fixture: &CandleFixture) -> Result<()> {
-    let hub = sandbox.tmp().join("hf/hub");
-    let before = paths(&hub)?;
+    let hub = hub::dir(sandbox);
+    let before = hub::paths(&hub)?;
     let cli = Cli::new(sandbox, ardana, fixture.name)?;
     let mut pulled = Vec::new();
     let checked = match &fixture.gguf {
@@ -88,7 +88,7 @@ fn row(sandbox: &Sandbox, ardana: &Path, fixture: &CandleFixture) -> Result<()> 
     };
     let removed = cli
         .remove(&pulled)
-        .and(remove_added(&hub, &before))
+        .and(hub::remove_added(&hub, &before))
         .context("removing what the row pulled");
     match &removed {
         Ok(bytes) => println!(
@@ -628,50 +628,6 @@ fn gigabytes(bytes: u64) -> String {
     format!("{:.2} GB", bytes as f64 / 1e9)
 }
 
-/// Every path under `dir`, links not followed; none when `dir` is missing.
-fn paths(dir: &Path) -> Result<BTreeSet<PathBuf>> {
-    fn walk(dir: &Path, into: &mut BTreeSet<PathBuf>) -> Result<()> {
-        for entry in std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                walk(&entry.path(), into)?;
-            }
-            into.insert(entry.path());
-        }
-        Ok(())
-    }
-    let mut paths = BTreeSet::new();
-    if dir.is_dir() {
-        walk(dir, &mut paths)?;
-    }
-    Ok(paths)
-}
-
-/// R3.5: removes every path under `dir` that is not in `before`, so a repository the cache held in part keeps the
-/// files it had and loses the ones added since; returns the bytes of the files removed.
-fn remove_added(dir: &Path, before: &BTreeSet<PathBuf>) -> Result<u64> {
-    let mut bytes = 0;
-    if !dir.is_dir() {
-        return Ok(bytes);
-    }
-    for entry in std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        let added = !before.contains(&path);
-        if entry.file_type()?.is_dir() {
-            bytes += remove_added(&path, before)?;
-            if added {
-                std::fs::remove_dir(&path)
-                    .with_context(|| format!("removing {}", path.display()))?;
-            }
-        } else if added {
-            bytes += entry.metadata()?.len();
-            std::fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
-        }
-    }
-    Ok(bytes)
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -720,41 +676,5 @@ mod tests {
             summary(&want),
             "department billing, refund 0.8, charges 1.0"
         );
-    }
-
-    /// R3.5: what a row added goes, in a directory that is new and in one that was there, links included; what was
-    /// there stays.
-    #[test]
-    fn remove_added_keeps_what_was_there() -> Result<()> {
-        let dir = std::env::temp_dir().join(format!("candle-remove-added-{}", std::process::id()));
-        let old = dir.join("models--a--old");
-        std::fs::create_dir_all(old.join("blobs"))?;
-        std::fs::create_dir_all(old.join("snapshots/c1"))?;
-        std::fs::write(old.join("blobs/tokenizer"), "12345")?;
-        std::os::unix::fs::symlink(
-            "../../blobs/tokenizer",
-            old.join("snapshots/c1/tokenizer.json"),
-        )?;
-        let before = paths(&dir)?;
-        assert_eq!(remove_added(&dir, &before)?, 0);
-
-        std::fs::write(old.join("blobs/weights"), "1234567")?;
-        std::os::unix::fs::symlink(
-            "../../blobs/weights",
-            old.join("snapshots/c1/model.safetensors"),
-        )?;
-        let new = dir.join("models--a--new/snapshots/c2");
-        std::fs::create_dir_all(&new)?;
-        std::fs::write(new.join("model.gguf"), "123")?;
-        std::fs::create_dir_all(dir.join(".locks/models--a--new"))?;
-        let link = "../../blobs/weights".len() as u64;
-        assert_eq!(remove_added(&dir, &before)?, 7 + link + 3);
-        assert_eq!(paths(&dir)?, before);
-        assert_eq!(
-            std::fs::read_to_string(old.join("snapshots/c1/tokenizer.json"))?,
-            "12345"
-        );
-        std::fs::remove_dir_all(&dir)?;
-        Ok(())
     }
 }

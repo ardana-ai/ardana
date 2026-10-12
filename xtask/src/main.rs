@@ -8,8 +8,10 @@ use xtask::{deps, docs, e2e, env, export, fetch, onnx, playground};
 const USAGE: &str = "usage: cargo xtask <step>
   env [--claude]   print the sandbox environment as shell exports, or write it
                    into .claude/settings.local.json
-  fetch [--check]  install, or verify, the xtask/fetch.toml entries into tmp/
-  fetch --tests    install only the Hub files plain `cargo test` reads (CI)
+  fetch [--check]  install, or verify, the xtask/fetch.toml entries into tmp/:
+                   the tools, and the Hub files plain `cargo test` reads (no
+                   weights: an e2e suite downloads and removes its own)
+  fetch --tests    install only those Hub files (CI)
   build            build the playground dist with trunk, then the release ardana
   build-playground --public-url <path> [--hub <url>] [--library <url>]
                    build the standalone playground, served as static files at

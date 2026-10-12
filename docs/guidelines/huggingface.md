@@ -4,7 +4,7 @@ Covers the Hugging Face side of Ardana: the `tokenizers` crate (`tokenizer.json`
 and in the wasm32 build of the playground's engine module (`crates/ardana-engine`), chat template rendering with
 `minijinja` and `minijinja-contrib` in `crates/ardana-core/src/chat.rs`, the `hf-hub` client and the Hub cache layout
 in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants `ardana serve` pulls), and the
-`tmp/hf` model store that `cargo xtask fetch` fills from `xtask/fetch.toml`.
+`tmp/hf` model store that `cargo xtask fetch` and the end-to-end suites fill from `xtask/fetch.toml`.
 
 ## Versions
 - `tokenizers` 0.23.2 — loads each model's HF `tokenizer.json`; the single source of prompt token ids (Q2).
@@ -27,17 +27,20 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   `HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, `HF_HOME`, `XDG_CACHE_HOME` and `HOME` is set; every variable keeps its
   precedence. The Ardana home and the Ollama store fall back to `home_dir()` the same way.
 - `HFClient` wraps an `Arc` and is `Clone + Send + Sync`: build one per process and clone it; never rebuild per file.
-- Only `cargo xtask fetch` reads the real `~/.cache/huggingface/hub`, and only for `[[hf_local]]` entries it copies
-  read-only into `tmp/hf/hub`: it resolves `snapshots/<revision>/<file>` to its blob, copies the blob into
-  `tmp/hf/hub/.../blobs/`, verifies it against its name (git blob id, or LFS sha256 for 64-hex names), links the
-  snapshot and writes `refs/main`. Ardana itself never reads or writes the user's real HF cache. The one other read
-  of the real cache is `cargo xtask onnx publish`'s, of `~/.cache/huggingface/token` (`onnx.md`).
-- `cargo xtask fetch --tests` installs only the files plain `cargo test` reads: every `[[hf]]` file (the library's
-  models, and the Candle runtime's Qwen3-1.7B checkpoint and its GGUF) but the weights (`.gguf`, `.onnx`,
-  `.onnx.data`, `.safetensors`), which needs no token, so CI runs it. Plain tests use only those models
-  (decider, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8, Qwen3-1.7B); a test that needs the gated `[[hf_local]]` Llama 3.2
-  tokenizer is a real-model test (`#[ignore = "e2e: ..."]`), like those on Ollama's `llama3.2`.
-- `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`. `cargo xtask fetch` lists
+- Nothing reads the real `~/.cache/huggingface/hub`: no xtask step copies from it, and under cargo Ardana never
+  reads or writes the user's real HF cache. The one read of the real cache directory is `cargo xtask onnx publish`'s,
+  of `~/.cache/huggingface/token` (`onnx.md`).
+- Of the Hub, `cargo xtask fetch` installs only the files plain `cargo test` reads: every `[[hf]]` file but the
+  weights (`.gguf`, `.onnx`, `.onnx.data`, `.safetensors`), which needs no token; `cargo xtask fetch --tests`
+  installs those files without the tools, so CI runs it, and `fetch --check` verifies the same files. Plain tests
+  use only them: the tokenizers, configs and chat templates of decider, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8,
+  Qwen3-1.7B and Llama 3.2.
+- The weights of an `[[hf]]` entry are in `tmp/hf` only while an end-to-end suite that names its repository runs
+  (`RUST_FIXTURES` and the weight lists in `xtask/src/e2e.rs`). `hub::with_weights` (`xtask/src/hub.rs`) lists the
+  cache, downloads the entries whole with the downloader below, runs the suite and deletes every path the cache
+  gained, whatever the suite returned: what the cache held before stays, a repository's text files included.
+- `[[hf]]` entries in `xtask/fetch.toml` pin `repo`, a full commit `revision` and `files`, weights included: the one
+  table of commits and file lists. The downloader (`fetch::Hf::install`) lists
   the revision through `https://huggingface.co/api/models/<repo>/revision/<rev>?blobs=true`, downloads each file from
   `resolve/<rev>/<file>` with `curl` into `blobs/<LFS sha256 or git blob id>`, verifies that hash (`shasum -a 256`,
   `git hash-object`), links `snapshots/<rev>/<file>` relatively and writes `refs/main` with the pinned revision, so an
@@ -218,22 +221,27 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 - The layout under `tmp/hf/hub` is the official one: `models--<org>--<repo>/` holding `blobs/<hash>` (file bodies),
   `snapshots/<commit>/<path>` (symlinks into `blobs/`) and `refs/<revision>` (a text file with the commit id, e.g.
   `refs/main`). Python tooling may also add `.no_exist/` and `trees/`; ignore them.
-- Any code that writes into the cache without `hf-hub` (the `[[hf_local]]` copy for Q18, the repositories
+- Any code that writes into the cache without `hf-hub` (xtask's downloader, the repositories
   `cargo xtask onnx convert` builds before they are published) must produce exactly this shape, including `refs/main`
   holding the snapshot commit, so a `main` lookup resolves offline. A repository that exists only locally gets a local
   commit id (`onnx.md`, "Repositories and the cache layout").
 - Treat everything in the cache as read-only once written; a changed file means a new commit, never an edit.
 - A download through `hf-hub` with a commit as its revision, which every `hub::Hub::file` is, writes no `refs/` file
   and changes no file the cache holds: it adds blobs, the `snapshots/<commit>/` links to them and one lock file per
-  blob under `.locks/models--<org>--<repo>/`, which stays behind. `cargo xtask e2e candle` removes a row's downloads
-  on that ground: it lists the cache before the row and deletes every path added since, also inside a repository
-  `cargo xtask fetch` installed in part (HuggingFaceTB/SmolLM3-3B's tokenizer files stay, its shards go).
+  blob under `.locks/models--<org>--<repo>/`, which stays behind. The suites remove their downloads on that ground
+  (`hub::paths`, `hub::remove_added`): `cargo xtask e2e candle` lists the cache before a row and deletes every path
+  added since, also inside a repository `cargo xtask fetch` installed in part (HuggingFaceTB/SmolLM3-3B's tokenizer
+  files stay, its shards go), and `hub::with_weights` does the same around every other suite.
 
 ### Gated repositories (Q18)
-- Never download from a gated repo (meta-llama/*): the Hub requires an approved access request and an authenticated
-  token. The `meta-llama/Llama-3.2-3B-Instruct` tokenizer files come only from the user's existing HF cache via the
-  `[[hf_local]]` entry, copied read-only into `tmp/hf/hub`, and `ardana pull` resolves them with
-  `local_files_only(true)`.
+- Never depend on a gated repo (meta-llama/*): the Hub requires an approved access request and an authenticated
+  token, and nothing is copied from the user's own HF cache. Llama 3.2's tokenizer and chat template come from the
+  ungated mirror the library reads llama-3.2:3b from, unsloth/Llama-3.2-3B-Instruct at
+  `006f5dcd1393c3add266de40994ba96225e9689d`, an ordinary `[[hf]]` entry. Compared on 2026-10-12 with the gated
+  repository's two files (alpindale/Llama-3.2-3B-Instruct carries them under meta-llama's git blob ids,
+  `5cc5f00a` and `4ff488a1` at `0cb88a4f`): the mirror's `chat_template.jinja` is the `chat_template` of
+  `tokenizer_config.json` character for character, and its `tokenizer.json` is the same JSON but for the merges,
+  the same 280,147 written as pairs instead of strings.
 - Prefer ungated sources for any new target (ggml-org GGUFs, Qwen/Qwen3.5-0.8B, HuggingFaceTB/SmolLM3-3B tokenizers).
 - A stock model joins the library only after its tokenizer and chat template pass `chat::chat_layout` and
   `LabelTable::new`, and its GGUF answers the ticket and sentiment fixtures through `ardana run <name>`. Screened on

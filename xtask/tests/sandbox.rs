@@ -89,10 +89,8 @@ fn env_points_into_tmp() {
     }
     assert_eq!(env["RUSTUP_HOME"], home.join(".rustup").into_os_string());
     assert_eq!(env["CARGO_HOME"], home.join(".cargo").into_os_string());
-    assert_eq!(
-        env["OLLAMA_MODELS"],
-        home.join(".ollama/models").into_os_string()
-    );
+    // No Ollama store is named: a test of the `ollama:` reference builds its own.
+    assert!(!env.contains_key("OLLAMA_MODELS"));
 
     let cmd = sandbox.command("true");
     let path = cmd

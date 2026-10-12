@@ -9,6 +9,7 @@ pub mod env;
 pub mod export;
 pub mod fetch;
 mod guard;
+pub mod hub;
 pub mod onnx;
 pub mod playground;
 pub mod python;

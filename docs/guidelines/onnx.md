@@ -177,7 +177,8 @@ variants").
 - After an upload, `publish` pins `[[hf]]` (`repo`, the Hub commit `hf upload` prints, every file but `README.md` and
   `LICENSE`) in `xtask/fetch.toml`, replacing an older pin of the repository, and the same commit in the document and
   the snapshot: the browser table's `commit` for the ONNX repository, the size's `gguf.commit` for the GGUF one.
-  `cargo xtask fetch --tests` leaves out `.onnx`, `.onnx.data` and `.gguf` files, so CI downloads no weights.
+  `cargo xtask fetch` leaves out `.onnx`, `.onnx.data` and `.gguf` files, so neither it nor CI downloads weights: the
+  end-to-end suite that reads a repository downloads them and removes them again (`huggingface.md`).
 
 ## Sources
 - https://onnxruntime.ai/docs/genai/howto/build-model.html — the model builder: inputs, precisions, execution providers

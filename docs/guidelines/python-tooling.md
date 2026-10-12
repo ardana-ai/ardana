@@ -57,6 +57,9 @@ dependency.
 - `cargo xtask e2e jevcompat` runs `jevcompat test <url> --json tmp/evals/jevcompat/<run>.json` twice, against an
   open server and against one started with `ARDANA_API_KEY` (the key reaches jevcompat through `--key-env`, never
   argv), so both conditional auth MUSTs are tested; each run must be conformant (every applicable MUST passes).
+- `cargo xtask e2e jevcompat`, `sdk` and `jevbench` serve decider:2b, whose GGUF is not in `tmp/hf` beforehand: each
+  suite downloads it at its `[[hf]]` pin, pulls it offline into its server's home and removes it from `tmp/hf` when it
+  ends (`hub::with_weights`).
 
 ### Venvs (`source = "uv-venv"`)
 - One venv per harness under `tmp/py/<name>`: `tmp/py/sdk` for `typesafe-sdk`, `tmp/py/jevbench` for JevBench's

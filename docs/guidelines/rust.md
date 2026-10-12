@@ -134,14 +134,29 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   (`crates/ardana/src/help.rs`, checked by a unit test), readable output by default with `--json` for the exact
   data, figures through `ardana_api::format`, and errors that end with the command to type next. Every `serve` flag
   also reads an `ARDANA_<FLAG>` variable, its value hidden in `--help`.
-- Mark every test that needs a real model, network, the Ollama store or more than a few seconds with
-  `#[ignore = "e2e: <what it needs>"]`. Plain `cargo test` stays fast and offline; `cargo xtask e2e rust` runs
-  `cargo test --workspace -- --include-ignored` under the home guard. The one plain test above that is `update.rs`
+- Mark every test that needs a real model's weights, the network or more than a few seconds with
+  `#[ignore = "e2e: cargo xtask e2e rust, row <row>"]` and list it in that row of `RUST_FIXTURES`
+  (`xtask/src/e2e.rs`). Plain `cargo test` stays fast and offline. The one plain test above that is `update.rs`
   "a_failed_lookup_is_an_error", which waits out the two 10 s request timeouts of a GitHub that never answers.
-- End-to-end tests use the official models from `xtask/fetch.toml` (decider:2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B, Gemma 4 E2B,
-  Ollama `llama3.2`), resolved from `tmp/hf`; never replace a real model with an invented fixture. The checkpoints of
-  `cargo xtask e2e candle` are too large to keep there: that suite pulls each from the Hub, checks it against the
-  commit its row pins and removes it again (`candle.md`, "Testing").
+- `cargo xtask e2e rust` is self-contained: under the home guard it runs `cargo test --workspace` once, then each row
+  of `RUST_FIXTURES` in turn. A row names the `[[hf]]` repositories of `xtask/fetch.toml` whose weights its tests
+  read (one model under its ardana name, `decider:2b`; several for the tests that need them together, `library`;
+  none for `update`, the GitHub Release test) and the tests, as libtest names them. `hub::with_weights`
+  (`xtask/src/hub.rs`) downloads the weights into `tmp/hf` at their pins, the row runs
+  `cargo test --workspace --tests --no-fail-fast -- --ignored --exact <tests>`, and every path the row added under
+  `tmp/hf/hub` is removed, also when a test fails; a failed row does not stop the others, and the suite fails naming
+  it. Before anything is downloaded the suite fails naming an `#[ignore]`d test no row lists, a row entry no test
+  matches and a name two rows or two tests share (`e2e::drift`), so an `#[ignore]`d test's name is unique in the
+  workspace and a new one joins a row in the same change.
+- End-to-end tests use the official models `xtask/fetch.toml` pins (decider:2b Q4_K_M, Qwen3.5-0.8B, SmolLM3-3B,
+  Gemma 4 E2B, Qwen3-1.7B), resolved from `tmp/hf`, which holds their weights only while the suite that
+  reads them runs: `cargo xtask fetch` installs none, and no test depends on what the machine happens to hold (an
+  Ollama install, a file of the real home). A test of the `ollama:` reference builds an Ollama store in its scratch
+  directory (`common::ollama_model` writes the manifest; the blob it names is a link to a GGUF of the test's row,
+  `e2e_registry.rs`) and names it in `OLLAMA_MODELS`. Never replace a real model with an invented fixture. A test
+  that copies weights out of `tmp/hf` (a pull through a stand-in of the Hub into a cache of its own) removes the copy
+  after its checks. `cargo xtask e2e candle` pulls each of its checkpoints from the Hub through `ardana` itself, checks
+  it against the commit its row pins and removes it again (`candle.md`, "Testing").
 - Put test temp files under `$ARDANA_TMP` (or `std::env::temp_dir()`, which `[env]` points at `tmp/sys`); never under
   the real home. Tests that run `ardana pull` give each child its own `ARDANA_HOME` under `$ARDANA_TMP/<test>` (tests
   run in parallel) and `HF_HUB_OFFLINE=1`, so they read `tmp/hf` and never the network; the library comes from the
@@ -155,8 +170,8 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - A test of `ardana update` or the daily check gives its child a receipt directory of its own in
   `AXOUPDATER_CONFIG_PATH` (the receipt naming the directory of `CARGO_BIN_EXE_ardana` as `install_prefix`) and a
   loopback stand-in of GitHub's API in `ARDANA_INSTALLER_GHE_BASE_URL`, which records every request
-  (`crates/ardana/tests/update.rs`); the real download and install is `#[ignore = "e2e: network, GitHub Releases"]`
-  and installs into `$ARDANA_TMP`. No other test's `ardana` has a receipt for it (a developer's own install receipt
+  (`crates/ardana/tests/update.rs`); the real download and install is the `#[ignore]`d test of the rust suite's
+  `update` row and installs into `$ARDANA_TMP`. No other test's `ardana` has a receipt for it (a developer's own install receipt
   names another directory), so it checks nothing.
 - Prefer tests returning `anyhow::Result<()>` with `?` over chains of `unwrap()`.
 - Vendored goldens live under `crates/<crate>/tests/data/` with their upstream license notice. The decider goldens in
@@ -184,8 +199,7 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   (`cargo xtask fetch --tests`, then `cargo test --workspace --locked`), a Windows build
   (`cargo build --workspace --exclude xtask`, as xtask is Unix only) and the playground build the release runs
   (`cargo install trunk --version 0.21.14 --locked`, `trunk build --release`).
-- The `#[ignore]`d real-model tests and the `cargo xtask e2e` suites stay local: they need the GGUF weights and the
-  Ollama store.
+- The `#[ignore]`d real-model tests and the `cargo xtask e2e` suites stay local: they download gigabytes of weights.
 - Follow the common Rust CI practice (ruff, uv, bevy): `permissions: contents: read`, `CARGO_INCREMENTAL=0`, superseded
   pull-request runs cancelled, `actions/checkout` with `persist-credentials: false`, every action pinned to a commit
   SHA with its version in a comment, and `Swatinem/rust-cache` saving only from `main`

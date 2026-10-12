@@ -1440,7 +1440,7 @@ mod tests {
     fn pins_hub_entries() {
         let fetch = "[[tool]]\nname = \"x\"\n\n[[hf]]\nrepo = \"o/a\"\nrevision = \"1\"\nfiles = [\"a\"]\n\n\
                      [[hf]]\nrepo = \"ardana-ai/b\"\nrevision = \"2\"\nfiles = [\"b\"]\n\n\
-                     [[hf_local]]\nrepo = \"o/c\"\nrevision = \"3\"\nfiles = [\"c\"]\n";
+                     [[tool]]\nname = \"y\"\n";
         let pin = |repo: &str| Hf {
             repo: repo.into(),
             revision: "9".repeat(40),
@@ -1462,8 +1462,8 @@ mod tests {
         assert_eq!(
             pin_entry(fetch, &pin("ardana-ai/new")),
             fetch.replace(
-                "\n[[hf_local]]",
-                &format!("\n{}\n[[hf_local]]", entry("ardana-ai/new"))
+                "\n[[tool]]\nname = \"y\"",
+                &format!("\n{}\n[[tool]]\nname = \"y\"", entry("ardana-ai/new"))
             )
         );
     }

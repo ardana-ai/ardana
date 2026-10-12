@@ -35,27 +35,13 @@ fn pull_local(ardana: &Ardana) -> Result<()> {
         .parent()
         .context("the home has a parent")?
         .join("ollama");
-    let manifests = store.join("manifests/registry.ollama.ai/library/local");
-    std::fs::create_dir_all(&manifests)?;
-    std::fs::create_dir_all(store.join("blobs"))?;
-    let hex = "0".repeat(64);
     let mut blob = b"GGUF".to_vec();
     blob.extend(3u32.to_le_bytes());
     blob.extend(0u64.to_le_bytes());
     blob.extend(0u64.to_le_bytes());
-    std::fs::write(store.join("blobs").join(format!("sha256-{hex}")), &blob)?;
     std::fs::write(
-        manifests.join("latest"),
-        json!({
-            "schemaVersion": 2,
-            "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-            "layers": [{
-                "mediaType": "application/vnd.ollama.image.model",
-                "digest": format!("sha256:{hex}"),
-                "size": blob.len(),
-            }],
-        })
-        .to_string(),
+        common::ollama_model(&store, "local", &"0".repeat(64), blob.len() as u64)?,
+        &blob,
     )?;
     let mut pull = ardana.command([
         "pull",

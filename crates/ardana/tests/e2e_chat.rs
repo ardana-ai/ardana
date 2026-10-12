@@ -32,7 +32,7 @@ fn run_chat(gguf: (&str, &str), tokenizer: &str, request: PathBuf) -> Result<Val
 }
 
 #[test]
-#[ignore = "e2e: ggml-org/Qwen3.5-0.8B-GGUF Q4_0 and the Qwen/Qwen3.5-0.8B tokenizer in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row qwen3.5:0.8b"]
 fn qwen35_0_8b() -> Result<()> {
     let resp = run_chat(
         QWEN35_GGUF,
@@ -44,7 +44,7 @@ fn qwen35_0_8b() -> Result<()> {
 }
 
 #[test]
-#[ignore = "e2e: ggml-org/SmolLM3-3B-GGUF Q4_K_M and the HuggingFaceTB/SmolLM3-3B tokenizer in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row smollm3:3b"]
 fn smollm3_3b() -> Result<()> {
     let resp = run_chat(
         SMOLLM3_GGUF,
@@ -56,7 +56,7 @@ fn smollm3_3b() -> Result<()> {
 }
 
 #[test]
-#[ignore = "e2e: ggml-org/gemma-4-E2B-it-GGUF Q4_0 and the google/gemma-4-E2B-it tokenizer in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row gemma-4:e2b"]
 fn gemma4_e2b() -> Result<()> {
     let resp = run_chat(
         GEMMA4_GGUF,
@@ -69,7 +69,7 @@ fn gemma4_e2b() -> Result<()> {
 
 /// Without `--config` the model gets `ModelProfile::stock`: listwise score levels, so no `x_level_fit`.
 #[test]
-#[ignore = "e2e: ggml-org/Qwen3.5-0.8B-GGUF Q4_0 and the Qwen/Qwen3.5-0.8B tokenizer in tmp/hf (cargo xtask fetch)"]
+#[ignore = "e2e: cargo xtask e2e rust, row qwen3.5:0.8b"]
 fn stock_profile() -> Result<()> {
     let tmp = PathBuf::from(std::env::var_os("ARDANA_TMP").context("ARDANA_TMP is not set")?);
     std::fs::create_dir_all(&tmp)?;

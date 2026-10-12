@@ -120,9 +120,11 @@ llama.cpp.
   against decider through logits, not through final probabilities, and assert argmaxes and ranges end to end.
 
 ## Testing
-- Unit tests in `ardana-core` use fake `LoadedModel`s; tests that load a GGUF are `#[ignore]` and run through
-  `cargo xtask e2e rust` against the official models in `tmp/hf` (decider:2b Q4_K_M, Qwen3.5-0.8B Q4_0,
-  SmolLM3-3B Q4_K_M, Gemma 4 E2B Q4_0) or the local Ollama `llama3.2` blob, never an invented fixture.
+- Unit tests in `ardana-core` use fake `LoadedModel`s; tests that load a GGUF are `#[ignore]`d and run through
+  `cargo xtask e2e rust`, each in the row that downloads its official model into `tmp/hf` and removes it afterwards
+  (decider:2b Q4_K_M, Qwen3.5-0.8B Q4_0, SmolLM3-3B Q4_K_M, Gemma 4 E2B Q4_0, Qwen3-1.7B Q8_0), never an invented
+  fixture. The `ollama:` reference loads Qwen3.5-0.8B Q4_0 as a blob of an Ollama store the test builds around that
+  GGUF: no Ollama install is read.
 - Run the decider:2b ticket check at default offload and at `--gpu-layers 0` and compare argmaxes (R2.7).
 
 ## Sources

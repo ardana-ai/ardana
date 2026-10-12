@@ -24,7 +24,7 @@ fn ardana_run(extra: &[&str]) -> Result<Value> {
 }
 
 #[test]
-#[ignore = "e2e: decider-2b Q4_K_M GGUF in tmp/hf (cargo xtask fetch), Metal and CPU"]
+#[ignore = "e2e: cargo xtask e2e rust, row decider:2b"]
 fn decider_2b_ticket() -> Result<()> {
     let metal = common::check_ticket(&ardana_run(&[])?)?;
     let cpu = common::check_ticket(&ardana_run(&["--gpu-layers", "0"])?)?;

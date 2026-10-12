@@ -1,16 +1,21 @@
-//! `cargo xtask e2e <suite>`: end-to-end suites, each run under the home guard. The API suites (`jevcompat`, `sdk`,
-//! `jevbench`) run their harness from `tmp/` against a release `ardana serve` on decider:2b; the browser suites
-//! (`playground`, `standalone`, `design`) live in [`crate::browser`], and the `candle` suite, which checks the rows
-//! of [`CANDLE_FIXTURES`], in [`crate::candle`].
+//! `cargo xtask e2e <suite>`: end-to-end suites, each run under the home guard. `rust` runs the plain workspace tests,
+//! then the rows of [`RUST_FIXTURES`]: each downloads its weights, runs its `#[ignore]`d tests and removes the weights.
+//! The API suites (`jevcompat`, `sdk`, `jevbench`) run their harness from `tmp/` against a release `ardana serve` on
+//! decider:2b; the browser suites (`playground`, `standalone`, `design`) live in [`crate::browser`], and the `candle`
+//! suite, which checks the rows of [`CANDLE_FIXTURES`], in [`crate::candle`]. Every suite but `candle`, which pulls
+//! through `ardana`, gets the weights it reads from [`hub::with_weights`], and leaves `tmp/hf` as it found it.
 
+use std::collections::BTreeMap;
 use std::path::Path;
+use std::process::Stdio;
+use std::time::Instant;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 
-use crate::sandbox::{Sandbox, cargo};
+use crate::sandbox::{Sandbox, cargo, run as run_command};
 use crate::serve::{Server, build_ardana};
-use crate::{browser, candle};
+use crate::{browser, candle, hub};
 
 pub const SUITES: &[&str] = &[
     "smoke",
@@ -209,6 +214,111 @@ pub const CANDLE_FIXTURES: &[CandleFixture] = &[
     },
 ];
 
+/// One row of the `rust` suite: the `#[ignore]`d workspace tests that need the same weights.
+#[derive(Debug)]
+pub struct RustFixture {
+    /// The row's name in the suite's output: the ardana name of the model its tests run, or what they exercise when
+    /// they need several models together.
+    pub name: &'static str,
+    /// The `[[hf]]` repositories of `xtask/fetch.toml` whose weights the row downloads and removes; none for a row
+    /// that reads no model.
+    pub weights: &'static [&'static str],
+    /// The tests the row runs, as libtest names them.
+    pub tests: &'static [&'static str],
+}
+
+/// The rows `cargo xtask e2e rust` runs after the plain tests, in run order. Every `#[ignore]`d test of the workspace
+/// is in exactly one ([`drift`]).
+pub const RUST_FIXTURES: &[RustFixture] = &[
+    RustFixture {
+        name: "decider:2b",
+        weights: &["Mapika/decider-2b-GGUF"],
+        tests: &[
+            "decider_2b_ticket",
+            "pull_decider",
+            "pull_local",
+            "run_pulls_a_library_model_first",
+            "serve_pulls_the_default_model_on_first_use",
+            "run_inline_questions",
+            "run_says_a_newer_release",
+        ],
+    },
+    RustFixture {
+        name: "qwen3.5:0.8b",
+        weights: &["ggml-org/Qwen3.5-0.8B-GGUF"],
+        tests: &[
+            "qwen35_0_8b",
+            "stock_profile",
+            "serve_picks_up_models_pulled_while_it_runs",
+            "pull_ollama",
+        ],
+    },
+    RustFixture {
+        name: "smollm3:3b",
+        weights: &["ggml-org/SmolLM3-3B-GGUF"],
+        tests: &["smollm3_3b"],
+    },
+    RustFixture {
+        name: "gemma-4:e2b",
+        weights: &["ggml-org/gemma-4-E2B-it-GGUF"],
+        tests: &["gemma4_e2b"],
+    },
+    // decider:2b, qwen3.5:0.8b, smollm3:3b and gemma-4:e2b in one registry.
+    RustFixture {
+        name: "library",
+        weights: &[
+            "Mapika/decider-2b-GGUF",
+            "ggml-org/Qwen3.5-0.8B-GGUF",
+            "ggml-org/SmolLM3-3B-GGUF",
+            "ggml-org/gemma-4-E2B-it-GGUF",
+        ],
+        tests: &[
+            "pull_library_names",
+            "pull_reads_the_pinned_commit",
+            "pull_stock",
+            "list_show_rm",
+            "library_names_are_spellings",
+            "run_by_name",
+        ],
+    },
+    // The Candle runtime's checkpoint and the GGUF of the same model.
+    RustFixture {
+        name: "qwen3:1.7b",
+        weights: &["Qwen/Qwen3-1.7B", "Qwen/Qwen3-1.7B-GGUF"],
+        tests: &[
+            "tests::qwen3_decodes_each_prompt_alone",
+            "pull_safetensors",
+            "pull_with_a_tokenizer_asks_for_no_other",
+            "candle_answers_like_the_gguf",
+        ],
+    },
+    // decider:0.8b's browser variant.
+    RustFixture {
+        name: "decider:0.8b",
+        weights: &["ardana-ai/decider-0.8b-ONNX"],
+        tests: &["browser_files"],
+    },
+    // The network alone: the latest GitHub Release.
+    RustFixture {
+        name: "update",
+        weights: &[],
+        tests: &["latest_release_is_installed"],
+    },
+];
+
+/// The weights the API suites serve: decider:2b's GGUF ([`crate::serve::MODEL`]).
+const SERVED_WEIGHTS: &[&str] = &["Mapika/decider-2b-GGUF"];
+/// The weights the browser suites read: the models their servers pull (decider:2b, decider:0.8b, qwen3.5:0.8b) and
+/// every browser variant of the library.
+const BROWSER_WEIGHTS: &[&str] = &[
+    "Mapika/decider-2b-GGUF",
+    "ardana-ai/decider-0.8b-GGUF",
+    "ggml-org/Qwen3.5-0.8B-GGUF",
+    "ardana-ai/decider-0.8b-ONNX",
+    "ardana-ai/decider-2b-ONNX",
+    "ardana-ai/qwen3.5-0.8b-ONNX",
+];
+
 /// The request fixture the SDK suite sends.
 const SDK_REQUEST: &str = "tests/fixtures/requests/ticket.json";
 /// JevBench's public items, in the order its results report them.
@@ -219,15 +329,22 @@ const JEVBENCH_TASKS: &[&str] = &[
 ];
 
 pub fn run(sandbox: &Sandbox, suite: &str) -> Result<()> {
+    let what = format!("e2e {suite}");
+    let served = |suite: fn(&Sandbox) -> Result<()>| {
+        hub::with_weights(sandbox, &what, SERVED_WEIGHTS, || suite(sandbox))
+    };
+    let in_browser = |suite: fn(&Sandbox) -> Result<()>| {
+        hub::with_weights(sandbox, &what, BROWSER_WEIGHTS, || suite(sandbox))
+    };
     match suite {
         "smoke" => smoke(sandbox),
-        "rust" => rust(sandbox),
-        "jevcompat" => jevcompat(sandbox),
-        "sdk" => sdk(sandbox),
-        "jevbench" => jevbench(sandbox),
-        "playground" => browser::playground(sandbox),
-        "standalone" => browser::standalone(sandbox),
-        "design" => browser::design(sandbox),
+        "rust" => rust(sandbox, RUST_FIXTURES),
+        "jevcompat" => served(jevcompat),
+        "sdk" => served(sdk),
+        "jevbench" => served(jevbench),
+        "playground" => in_browser(browser::playground),
+        "standalone" => in_browser(browser::standalone),
+        "design" => in_browser(browser::design),
         "candle" => candle::candle(sandbox, CANDLE_FIXTURES),
         other => bail!("unknown e2e suite `{other}`; suites: {}", SUITES.join(", ")),
     }
@@ -254,18 +371,112 @@ fn smoke(sandbox: &Sandbox) -> Result<()> {
     Ok(())
 }
 
-/// Every workspace test, including the `#[ignore]`d end-to-end tests on real models.
-fn rust(sandbox: &Sandbox) -> Result<()> {
-    let status = sandbox
-        .command(cargo())
-        .current_dir(sandbox.repo_root())
-        .args(["test", "--workspace", "--", "--include-ignored"])
-        .status()
-        .context("running cargo test")?;
-    if !status.success() {
-        bail!("cargo test --workspace -- --include-ignored failed ({status})");
+/// `cargo test` over the workspace's test targets, with `args` for the test binaries.
+fn cargo_test(sandbox: &Sandbox, args: &[&str]) -> std::process::Command {
+    let mut test = sandbox.command(cargo());
+    test.current_dir(sandbox.repo_root())
+        .args(["test", "--workspace", "--tests", "--no-fail-fast", "--"])
+        .args(args);
+    test
+}
+
+/// The plain workspace tests once, then each row of `fixtures` in turn: its weights downloaded into `tmp/hf`, its
+/// `#[ignore]`d tests run, and every path it added to the cache removed. A failed row is counted and does not end the
+/// suite. Before anything is downloaded, the rows must hold every `#[ignore]`d test of the workspace ([`drift`]) and
+/// name only weights `xtask/fetch.toml` pins.
+fn rust(sandbox: &Sandbox, fixtures: &[RustFixture]) -> Result<()> {
+    let listed = cargo_test(sandbox, &["--list", "--ignored"])
+        .stderr(Stdio::inherit())
+        .output()
+        .context("listing the ignored tests")?;
+    ensure!(
+        listed.status.success(),
+        "cargo test -- --list --ignored failed ({})",
+        listed.status
+    );
+    let listed = String::from_utf8(listed.stdout)?;
+    let ignored: Vec<&str> = listed
+        .lines()
+        .filter_map(|line| line.strip_suffix(": test"))
+        .collect();
+    let problems = drift(&ignored, fixtures);
+    ensure!(
+        problems.is_empty(),
+        "the rows of the rust suite and the workspace's #[ignore]d tests differ:\n  {}",
+        problems.join("\n  ")
+    );
+    for fixture in fixtures {
+        hub::pins(sandbox, fixture.weights).with_context(|| format!("row {}", fixture.name))?;
     }
+
+    run_command(
+        sandbox
+            .command(cargo())
+            .current_dir(sandbox.repo_root())
+            .args(["test", "--workspace"]),
+    )?;
+    let mut failed = Vec::new();
+    for fixture in fixtures {
+        let what = format!("e2e rust {}", fixture.name);
+        let started = Instant::now();
+        let mut tests = cargo_test(sandbox, &["--ignored", "--exact"]);
+        tests.args(fixture.tests);
+        match hub::with_weights(sandbox, &what, fixture.weights, || run_command(&mut tests)) {
+            Ok(()) => println!(
+                "{what}: {} tests passed in {:.1} s",
+                fixture.tests.len(),
+                started.elapsed().as_secs_f64()
+            ),
+            Err(err) => {
+                println!("{what}: failed: {err:#}");
+                failed.push(fixture.name);
+            }
+        }
+    }
+    ensure!(
+        failed.is_empty(),
+        "{} of {} rust rows failed: {}",
+        failed.len(),
+        fixtures.len(),
+        failed.join(", ")
+    );
     Ok(())
+}
+
+/// What keeps `ignored`, the workspace's `#[ignore]`d tests as libtest lists them, from being the tests of `fixtures`,
+/// each in exactly one row: a test no row lists, a row entry no test matches, a name two rows or two tests share, and
+/// a row without a test (libtest would run every `#[ignore]`d test for it).
+fn drift(ignored: &[&str], fixtures: &[RustFixture]) -> Vec<String> {
+    let mut problems = Vec::new();
+    let mut rows: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for fixture in fixtures {
+        for test in fixture.tests {
+            rows.entry(test).or_default().push(fixture.name);
+        }
+    }
+    for fixture in fixtures.iter().filter(|fixture| fixture.tests.is_empty()) {
+        problems.push(format!("row {} lists no test", fixture.name));
+    }
+    for (test, rows) in &rows {
+        let tests = ignored.iter().filter(|name| name == &test).count();
+        match (tests, rows.as_slice()) {
+            (0, _) => problems.push(format!(
+                "row {} lists `{test}`, which no #[ignore]d test is named",
+                rows.join(", ")
+            )),
+            (1, [_]) => {}
+            (1, _) => problems.push(format!("`{test}` is in the rows {}", rows.join(", "))),
+            (n, _) => problems.push(format!(
+                "{n} #[ignore]d tests are named `{test}`; a row names one test"
+            )),
+        }
+    }
+    for test in ignored {
+        if !rows.contains_key(test) {
+            problems.push(format!("no row lists the #[ignore]d test `{test}`"));
+        }
+    }
+    problems
 }
 
 /// An emptied `tmp/evals/<name>`.
@@ -441,4 +652,84 @@ pub(crate) fn read_json(path: &Path) -> Result<Value> {
     let text =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ROWS: &[RustFixture] = &[
+        RustFixture {
+            name: "a",
+            weights: &[],
+            tests: &["one", "tests::two"],
+        },
+        RustFixture {
+            name: "b",
+            weights: &[],
+            tests: &["three"],
+        },
+    ];
+
+    /// Every `#[ignore]`d test belongs to exactly one row: a test without a row, a row entry without a test, a test
+    /// in two rows and a name two tests share are each named.
+    #[test]
+    fn drift_names_what_differs() {
+        assert_eq!(
+            drift(&["three", "one", "tests::two"], ROWS),
+            [] as [&str; 0]
+        );
+        assert_eq!(
+            drift(&["one", "tests::two", "three", "four"], ROWS),
+            ["no row lists the #[ignore]d test `four`"]
+        );
+        assert_eq!(
+            drift(&["one", "three"], ROWS),
+            ["row a lists `tests::two`, which no #[ignore]d test is named"]
+        );
+        assert_eq!(
+            drift(&["one", "one", "tests::two", "three"], ROWS),
+            ["2 #[ignore]d tests are named `one`; a row names one test"]
+        );
+        let twice = [
+            RustFixture {
+                name: "c",
+                weights: &[],
+                tests: &["one"],
+            },
+            RustFixture {
+                name: "d",
+                weights: &[],
+                tests: &["one"],
+            },
+        ];
+        assert_eq!(drift(&["one"], &twice), ["`one` is in the rows c, d"]);
+        let empty = [RustFixture {
+            name: "e",
+            weights: &[],
+            tests: &[],
+        }];
+        assert_eq!(drift(&[], &empty), ["row e lists no test"]);
+    }
+
+    /// The weights every suite names are `[[hf]]` entries of `xtask/fetch.toml`, each with a weight file.
+    #[test]
+    fn suites_name_pinned_weights() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let manifest = crate::fetch::Manifest::load(root).unwrap();
+        let named = RUST_FIXTURES
+            .iter()
+            .flat_map(|fixture| fixture.weights)
+            .chain(SERVED_WEIGHTS)
+            .chain(BROWSER_WEIGHTS);
+        for repo in named {
+            let pin = manifest.hf.iter().find(|hf| hf.repo == *repo);
+            let pin = pin.unwrap_or_else(|| panic!("fetch.toml has no [[hf]] entry for {repo}"));
+            assert_ne!(
+                pin.files,
+                pin.without_weights().files,
+                "{repo} lists no weights"
+            );
+        }
+    }
 }
