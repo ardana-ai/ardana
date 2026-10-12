@@ -1,5 +1,6 @@
 //! Shared helpers of the server tests: a fake runtime that counts loads and drops and can hold a load or a decode, registries
-//! of decider:2b's real tokenizer and profile (from `tmp/hf`) over fake weights, and requests through the router.
+//! of decider:2b's real tokenizer and profile (from `tmp/hf`) over fake weights, a decision-model entry (Gemma 4's
+//! real tokenizer, a profile read as THX-01's is) over fake weights of the other kind, and requests through the router.
 #![allow(dead_code, reason = "each test file uses a different subset")]
 
 use std::path::{Path, PathBuf};
@@ -8,7 +9,9 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context, Result, ensure};
-use ardana_core::{LoadOptions, Loaded, LoadedModel, Runtime, Runtimes};
+use ardana_core::{
+    DecisionModel, DecisionSequence, LoadOptions, Loaded, LoadedModel, Runtime, Runtimes,
+};
 use ardana_registry::library::{Library, LibraryClient, LibrarySource};
 use ardana_registry::{LayoutKind, Registry, ResolvedModel};
 use ardana_server::{ModelOptions, Models};
@@ -18,7 +21,7 @@ use axum::http::{HeaderMap, Request, StatusCode};
 use serde_json::Value;
 use tower::ServiceExt;
 
-/// What the fake runtime saw: loads, drops, and every decoded prompt in decode order.
+/// What the fake runtime saw: loads, drops, and every decoded prompt (or decision sequence) in decode order.
 #[derive(Debug, Default)]
 pub struct Fake {
     pub loads: AtomicUsize,
@@ -28,7 +31,7 @@ pub struct Fake {
     /// The weights file of each load and each drop, in order.
     pub loaded: Mutex<Vec<PathBuf>>,
     pub dropped: Mutex<Vec<PathBuf>>,
-    /// The token ids of every decoded prompt row.
+    /// The token ids of every decoded prompt row, and of every sequence a decision model was asked.
     pub decoded: Mutex<Vec<Vec<u32>>>,
     /// While closed, every decode waits.
     decode_gate: Gate,
@@ -134,15 +137,22 @@ impl Runtime for FakeRuntime {
         self.0.peak_resident.fetch_max(resident, Ordering::SeqCst);
         self.0.loaded.lock().unwrap().push(weights.to_path_buf());
         self.0.load_gate.pass();
-        Ok(Loaded::Causal(Box::new(FakeModel {
+        let model = Box::new(FakeModel {
             fake: self.0.clone(),
             weights: weights.to_path_buf(),
             n_ctx: opts.n_ctx as usize,
-        })))
+        });
+        Ok(match weights.extension() {
+            Some(kind) if kind == DECISION_WEIGHTS => Loaded::Decision(model),
+            _ => Loaded::Causal(model),
+        })
     }
 }
 
-/// Answers every slot with equal logits, after the gate opens.
+/// The extension of the weights file the fake runtime loads as a decision model; any other file is a causal one.
+const DECISION_WEIGHTS: &str = "decision";
+
+/// Answers every slot with equal logits, and every sequence with equal probabilities, after the gate opens.
 struct FakeModel {
     fake: Arc<Fake>,
     weights: PathBuf,
@@ -163,6 +173,21 @@ impl LoadedModel for FakeModel {
         self.fake.decode_gate.pass();
         self.fake.decoded.lock().unwrap().push(ids.to_vec());
         Ok(slots.iter().map(|_| vec![0.0; label_ids.len()]).collect())
+    }
+}
+
+impl DecisionModel for FakeModel {
+    fn decide(&mut self, sequences: &[DecisionSequence]) -> anyhow::Result<Vec<Vec<f64>>> {
+        self.fake.decode_gate.pass();
+        let mut decoded = self.fake.decoded.lock().unwrap();
+        Ok(sequences
+            .iter()
+            .map(|sequence| {
+                decoded.push(sequence.ids.clone());
+                let options = sequence.markers.len();
+                vec![1.0 / options as f64; options]
+            })
+            .collect())
     }
 }
 
@@ -307,9 +332,54 @@ pub fn fake_entry(dir: &Path, name: &str) -> Result<ResolvedModel> {
     })
 }
 
+/// THX-01's `rl_agent_config.json` limits (a 1,024-token window, 24 options, a 256-token head) with a base
+/// temperature triple (choice, score, noul) whose last value the profile clamps to 0.5.
+pub fn decision_config() -> Value {
+    serde_json::json!({"max_len": 1024, "head_max_len": 256, "tournament_above": 24, "auto_head_budget": true,
+                       "temperature": [2.55, 3.05, 0.1]})
+}
+
+/// A registry entry named `name` for a decision model over the fake weights `<dir>/<name>.decision` (created), which
+/// the fake runtime loads as one: the profile is [`decision_config`] read as a pull reads THX-01's, renamed after the
+/// entry, and the tokenizer is Gemma 4's, which names `<bos>`, `<eos>` and `<mask>` as THX-01's Gemma tokenizer does.
+pub fn decision_entry(dir: &Path, name: &str) -> Result<ResolvedModel> {
+    let weights = dir.join(format!("{name}.{DECISION_WEIGHTS}"));
+    std::fs::write(&weights, b"")?;
+    let mut profile = ardana_core::from_rl_agent_config(&decision_config())?;
+    profile.name = name.to_string();
+    Ok(ResolvedModel {
+        name: name.to_string(),
+        source: format!("hf.co/test/{name}"),
+        weights,
+        tokenizer: hf_file("google/gemma-4-E2B-it", "tokenizer.json")?,
+        runtime: "fake".into(),
+        profile,
+        pulled_at: "2026-10-12".into(),
+    })
+}
+
 /// [`Models`] over [`registry`] with the fake runtime, reading the library snapshot (a file source).
 pub fn models(test: &str, names: &[&str], opts: ModelOptions) -> Result<(Arc<Fake>, Arc<Models>)> {
     models_from(test, names, opts, LibrarySource::from_env())
+}
+
+/// [`models`] over a registry that holds the decision model `decision` ([`decision_entry`]) after `names`.
+pub fn models_with_decision(
+    test: &str,
+    names: &[&str],
+    decision: &str,
+    opts: ModelOptions,
+) -> Result<(Arc<Fake>, Arc<Models>)> {
+    let mut registry = registry(test, names)?;
+    let dir = registry
+        .path()
+        .parent()
+        .and_then(Path::parent)
+        .context("the test's scratch directory")?
+        .to_path_buf();
+    registry.insert(decision_entry(&dir, decision)?);
+    registry.save()?;
+    models_over(registry, opts, LibrarySource::from_env())
 }
 
 /// [`Models`] over [`registry`] with the fake runtime, reading the library from `source`, cached in the registry's
@@ -320,8 +390,16 @@ pub fn models_from(
     opts: ModelOptions,
     source: LibrarySource,
 ) -> Result<(Arc<Fake>, Arc<Models>)> {
+    models_over(registry(test, names)?, opts, source)
+}
+
+/// [`Models`] over `registry` with the fake runtime, reading the library from `source`, cached in the registry's home.
+fn models_over(
+    registry: Registry,
+    opts: ModelOptions,
+    source: LibrarySource,
+) -> Result<(Arc<Fake>, Arc<Models>)> {
     let fake = Fake::new();
-    let registry = registry(test, names)?;
     let home = registry
         .path()
         .parent()

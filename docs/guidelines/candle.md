@@ -470,7 +470,12 @@ building and readout stay in `ardana-core` and never call Candle.
   `ardana run --json` answers the three fixtures with the golden's choices, every probability within 0.01 and the
   golden's `input_tokens`; the ticket's state repeated 300 times is refused naming the 1,024-token window and a
   25-option choice naming the 24-option limit; `--verbose` prints the model, the tokens and the timings and
-  `ardana list` sizes the entry by `model.safetensors`. The served checks are W9's.
+  `ardana list` sizes the entry by `model.safetensors`; one `ardana serve` on the row's home then answers the three
+  fixtures at `/v1/systemone` held to the goldens the same way (0.01, the golden's `input_tokens`) and the first
+  again with identical probabilities, and `ardana ps` lists the model while that server holds it. What the server
+  does around a decision model's decode (the listing, the load on the first request, `/health`, the refusals before
+  any load, keep-alive and eviction) is `crates/ardana-server/tests/http.rs`'s, on a fake decision model
+  (`axum.md`, "Testing").
 
 ## Sources
 - https://github.com/huggingface/candle — README: pure-Rust ML framework, backends, feature flags

@@ -171,8 +171,10 @@ change them) and its Requirements are the definition of done.
   fixtures with the `thx01` package's goldens (`crates/ardana-core/tests/data/thx01/`: the golden's choices, every
   probability within 0.01, the golden's `input_tokens`), is refused on the ticket's state repeated 300 times (naming
   the 1,024-token window) and on a 25-option choice (naming the 24-option limit), prints the model, tokens and timings
-  under `--verbose` and is listed by its `model.safetensors`; it is not served (W9). Then, also when a
-  check failed,
+  under `--verbose` and is listed by its `model.safetensors`; then one `ardana serve` on its home answers the three
+  fixtures at `/v1/systemone` with the goldens too (the same choices, every probability within 0.01, the golden's
+  `input_tokens`) and the first again with identical probabilities, and `ardana ps` lists the model it loaded. Then,
+  also when a check failed,
   the row's registry entries and every file it added under `tmp/hf/hub` are removed, the files that were there
   before staying, and after the last row the suite runs `cargo clean`: no `target/` is left, and the next cargo
   command builds from nothing. A failed row does not stop the others; the suite fails naming it).

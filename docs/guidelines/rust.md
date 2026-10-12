@@ -242,7 +242,9 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   is too slow for 231 JevBench items) and run it through `xtask/src/serve.rs#Server`, which kills the server on drop.
 - The `candle` suite (`xtask/src/candle.rs`) is the one suite that downloads models itself: it runs the release
   `ardana` online on a home per row, `tmp/e2e/candle/<row>/home`, serves that home as it is with `Server::start_on`
-  (a row with a GGUF; a row without one, THX-01, compares `ardana run` with the goldens instead), lists `tmp/hf/hub`
+  (every row: `candle.rs#served` asks it the fixtures and hands back the running server, which a row with a GGUF holds
+  to the GGUF's answers and stops, and the row without one, THX-01, holds to the goldens and asks `ardana ps` about
+  first), lists `tmp/hf/hub`
   before a row and removes every path added since when the row ends, checks passed or not, and
   runs `cargo clean` last. The `xtask` binary runs from `target/` while that happens; it is Unix only, where a running
   file can be removed. Add a row to `xtask/src/e2e.rs#CANDLE_FIXTURES`, never a model to `xtask/fetch.toml`, for a

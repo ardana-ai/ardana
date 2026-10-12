@@ -1,9 +1,11 @@
 //! R5.4 to R5.6 and R5.8 through the router: the API surface, model resolution, every error shape, and the
 //! `ardana serve` defaults; R3.1 to R3.4: one `/v1/models` row per library size under its canonical name, every
 //! spelling of a model answered by its one entry, the default model under any spelling, and a name the library's index
-//! does not resolve asked of the library once. Requests are read with decider:2b's real tokenizer and profile; the
-//! weights are the fake runtime's, since these tests check what happens around a decode (the real model runs in
-//! `cargo xtask e2e jevcompat|sdk|jevbench`).
+//! does not resolve asked of the library once; R9.2 to R9.4: a decision model listed, loaded, answered, refused and
+//! unloaded as a causal one is. Requests are read with decider:2b's real tokenizer and profile (a decision model's
+//! with Gemma 4's tokenizer and a profile read as THX-01's is); the weights are the fake runtime's, since these tests
+//! check what happens around a decode (the real model runs in `cargo xtask e2e jevcompat|sdk|jevbench`, THX-01 in
+//! `cargo xtask e2e candle`).
 
 mod common;
 
@@ -1000,5 +1002,249 @@ async fn defaults() -> Result<()> {
     assert_eq!(models.default_model(), "alpha");
     let (_, models) = common::models("http-defaults-none", &[], ModelOptions::default())?;
     assert_eq!(models.default_model(), "decider:2b");
+    Ok(())
+}
+
+/// The decision model of the tests below: `common::decision_entry`, a 1,024-token window and 24 options.
+const DECISION: &str = "thx-test";
+
+/// One question of each type for the decision model, over `state`.
+fn decision_request(state: &str) -> Value {
+    json!({"model": DECISION, "state": state, "questions": {
+        "department": {"type": "choice", "instructions": "Which department should handle this?",
+                       "criteria": ["billing", "technical", "sales"]},
+        "refund": noul("Does the customer ask for a refund?"),
+        "anger": {"type": "score", "instructions": "How angry is the customer?",
+                  "criteria": ["calm", "annoyed", "furious"]},
+    }})
+}
+
+/// R9.2: an entry whose profile carries a `decision` format is listed as any pulled model is and loads nothing until
+/// its first request, which loads it once as a decision model and asks it the sequences `Decider::plan` builds (one
+/// per question, `usage.input_tokens` their lengths together); `/health` shows it under `x_loaded`, and under
+/// `x_temperature_by_type` its profile's clamped base triple (2.55, 3.05 and 0.1 for choice, score and noul, the last
+/// clamped to 0.5) before and after the load.
+#[tokio::test]
+async fn a_decision_model_is_served() -> Result<()> {
+    let (fake, models) = common::models_with_decision(
+        "http-decision-served",
+        &[],
+        DECISION,
+        ModelOptions::default(),
+    )?;
+    let app = router(models.clone(), None);
+
+    let listed = get(&app, "/v1/models").await?;
+    assert_eq!(listed.status, 200);
+    let mut expected = vec![
+        json!({"name": DECISION, "description": "hf.co/test/thx-test", "release_date": "2026-10-12",
+               "x_pulled": true, "x_default": true}),
+    ];
+    expected.extend(common::library_rows(&[DECISION], None)?);
+    assert_eq!(
+        listed.body,
+        with_held_variants(json!({"models": expected})).await?
+    );
+    let temperatures = json!({DECISION: {"choice": 2.55, "noul": 0.5, "score": 3.05}});
+    assert_eq!(
+        get(&app, "/health").await?.body,
+        json!({"status": "ok", "x_loaded": [], "x_temperature_by_type": temperatures})
+    );
+    assert_eq!(fake.loads(), 0, "listing loads nothing");
+
+    let request = decision_request("My card was charged twice for order A-104.");
+    let answered = post(&app, &request).await?;
+    assert_eq!(answered.status, 200, "{answered:?}");
+    assert_eq!(answered.body["model"], DECISION);
+    // The fake answers every option alike.
+    let answers = &answered.body["answers"];
+    assert_eq!(answers["refund"], json!({"type": "noul", "noul": 0.5}));
+    assert_eq!(answers["department"]["type"], "choice");
+    let options = answers["department"]["probabilities"]
+        .as_object()
+        .context("the choice's probabilities")?;
+    assert_eq!(
+        options.keys().collect::<Vec<_>>(),
+        ["billing", "technical", "sales"]
+    );
+    for p in options.values() {
+        assert!(
+            p.as_f64().is_some_and(|p| (p - 1.0 / 3.0).abs() < 1e-3),
+            "{answered:?}"
+        );
+    }
+    assert_eq!(answers["anger"]["score"], 1.0, "{answered:?}");
+
+    // What the model was asked is the plan of the entry's own reader.
+    let entry = models
+        .registry()
+        .map_err(|err| anyhow::anyhow!("{err:?}"))?
+        .resolve(DECISION)?;
+    let decider = ardana_core::Decider::new(
+        ardana_registry::load_tokenizer(&entry.tokenizer)?,
+        entry.profile,
+    )?;
+    let plan = decider.plan(&serde_json::from_value(request.clone())?)?;
+    assert_eq!(
+        plan.sequences()
+            .iter()
+            .map(|sequence| sequence.markers.len())
+            .collect::<Vec<_>>(),
+        [3, 2, 3]
+    );
+    assert_eq!(
+        fake.decoded(),
+        plan.row_ids().map(<[u32]>::to_vec).collect::<Vec<_>>()
+    );
+    assert_eq!(answered.body["usage"]["input_tokens"], plan.input_tokens());
+    assert_eq!(answered.body["usage"]["output_tokens"], 0);
+
+    assert_eq!(fake.loads(), 1, "the first request loads it");
+    assert_eq!(
+        get(&app, "/health").await?.body,
+        json!({"status": "ok", "x_loaded": [DECISION], "x_temperature_by_type": temperatures})
+    );
+    let again = post(&app, &request).await?;
+    assert_eq!(again.body, answered.body);
+    assert_eq!(
+        (fake.loads(), fake.decoded().len()),
+        (1, 6),
+        "the loaded model answers again"
+    );
+    Ok(())
+}
+
+/// R9.3 (Q9, Q10): a decision model refuses with a causal model's status codes, each time when the request is
+/// planned, before anything loads: an invalid question is the 422 the causal entry gives it, body for body; a state
+/// past the profile's `decision.window` is a 413 naming the window; a choice above its `decision.max_options` is a 422
+/// at the question, naming the limit. A choice of exactly that many options then loads the model and is answered.
+#[tokio::test]
+async fn a_decision_model_refuses_like_the_others() -> Result<()> {
+    let (fake, models) = common::models_with_decision(
+        "http-decision-refuses",
+        &["alpha"],
+        DECISION,
+        ModelOptions::default(),
+    )?;
+    let app = router(models, None);
+    let ask = |model: &str, state: &str, q: Value| json!({"model": model, "state": state, "questions": {"q": q}});
+    let teams = |n: usize| {
+        let options: Vec<String> = (0..n).map(|i| format!("team{i}")).collect();
+        json!({"type": "choice", "instructions": "Which team?", "criteria": options})
+    };
+    let nothing_loaded = |case: &str| {
+        assert_eq!(
+            (fake.loads(), fake.decoded().len()),
+            (0, 0),
+            "{case} is refused before any load"
+        );
+    };
+
+    let invalid = json!({"type": "choice", "instructions": "Which?", "criteria": {}});
+    let refused = post(&app, &ask(DECISION, "s", invalid.clone())).await?;
+    nothing_loaded("an invalid question");
+    validation_shape(&refused);
+    assert_eq!(
+        refused.body,
+        json!({"detail": [{"loc": ["body", "questions", "q"], "msg": "choice criteria: a map of 2..255 options",
+                           "type": "value_error"}]})
+    );
+    let causal = post(&app, &ask("alpha", "s", invalid)).await?;
+    assert_eq!(
+        (causal.status, &causal.body),
+        (refused.status, &refused.body)
+    );
+
+    let long = post(&app, &ask(DECISION, &words(1100), noul("Is it?"))).await?;
+    nothing_loaded("a state past the window");
+    assert_eq!(long.status, 413, "{long:?}");
+    let message = error_shape(&long, "request_too_large");
+    assert!(
+        message.contains("more than the model's context window of 1024 tokens"),
+        "{message}"
+    );
+
+    let wide = post(&app, &ask(DECISION, "s", teams(25))).await?;
+    nothing_loaded("a choice above the option limit");
+    validation_shape(&wide);
+    let item = &wide.body["detail"][0];
+    assert_eq!(item["loc"], json!(["body", "questions", "q"]), "{wide:?}");
+    assert_eq!(item["type"], "value_error", "{wide:?}");
+    assert!(
+        item["msg"]
+            .as_str()
+            .is_some_and(|msg| msg.contains("at most 24 options")),
+        "{wide:?}"
+    );
+
+    let widest = post(&app, &ask(DECISION, "s", teams(24))).await?;
+    assert_eq!(widest.status, 200, "{widest:?}");
+    assert_eq!(
+        (fake.loads(), fake.decoded().len()),
+        (1, 1),
+        "a request inside the limits loads the model"
+    );
+    Ok(())
+}
+
+/// R9.4: a decision model's weights go as a causal model's do. Idle for `keep_alive`, it is unloaded and dropped, and
+/// its next request loads it again; with one model loaded at a time, a causal model's request evicts it and its own
+/// next request evicts the causal model, never two resident at once.
+#[tokio::test]
+async fn a_decision_model_unloads() -> Result<()> {
+    let opts = ModelOptions {
+        keep_alive: Duration::from_millis(300),
+        ..ModelOptions::default()
+    };
+    let (fake, models) =
+        common::models_with_decision("http-decision-keep-alive", &[], DECISION, opts)?;
+    let app = router(models.clone(), None);
+    assert_eq!(post(&app, &decision_request("s")).await?.status, 200);
+    assert_eq!(fake.loads(), 1);
+    for _ in 0..500 {
+        if models.loaded().await.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(
+        get(&app, "/health").await?.body["x_loaded"],
+        json!([]),
+        "unloaded after 300 ms idle"
+    );
+    eventually("the decision model is dropped", || fake.drops() == 1).await?;
+    assert!(fake.dropped.lock().unwrap()[0].ends_with("thx-test.decision"));
+    assert_eq!(post(&app, &decision_request("s")).await?.status, 200);
+    assert_eq!(fake.loads(), 2, "it loads again");
+
+    let (fake, models) = common::models_with_decision(
+        "http-decision-evicted",
+        &["alpha"],
+        DECISION,
+        ModelOptions::default(),
+    )?;
+    let app = router(models.clone(), None);
+    let causal = json!({"model": "alpha", "state": "s", "questions": {"q": noul("Is it?")}});
+    assert_eq!(post(&app, &decision_request("s")).await?.status, 200);
+    assert_eq!(models.loaded().await, [DECISION]);
+    assert_eq!(post(&app, &causal).await?.status, 200);
+    assert_eq!(models.loaded().await, ["alpha"]);
+    eventually("the decision model is dropped", || fake.drops() == 1).await?;
+    assert_eq!(post(&app, &decision_request("s")).await?.status, 200);
+    assert_eq!(models.loaded().await, [DECISION]);
+    eventually("the causal model is dropped", || fake.drops() == 2).await?;
+    let dropped: Vec<String> = fake
+        .dropped
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|weights| weights.file_name()?.to_str().map(String::from))
+        .collect();
+    assert_eq!(dropped, ["thx-test.decision", "alpha.fake"]);
+    assert_eq!(
+        (fake.loads(), fake.peak_resident()),
+        (3, 1),
+        "one model is resident at a time"
+    );
     Ok(())
 }

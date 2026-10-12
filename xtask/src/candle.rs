@@ -1,8 +1,9 @@
 //! `cargo xtask e2e candle`: each row of [`crate::e2e::CANDLE_FIXTURES`] in turn, with the release `ardana`. A row
 //! pulls a safetensors checkpoint and the GGUF of the same model from the Hub into `tmp/hf`, checks that Candle
 //! answers as llama.cpp does, and removes what it pulled before the next row starts; a row without a GGUF (the THX-01
-//! decision model) checks the checkpoint against the `thx01` package's goldens instead. The suite ends with
-//! `cargo clean`. The disk holds neither every row's weights at once nor a row's beside a full `target/`.
+//! decision model) checks the checkpoint against the `thx01` package's goldens instead. Either way the row's
+//! checkpoint answers through `ardana run` and through one `ardana serve`. The suite ends with `cargo clean`. The
+//! disk holds neither every row's weights at once nor a row's beside a full `target/`.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -136,7 +137,14 @@ fn check(
         let (got, want) = cli.compare(fixture.name, request, &path, &candle, &llama)?;
         answered.push((request, path, got, want));
     }
-    served(cli, &candle, &answered)?;
+    let wanted: Vec<(&str, &Path, &Value)> = answered
+        .iter()
+        .map(|(request, path, _, want)| (*request, path.as_path(), want))
+        .collect();
+    served(cli, &candle, &wanted, |_, got, want| {
+        same_answers(got, want, TOLERANCE).map(drop)
+    })?
+    .stop()?;
     if fixture.long_state {
         let (_, ticket, short, _) = &answered[0];
         long_state(cli, fixture.name, ticket, short, &candle, &llama)?;
@@ -144,11 +152,13 @@ fn check(
     Ok(())
 }
 
-/// R8.1, R8.3, R8.4 and R8.5 for a decision-model row: the pull records runtime `candle` at the pin with the six
-/// files in its snapshot, `tokenizer/tokenizer.json` as the tokenizer and the kind `decision`; `ardana run --json`
+/// R8.1, R8.3, R8.4, R8.5 and R9.1 for a decision-model row: the pull records runtime `candle` at the pin with the
+/// six files in its snapshot, `tokenizer/tokenizer.json` as the tokenizer and the kind `decision`; `ardana run --json`
 /// gives each fixture the golden's choices, every probability within [`DECISION_TOLERANCE`] and the golden's
 /// `input_tokens`; a state past the window and a choice of 25 options are refused naming the window and the limit;
-/// `--verbose` prints the model, the tokens and the timings, and `ardana list` sizes the entry by its safetensors.
+/// `--verbose` prints the model, the tokens and the timings, and `ardana list` sizes the entry by its safetensors;
+/// one `ardana serve` on the row's home answers the fixtures as the goldens too, and `ardana ps` lists the model it
+/// loaded for them.
 fn check_decision(cli: &Cli, fixture: &CandleFixture, pulled: &mut Vec<String>) -> Result<()> {
     let name = fixture.name.to_string();
     let checkpoint = format!("hf.co/{}", fixture.checkpoint.repo);
@@ -192,20 +202,14 @@ fn check_decision(cli: &Cli, fixture: &CandleFixture, pulled: &mut Vec<String>) 
     let root = cli.sandbox.repo_root();
     let requests = root.join("tests/fixtures/requests");
     let goldens = root.join(GOLDENS);
+    let mut answered = Vec::new();
     for request in REQUESTS {
         let path = requests.join(request);
         let want = read_json(&goldens.join(request))?;
         let (got, took) = cli.answer(&name, &path)?;
-        let gap = same_answers(&got, &want, DECISION_TOLERANCE).with_context(|| {
+        let gap = same_as_golden(&got, &want).with_context(|| {
             format!("{request}: Candle answered {got}, the thx01 package {want}")
         })?;
-        let tokens = |response: &Value| response["usage"]["input_tokens"].as_u64();
-        ensure!(
-            tokens(&got) == tokens(&want),
-            "{request}: Candle reports {:?} input tokens, the thx01 package {:?}",
-            tokens(&got),
-            tokens(&want)
-        );
         println!(
             "e2e candle {name} {request}: {} (thx01: {}), probabilities within {gap:.4}, {} tokens; Candle {}",
             summary(&got),
@@ -213,6 +217,7 @@ fn check_decision(cli: &Cli, fixture: &CandleFixture, pulled: &mut Vec<String>) 
             got["usage"]["input_tokens"],
             seconds(took)
         );
+        answered.push((request, path, want));
     }
 
     let ticket = read_json(&requests.join(REQUESTS[0]))?;
@@ -297,15 +302,63 @@ fn check_decision(cli: &Cli, fixture: &CandleFixture, pulled: &mut Vec<String>) 
         "e2e candle {name}: --verbose prints the model, tokens and timings; listed at {} {}",
         cells[1], cells[2]
     );
-    Ok(())
+
+    let wanted: Vec<(&str, &Path, &Value)> = answered
+        .iter()
+        .map(|(request, path, want)| (*request, path.as_path(), want))
+        .collect();
+    let server = served(cli, &name, &wanted, |request, got, want| {
+        let gap = same_as_golden(got, want)?;
+        println!(
+            "e2e candle {name} serve {request}: {} (thx01: {}), probabilities within {gap:.4}, {} tokens",
+            summary(got),
+            summary(want),
+            got["usage"]["input_tokens"]
+        );
+        Ok(())
+    })?;
+    let port = server.url.rsplit(':').next().context("the server's port")?;
+    let loaded = run_stdout(cli.command().args(["ps", "--port", port]))?;
+    let row = loaded
+        .lines()
+        .find(|line| line.starts_with(&format!("{name} ")))
+        .with_context(|| format!("ardana ps lists no {name} after its answers:\n{loaded}"))?;
+    let row = row.split_whitespace().collect::<Vec<_>>().join(" ");
+    ensure!(
+        row.ends_with(&format!(" {checkpoint}")),
+        "ardana ps lists {name} as `{row}`, not from {checkpoint}"
+    );
+    println!("e2e candle {name} serve: ardana ps lists `{row}`");
+    server.stop()
 }
 
-/// R3.3: one `ardana serve` on the row's home answers the fixtures in turn through Candle, each as the GGUF answered
-/// it, then the first one again with the very answers it gave before: no prompt leaves anything to the next.
-fn served(cli: &Cli, candle: &str, answered: &[(&str, PathBuf, Value, Value)]) -> Result<()> {
+/// Q11: `got` answers as the golden `want` does ([`same_answers`] within [`DECISION_TOLERANCE`]) and reports the
+/// golden's `input_tokens`. Returns the widest gap between two probabilities.
+fn same_as_golden(got: &Value, want: &Value) -> Result<f64> {
+    let gap = same_answers(got, want, DECISION_TOLERANCE)?;
+    let tokens = |response: &Value| response["usage"]["input_tokens"].as_u64();
+    ensure!(
+        tokens(got) == tokens(want),
+        "{:?} input tokens, the thx01 package reports {:?}",
+        tokens(got),
+        tokens(want)
+    );
+    Ok(gap)
+}
+
+/// R3.3 and R9.1: one `ardana serve` on the row's home answers the fixtures in turn through Candle, each as `agrees`
+/// holds it (request, answer, wanted) to the answer the row compares with (the GGUF's, or the golden), then the first
+/// one again with the very answers it gave before: no prompt leaves anything to the next. Returns the server, still
+/// running with the model loaded.
+fn served(
+    cli: &Cli,
+    candle: &str,
+    answered: &[(&str, &Path, &Value)],
+    agrees: impl Fn(&str, &Value, &Value) -> Result<()>,
+) -> Result<Server> {
     let server = Server::start_on(cli.sandbox, cli.ardana, &cli.home)?;
     let mut answers = Vec::new();
-    for (request, path, _, want) in answered.iter().chain(answered.first()) {
+    for (request, path, want) in answered.iter().chain(answered.first()) {
         let mut body = read_json(path)?;
         body["model"] = candle.into();
         let output = cli
@@ -325,11 +378,9 @@ fn served(cli: &Cli, candle: &str, answered: &[(&str, PathBuf, Value, Value)]) -
         );
         let got: Value = serde_json::from_slice(&output.stdout)
             .with_context(|| format!("parsing the server's answer to {request}"))?;
-        same_answers(&got, want, TOLERANCE)
-            .with_context(|| format!("{request} from the server: {got}"))?;
+        agrees(request, &got, want).with_context(|| format!("{request} from the server: {got}"))?;
         answers.push(got["answers"].clone());
     }
-    server.stop()?;
     let (first, again) = (&answers[0], &answers[answers.len() - 1]);
     ensure!(
         first == again,
@@ -341,7 +392,7 @@ fn served(cli: &Cli, candle: &str, answered: &[(&str, PathBuf, Value, Value)]) -
         REQUESTS.join(", "),
         answered[0].0
     );
-    Ok(())
+    Ok(server)
 }
 
 /// R3.4: the ticket's questions over its state repeated, through both runtimes. `short` is the answer to the ticket
