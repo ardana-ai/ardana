@@ -34,7 +34,7 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   weights (`.gguf`, `.onnx`, `.onnx.data`, `.safetensors`), which needs no token; `cargo xtask fetch --tests`
   installs those files without the tools, so CI runs it, and `fetch --check` verifies the same files. Plain tests
   use only them: the tokenizers, configs and chat templates of decider, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8,
-  Qwen3-1.7B and Llama 3.2.
+  Qwen3-1.7B, Llama 3.2, Spark X2.5, Granite 4.2, Nemotron 3 Nano and Apertus.
 - The weights of an `[[hf]]` entry are in `tmp/hf` only while an end-to-end suite that names its repository runs
   (`RUST_FIXTURES` and the weight lists in `xtask/src/e2e.rs`). `hub::with_weights` (`xtask/src/hub.rs`) lists the
   cache, downloads the entries whole with the downloader below, runs the suite and deletes every path the cache
