@@ -23,6 +23,8 @@
 //   sin and cos carry the attention factor, which upstream leaves out. Those tables are computed in F32 and then
 //   converted, and a factor list of another length than the rotary frequencies is an error.
 // - `Config` and the rope scaling types are candle-transformers' own, imported: this crate derives no `Deserialize`.
+// - Attention uses the shared query chunks, synchronizing Metal after each to release completed score buffers.
+// - No key-value cache: each prompt is decoded whole at offset 0, so layers retain no keys or values.
 // - Left out, as nothing here uses it: `clear_kv_cache`.
 
 //! Microsoft Phi-3 model implementation
@@ -76,12 +78,8 @@ impl RotaryEmbedding {
                     .step_by(2)
                     .map(|i| 1f32 / cfg.rope_theta.powf(i as f64 / dim as f64) as f32)
                     .collect();
-                let inv_freq = Tensor::from_vec(inv_freq, (1, ()), dev)?.to_dtype(dtype)?;
-                let t = Tensor::arange(0u32, max_seq_len as u32, dev)?
-                    .to_dtype(dtype)?
-                    .reshape((max_seq_len, 1))?;
-                let freqs = t.matmul(&inv_freq)?;
-                (freqs.sin()?, freqs.cos()?, None)
+                let (sin, cos) = crate::ops::rotary(&inv_freq, max_seq_len, 1.0, dtype, dev)?;
+                (sin, cos, None)
             }
             Some(rope_scaling) => {
                 let original_max_seq_len =
@@ -107,15 +105,7 @@ impl RotaryEmbedding {
                             1f32 / (f * cfg.rope_theta.powf(i as f64 / dim as f64) as f32)
                         })
                         .collect();
-                    let inv_freq = Tensor::from_vec(inv_freq, (1, ()), dev)?;
-                    let t = Tensor::arange(0u32, seq_len as u32, dev)?
-                        .to_dtype(DType::F32)?
-                        .reshape((seq_len, 1))?;
-                    let freqs = t.matmul(&inv_freq)?;
-                    Ok((
-                        (freqs.sin()? * attention_factor)?.to_dtype(dtype)?,
-                        (freqs.cos()? * attention_factor)?.to_dtype(dtype)?,
-                    ))
+                    crate::ops::rotary(&inv_freq, seq_len, attention_factor, dtype, dev)
                 };
                 if max_seq_len > original_max_seq_len {
                     let (sin, cos) = sin_cos(&rope_scaling.short_factor, original_max_seq_len)?;
@@ -180,7 +170,6 @@ struct Attention {
     num_kv_groups: usize,
     head_dim: usize,
     rotary_emb: Arc<RotaryEmbedding>,
-    kv_cache: Option<(Tensor, Tensor)>,
 }
 
 impl Attention {
@@ -195,7 +184,6 @@ impl Attention {
             qkv_proj,
             o_proj,
             rotary_emb,
-            kv_cache: None,
             num_heads,
             num_kv_heads,
             num_kv_groups: num_heads / num_kv_heads,
@@ -204,7 +192,7 @@ impl Attention {
     }
 
     fn forward(
-        &mut self,
+        &self,
         xs: &Tensor,
         attention_mask: Option<&Tensor>,
         seqlen_offset: usize,
@@ -235,30 +223,17 @@ impl Attention {
             self.rotary_emb
                 .apply_rotary_emb_qkv(&query_states, &key_states, seqlen_offset)?;
 
-        let (key_states, value_states) = match &self.kv_cache {
-            None => (key_states, value_states),
-            Some((prev_k, prev_v)) => {
-                let key_states = Tensor::cat(&[prev_k, &key_states], 2)?;
-                let value_states = Tensor::cat(&[prev_v, &value_states], 2)?;
-                (key_states, value_states)
-            }
-        };
-        self.kv_cache = Some((key_states.clone(), value_states.clone()));
-
         let key_states = utils::repeat_kv(key_states, self.num_kv_groups)?.contiguous()?;
         let value_states = utils::repeat_kv(value_states, self.num_kv_groups)?.contiguous()?;
 
-        let attn_output = {
-            let scale = 1f64 / f64::sqrt(self.head_dim as f64);
-            let attn_weights = (query_states.matmul(&key_states.transpose(2, 3)?)? * scale)?;
-
-            let attn_weights = match attention_mask {
-                None => attn_weights,
-                Some(mask) => attn_weights.broadcast_add(mask)?,
-            };
-            let attn_weights = candle_nn::ops::softmax_last_dim(&attn_weights)?;
-            attn_weights.matmul(&value_states)?
-        };
+        let attn_output = crate::ops::attention(
+            &query_states,
+            &key_states,
+            &value_states,
+            attention_mask,
+            1f64 / f64::sqrt(self.head_dim as f64),
+            None,
+        )?;
         attn_output
             .transpose(1, 2)?
             .reshape((b_sz, q_len, ()))?
@@ -327,7 +302,7 @@ impl DecoderLayer {
     }
 
     fn forward(
-        &mut self,
+        &self,
         xs: &Tensor,
         attention_mask: Option<&Tensor>,
         seqlen_offset: usize,
@@ -393,7 +368,7 @@ impl Model {
             .to_dtype(self.dtype)
     }
 
-    pub fn forward(&mut self, input_ids: &Tensor, seqlen_offset: usize) -> Result<Tensor> {
+    pub fn forward(&self, input_ids: &Tensor, seqlen_offset: usize) -> Result<Tensor> {
         let (b_size, seq_len) = input_ids.dims2()?;
         let attention_mask = if seq_len <= 1 {
             None
@@ -402,9 +377,70 @@ impl Model {
             Some(mask)
         };
         let mut xs = self.embed_tokens.forward(input_ids)?;
-        for layer in self.layers.iter_mut() {
+        for layer in self.layers.iter() {
             xs = layer.forward(&xs, attention_mask.as_ref(), seqlen_offset)?
         }
         xs.apply(&self.norm)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn longrope_precision(device: &Device) -> Result<()> {
+        let cfg: Config = serde_json::from_value(serde_json::json!({
+            "vocab_size": 20, "hidden_act": "silu", "hidden_size": 8, "intermediate_size": 16,
+            "num_hidden_layers": 1, "num_attention_heads": 1, "num_key_value_heads": 1,
+            "rms_norm_eps": 1e-5, "rope_theta": 10000.0, "bos_token_id": 1, "eos_token_id": 2,
+            "rope_scaling": {"type": "longrope", "short_factor": [1.0, 1.0], "long_factor": [1.0, 4.0]},
+            "max_position_embeddings": 6000, "original_max_position_embeddings": 4096,
+            "partial_rotary_factor": 0.5, "tie_word_embeddings": true
+        })).unwrap();
+        let rotary = RotaryEmbedding::new(DType::BF16, &cfg, device)?;
+        let scale = (1.0 + (6000f32 / 4096.0).ln() / 4096f32.ln()).sqrt();
+        for (len, factor) in [(4096, 1.0), (4097, 4.0)] {
+            let head = Tensor::new(&[[1f32, 1.0, 0.0, 0.0, 7.0, 7.0, 7.0, 7.0]], device)?;
+            let heads = head
+                .repeat((len, 1))?
+                .reshape((1, 1, len, 8))?
+                .to_dtype(DType::BF16)?;
+            let (q, k) = rotary.apply_rotary_emb_qkv(&heads, &heads, 0)?;
+            let q = q
+                .reshape((len, 8))?
+                .to_dtype(DType::F32)?
+                .to_vec2::<f32>()?;
+            assert_eq!(
+                q,
+                k.reshape((len, 8))?
+                    .to_dtype(DType::F32)?
+                    .to_vec2::<f32>()?
+            );
+            for position in [256, 257, len - 1] {
+                let first = position as f32;
+                let second = first * 0.01 / factor;
+                let expected = [first.cos(), second.cos(), first.sin(), second.sin()];
+                for (got, want) in q[position].iter().zip(expected.map(|x| x * scale)) {
+                    assert!(
+                        (got - want).abs() < 0.005,
+                        "{len} tokens, position {position}: {got}, not {want}"
+                    );
+                }
+                assert_eq!(&q[position][4..], &[7.0; 4]);
+            }
+            assert_ne!(q[256], q[257]);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn bf16_longrope_applies_prompt_length_and_preserves_positions() -> Result<()> {
+        longrope_precision(&Device::Cpu)
+    }
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn metal_bf16_longrope_applies_prompt_length_and_preserves_positions() -> Result<()> {
+        longrope_precision(&Device::new_metal(0)?)
     }
 }

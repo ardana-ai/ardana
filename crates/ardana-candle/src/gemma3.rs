@@ -26,9 +26,9 @@
 // - A global layer's rotary frequencies are divided by `Config::rope_scaling_factor`, the `factor` of a `rope_scaling`
 //   of `rope_type` `linear` (gemma-3-4b-it writes 8), which upstream does not read; a sliding layer keeps
 //   `rope_local_base_freq` unscaled, as transformers and llama.cpp do.
-// - The value states are made contiguous before the cache takes them: candle-nn's `KvCache::append` (a global
-//   layer's) refuses the transposed tensor of a checkpoint with more than one key-value head (gemma-3-4b-it has
-//   four), where the rotating cache of a sliding layer copies it itself.
+// - Rotary positions, frequencies and trig are computed in F32; only the finished tables use the model dtype.
+// - Attention uses the shared query chunks, synchronizing Metal after each to release completed score buffers.
+// - No key-value cache: each prompt is decoded whole at offset 0, with sliding/global masks over that prompt.
 // - `Config` is built by `Config::new` from candle-transformers' own `gemma3::Config`, imported, and the factor: this
 //   crate derives no `Deserialize`. `Model::new(cfg, vb)` takes no flash-attention flag.
 // - Left out, as nothing here uses them: flash attention, `clear_kv_cache`, and `Model`'s `lm_head` and
@@ -151,16 +151,8 @@ impl RotaryEmbedding {
             .step_by(2)
             .map(|i| 1f32 / (rope_freq.powf(i as f64 / dim as f64) * factor) as f32)
             .collect();
-        let inv_freq_len = inv_freq.len();
-        let inv_freq = Tensor::from_vec(inv_freq, (1, inv_freq_len), dev)?.to_dtype(dtype)?;
-        let t = Tensor::arange(0u32, max_seq_len as u32, dev)?
-            .to_dtype(dtype)?
-            .reshape((max_seq_len, 1))?;
-        let freqs = t.matmul(&inv_freq)?;
-        Ok(Self {
-            sin: freqs.sin()?,
-            cos: freqs.cos()?,
-        })
+        let (sin, cos) = crate::ops::rotary(&inv_freq, max_seq_len, 1.0, dtype, dev)?;
+        Ok(Self { sin, cos })
     }
 
     fn apply_rotary_emb_qkv(
@@ -211,12 +203,6 @@ impl Module for Mlp {
 }
 
 #[derive(Debug, Clone)]
-enum KvCache {
-    Normal(candle_nn::kv_cache::KvCache),
-    Rotating(candle_nn::kv_cache::RotatingKvCache),
-}
-
-#[derive(Debug, Clone)]
 struct Attention {
     q_proj: Linear,
     k_proj: Linear,
@@ -231,16 +217,10 @@ struct Attention {
     query_pre_attn_scalar: usize,
     attn_logit_softcapping: Option<f64>,
     rotary_emb: Arc<RotaryEmbedding>,
-    kv_cache: KvCache,
 }
 
 impl Attention {
-    fn new(
-        rotary_emb: Arc<RotaryEmbedding>,
-        cfg: &Config,
-        sliding_window: Option<usize>,
-        vb: VarBuilder,
-    ) -> Result<Self> {
+    fn new(rotary_emb: Arc<RotaryEmbedding>, cfg: &Config, vb: VarBuilder) -> Result<Self> {
         let hidden_sz = cfg.hidden_size;
         let num_heads = cfg.num_attention_heads;
         let num_kv_heads = cfg.num_key_value_heads;
@@ -253,14 +233,6 @@ impl Attention {
         let o_proj = linear(num_heads * head_dim, hidden_sz, bias, vb.pp("o_proj"))?;
         let q_norm = RmsNorm::new(head_dim, cfg.rms_norm_eps, vb.pp("q_norm"))?;
         let k_norm = RmsNorm::new(head_dim, cfg.rms_norm_eps, vb.pp("k_norm"))?;
-        let kv_cache = if let Some(sliding_window) = sliding_window {
-            KvCache::Rotating(candle_nn::kv_cache::RotatingKvCache::new(2, sliding_window))
-        } else {
-            KvCache::Normal(candle_nn::kv_cache::KvCache::new(
-                2,
-                cfg.max_position_embeddings,
-            ))
-        };
         Ok(Self {
             q_proj,
             k_proj,
@@ -275,12 +247,11 @@ impl Attention {
             query_pre_attn_scalar: cfg.query_pre_attn_scalar,
             attn_logit_softcapping: cfg.attn_logit_softcapping,
             rotary_emb,
-            kv_cache,
         })
     }
 
     fn forward(
-        &mut self,
+        &self,
         xs: &Tensor,
         attention_mask: Option<&Tensor>,
         seqlen_offset: usize,
@@ -308,30 +279,17 @@ impl Attention {
             self.rotary_emb
                 .apply_rotary_emb_qkv(&query_states, &key_states, seqlen_offset)?;
 
-        let (key_states, value_states) = match &mut self.kv_cache {
-            KvCache::Normal(cache) => cache.append(&key_states, &value_states)?,
-            KvCache::Rotating(cache) => cache.append(&key_states, &value_states)?,
-        };
-
         let key_states = utils::repeat_kv(key_states, self.num_kv_groups)?.contiguous()?;
         let value_states = utils::repeat_kv(value_states, self.num_kv_groups)?.contiguous()?;
 
-        let attn_output = {
-            let scale = 1f64 / f64::sqrt(self.query_pre_attn_scalar as f64);
-            let attn_weights = (query_states.matmul(&key_states.transpose(2, 3)?)? * scale)?;
-
-            let attn_weights = match self.attn_logit_softcapping {
-                None => attn_weights,
-                Some(sc) => ((attn_weights / sc)?.tanh()? * sc)?,
-            };
-
-            let attn_weights = match attention_mask {
-                None => attn_weights,
-                Some(mask) => attn_weights.broadcast_add(mask)?,
-            };
-            let attn_weights = candle_nn::ops::softmax_last_dim(&attn_weights)?;
-            attn_weights.matmul(&value_states)?
-        };
+        let attn_output = crate::ops::attention(
+            &query_states,
+            &key_states,
+            &value_states,
+            attention_mask,
+            1f64 / f64::sqrt(self.query_pre_attn_scalar as f64),
+            self.attn_logit_softcapping,
+        )?;
         attn_output
             .transpose(1, 2)?
             .reshape((b_sz, q_len, ()))?
@@ -358,7 +316,7 @@ impl DecoderLayer {
             vb.device(),
             sliding_window,
         )?);
-        let self_attn = Attention::new(rotary_emb, cfg, sliding_window, vb.pp("self_attn"))?;
+        let self_attn = Attention::new(rotary_emb, cfg, vb.pp("self_attn"))?;
         let mlp = Mlp::new(cfg, vb.pp("mlp"))?;
         let input_layernorm =
             RmsNorm::new(cfg.hidden_size, cfg.rms_norm_eps, vb.pp("input_layernorm"))?;
@@ -389,7 +347,7 @@ impl DecoderLayer {
     }
 
     fn forward(
-        &mut self,
+        &self,
         xs: &Tensor,
         attention_mask: Option<&Tensor>,
         seqlen_offset: usize,
@@ -513,7 +471,7 @@ impl Model {
         Ok((Some(mask), Some(sliding_mask)))
     }
 
-    pub fn forward(&mut self, input_ids: &Tensor, seqlen_offset: usize) -> Result<Tensor> {
+    pub fn forward(&self, input_ids: &Tensor, seqlen_offset: usize) -> Result<Tensor> {
         let (b_size, seq_len) = input_ids.dims2()?;
         let xs = self.embed_tokens.forward(input_ids)?;
         let mut xs = (xs * (self.hidden_size as f64).sqrt())?;
@@ -521,7 +479,7 @@ impl Model {
         let (attention_mask, sliding_attention_mask) =
             self.create_attention_masks(b_size, seq_len, seqlen_offset)?;
 
-        for layer in self.layers.iter_mut() {
+        for layer in self.layers.iter() {
             let mask = if layer.sliding_window.is_some() {
                 &sliding_attention_mask
             } else {

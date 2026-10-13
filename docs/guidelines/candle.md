@@ -82,12 +82,16 @@ building and readout stay in `ardana-core` and never call Candle.
   derive `Deserialize`, `models::with_tracing::{Linear, RmsNorm}` and `utils::{repeat_kv, build_causal_mask}`.
 - A missing tensor is an error of the load, never a panic: replace an `unwrap()` on the load path with `?`.
 - The modules today, each with the change it is vendored for:
+  - `qwen2.rs` (`src/models/qwen2.rs`, `Qwen2ForCausalLM`): F32 rotary products and trig before conversion to the
+    model dtype, shared query-chunk attention and no key-value cache. It keeps upstream's all-position hidden
+    states and imports its `Config`; unused padding masks, incremental decode and `ModelForCausalLM` are left out.
   - `llama.rs` (`src/models/llama.rs`, `LlamaForCausalLM`): `Llama::forward` returns the final-normed hidden states
     at every position instead of the last position's logits, and `Llama` holds no `lm_head`. Also `Config::head_dim`
     from `config.json#head_dim`, and a layer's missing tensor as an error where upstream panics.
   - `phi3.rs` (`src/models/phi3.rs`, `Phi3ForCausalLM`): `Model::forward` returns the final-normed hidden states at
     every position instead of the last position's logits, and `Model` holds no `lm_head`. Also `longrope` scaled as
-    transformers scales it.
+    transformers scales it, F32 rotary products and trig before conversion, shared query-chunk attention and no
+    key-value cache.
   - `granite.rs` (`src/models/granite.rs`, `GraniteForCausalLM`): `Granite::forward` returns the final-normed hidden
     states at every position instead of the last position's logits, and `Granite` holds no `lm_head`. Also
     `Config::multipliers`, the four scalars of a Granite `config.json` that upstream's `granite` does not read
@@ -100,12 +104,13 @@ building and readout stay in `ardana-core` and never call Candle.
     `Gemma3ForConditionalGeneration`): `Model::forward` returns the final-normed hidden states at every position
     instead of the last position's softcapped logits, and `Model` holds neither `lm_head` nor
     `final_logit_softcapping`. Also the sliding mask's window, the attention scale and the global layers' linear
-    rope scaling as transformers and llama.cpp have them ("Gemma 3 in the vendored module").
+    rope scaling as transformers and llama.cpp have them ("Gemma 3 in the vendored module"), F32 rotary products
+    and trig before conversion, shared query-chunk attention and no key-value cache.
   - `olmo2.rs` (`src/models/olmo2.rs`, `Olmo3ForCausalLM`): `Model::forward` returns the final-normed hidden states
     at every position instead of the last position's logits, and `Model` holds no `lm_head`. Also Olmo 3's
     `layer_types` sliding layers under their window's mask and the full layers' yarn rope scaling, the attention
     over chunks of query rows and no key-value cache, which a 7B model's memory asks for ("Olmo 3 in the vendored
-    module").
+    module"), and F32 rotary products and trig before conversion.
 
 ### Loading
 - Map the files with `candle_core::safetensors::MmapedSafetensors::multi(&files)` (an `unsafe` call: the hub cache's
@@ -118,6 +123,23 @@ building and readout stay in `ardana-core` and never call Candle.
   error. A failure to open Metal is an error, never a silent CPU fallback.
 - `LoadedModel::n_ctx()` is the smaller of `LoadOptions::n_ctx` and `config.json#max_position_embeddings` (Q11): the
   rotary tables end there. The row cap stays the core's (`Limits::context_window`).
+
+### Whole-prompt rotary and attention
+- Qwen2, Phi-3, Gemma 3 and Olmo 3 share `ops::rotary`: positions, inverse frequencies, their products, sin/cos and
+  the attention factor are computed in F32; only the finished tables are converted to the model dtype. Converting
+  positions to BF16 first merges adjacent positions past 256 and corrupts long-prompt rotations. Model weights,
+  hidden states and attention remain BF16 on native Metal; the CPU remains F32.
+- These four decoders share `ops::attention`, covering at most 512 query rows per score tensor while retaining all
+  keys. The operation order stays scale, optional attention softcap, causal/sliding mask, softmax, value product;
+  chunks concatenate along the query dimension. Work still grows quadratically with prompt length, but individual
+  score tensors have shape `[batch, heads, min(512, len), len]`.
+- On Metal each chunk synchronizes after its score temporaries drop. candle-core 0.11.0's `Device::synchronize`
+  waits for the queued command buffers, releases them, clears their fence-output references and removes unused
+  buffers from its pools and Metal residency set. Chunking without this completion boundary allows asynchronous
+  layers to retain their scores until the final readback. CPU chunks need no synchronization.
+- These decoders store no key-value cache: the runtime decodes each prompt whole at offset 0. In particular Phi
+  does not retain every layer's keys/values, and Gemma does not allocate global caches to `max_position_embeddings`
+  for a single prompt. This changes no context limit, device selection or readout.
 
 ### THX-01, the decision model
 - `THXDecisionModel` (`hf.co/doofz/THX-01` at `bef2e2478be7acd79429324a658558a57552a2e8`, `config.json` with
@@ -182,10 +204,10 @@ building and readout stay in `ardana-core` and never call Candle.
 - The CPU is slow on Apple silicon: the same checkpoint in F32 takes 26 s for that 2.2k-token row and 3.5 s for four
   rows of 180 tokens, which Metal answers in 0.3 s. The dev profile is about four times slower again.
 
-### Qwen2 and SmolLM3 in candle-transformers 0.11.0
-- `Qwen2ForCausalLM`: `models::qwen2::Model::forward(input, 0, None)` returns the final-normed hidden states at every
-  position; `ModelForCausalLM` narrows to the last one. Pass no attention mask: `None` builds the causal mask, while
-  `Some(mask)` builds a padding mask that is not causal. The head is `model.embed_tokens.weight` when
+### Qwen2 in the vendored module and SmolLM3 in candle-transformers 0.11.0
+- `Qwen2ForCausalLM`: `qwen2::Model::forward(input, 0)` returns the final-normed hidden states at every
+  position; upstream's `ModelForCausalLM` narrows to the last one. The decoder builds the causal mask. The head is
+  `model.embed_tokens.weight` when
   `tie_word_embeddings` is true (Qwen2.5-1.5B-Instruct ties), else `lm_head.weight`.
 - `qwen2::Config` wants all 14 fields with `sliding_window` a number (a `null` does not read), and `forward` masks
   every layer by that window whatever `use_sliding_window` says. `qwen2_config` therefore reads a checkpoint with
@@ -194,16 +216,13 @@ building and readout stay in `ardana-core` and never call Candle.
 - `SmolLM3ForCausalLM`: `models::smol::smollm3::Model::forward(input, 0)` returns the final-normed hidden states at
   every position, masking causally itself. A layer skips its rotary embedding where `no_rope_layers` holds a 0 (else
   by `no_rope_layer_interval`); `use_sliding_window: true` makes `Model::new` fail; SmolLM3-3B ties its head.
-- Both models have a public `clear_kv_cache`, and both still decode each prompt with a clone, as Qwen3 does: one rule
-  for every architecture, and the clone's cache goes with the call (SmolLM3's `KvCache` keeps the buffer a long
-  prompt grew it to after a reset).
-- Both use matmul attention over `[heads, len, len]` scores on every device, the CPU too (Qwen3 alone has the fused
-  CPU kernel), so memory grows with the square of the prompt: Qwen2.5-1.5B-Instruct in F32 on a 16-core x86 CPU
-  answers the ticket's two rows over a 5.8k-token state in 271 s at an 11.6 GB peak, where its Q8_0 GGUF through
-  llama.cpp takes 145 s and 3.4 GB. SmolLM3-3B in F32 holds 18 GB for a 140-token request (its GGUF 6.4 GB).
-- Not measured on Metal (no Apple machine, 2026-10-11): both keep the BF16 rule. `qwen2` computes its rotary table in
-  the model's dtype, where `qwen3` and `smollm3` compute it in F32 and convert, so in BF16 its positions past 256 are
-  not exact; measure a long prompt against the GGUF before relying on Qwen2 on Metal.
+- SmolLM3 decodes each prompt with a clone, as Qwen3 does, so its `KvCache` and any buffers a long prompt grew go
+  with the call. Qwen2 stores no cache and runs the loaded decoder directly.
+- SmolLM3 uses matmul attention over `[heads, len, len]` scores on every device (Qwen3 alone has the fused CPU
+  kernel); Qwen2 now uses the shared query chunks. Earlier unchunked F32 CPU measurements had Qwen2.5-1.5B-Instruct
+  answer two rows over a 5.8k-token state in 271 s at an 11.6 GB peak (its Q8_0 GGUF: 145 s, 3.4 GB).
+  SmolLM3-3B in F32 holds 18 GB for a 140-token request (its GGUF 6.4 GB).
+- Qwen2's rotary table follows the F32-before-conversion rule above, as upstream Qwen3 and SmolLM3 already do.
 
 ### Llama and Phi-3 in the vendored modules
 - `LlamaForCausalLM`: `llama::Llama::forward(input, 0, &mut cache)` returns the final-normed hidden states at every
@@ -214,7 +233,8 @@ building and readout stay in `ardana-core` and never call Candle.
   MiniCPM5-1B has 16 heads of 128 over 1536 hidden, so its `q_proj` is 2048 wide. `LlamaConfig` reads an absent
   `tie_word_embeddings` as false: Llama-3.2-1B ties its head, MiniCPM5-1B has its own `lm_head.weight`.
 - `Phi3ForCausalLM`: `phi3::Model::forward(input, 0)` returns the final-normed hidden states at every position, on a
-  clone like every other architecture. `qkv_proj` and `gate_up_proj` are fused tensors, and a `partial_rotary_factor`
+  stateless decoder with no key-value cache. `qkv_proj` and `gate_up_proj` are fused tensors, and
+  `partial_rotary_factor`
   (Phi-4-mini: 0.75) rotates only the first dimensions of a head.
 - `longrope` (`rope_scaling.type`, Phi-4-mini) follows transformers: a rotary frequency is divided by its factor; a
   prompt longer than `original_max_position_embeddings` (4096) reads `long_factor` at every position and any other
@@ -228,17 +248,15 @@ building and readout stay in `ardana-core` and never call Candle.
   MiniCPM5-1B and Phi-4-mini through Candle are within 0.0001 of it at 29 and at 4.4k tokens, so what separates a
   checkpoint from its GGUF is the quantization and, for Phi-4-mini below 4,097 tokens, llama.cpp's factors.
 - A `Phi3ForCausalLM` checkpoint without `rope_scaling` (microsoft/phi-4, which also has its own `lm_head.weight`)
-  takes upstream's unscaled table unchanged. It was not run: its 29 GB of BF16 safetensors are 58 GB in F32.
-- Both compute attention by matmul over `[heads, len, len]` scores on every device (Llama casts them to F32 and
-  masks with a u8 mask, Phi-3 adds a mask in the model's dtype), so memory and time grow with the square of the
-  prompt. In F32 on a 16-core x86 CPU a load and one row of 4.4k tokens take Llama-3.2-1B 144 s at a 12.5 GB peak,
+  takes the unscaled table, computed in F32 before conversion. It was not run: its 29 GB of BF16 safetensors are 58 GB in F32.
+- Llama computes attention by matmul over `[heads, len, len]` scores, cast to F32 and masked with a u8 mask; Phi-3
+  uses the shared query chunks and adds a mask in the model's dtype. Earlier unchunked F32 measurements on a
+  16-core x86 CPU had a load and one row of 4.4k tokens take Llama-3.2-1B 144 s at a 12.5 GB peak,
   MiniCPM5-1B 115 s at 8.3 GB and Phi-4-mini 207 s at 22.5 GB; Phi-4-mini holds 22.6 GB for a 70-token request, its
   7.7 GB of BF16 weights read as F32 (its Q8_0 GGUF: 9.4 GB at the 40,960 window), and answers the ticket's two
   rows over a 4.9k-token state in 457 s, where the GGUF through llama.cpp takes 291 s.
-- Not measured on Metal (no Apple machine, 2026-10-11): both keep the BF16 rule. Llama computes its rotary table and
-  its attention in F32. Phi-3 computes the `longrope` tables in F32 and converts them, but the unscaled table (phi-4)
-  in the model's dtype as upstream does, so in BF16 its positions past 256 are not exact, and its attention runs in
-  the model's dtype; measure a long prompt against the GGUF before relying on Phi-3 on Metal.
+- Llama computes its rotary table and attention in F32. Phi-3 computes both its `longrope` and unscaled tables
+  in F32 before conversion; its attention remains in the model's dtype and completes each Metal query chunk.
 
 ### Granite and LFM2 in the vendored modules
 - `GraniteForCausalLM`: `granite::Granite::forward(input, 0, &mut cache)` returns the final-normed hidden states at
@@ -299,16 +317,15 @@ building and readout stay in `ardana-core` and never call Candle.
   head read `model.*` either way. A checkpoint saved by transformers 4.52 or later writes the tower under
   `model.language_model.*` with its own `lm_head.weight`; that form was not run and is not read (the load fails
   naming `model.embed_tokens.weight`). The unsloth mirrors are the pins because google's repositories are gated.
-- `gemma3::Model::forward(input, 0)` returns the final-normed hidden states at every position, on a clone like every
-  other architecture. The head is always the embedding (`model.embed_tokens.weight`; there is no
+- `gemma3::Model::forward(input, 0)` returns the final-normed hidden states at every position, with no key-value
+  cache. The head is always the embedding (`model.embed_tokens.weight`; there is no
   `tie_word_embeddings`), the embeddings are multiplied by `sqrt(hidden_size)`, and every RmsNorm multiplies by
   `1 + weight`. Final-logit softcapping belongs to the readout (`Architecture::final_logit_softcapping`, "Logits"):
   both pinned checkpoints write `final_logit_softcapping: null` and `attn_logit_softcapping: null`, so on them
   nothing is softcapped; the readout's path is pinned by a unit test over random weights.
 - A layer is sliding when `(layer_idx + 1) % sliding_window_pattern > 0` (five of every six); `sliding_window` is
-  512 for 1B and 1024 for 4B. A sliding layer attends over the whole prompt (candle's `RotatingKvCache::append`
-  hands back the whole source when one pass exceeds its window) under a mask that hides every key `sliding_window`
-  or more positions before its query, which is transformers' `sliding_window_overlay` (`kv > q - window`) and
+  512 for 1B and 1024 for 4B. A sliding layer attends over the whole prompt under a mask that hides every key
+  `sliding_window` or more positions before its query, which is transformers' `sliding_window_overlay` (`kv > q - window`) and
   llama.cpp's `is_masked_swa` (`p1 - p0 >= n_swa`); candle-transformers 0.11.0's mask hid one position less, a
   window of `sliding_window + 1`. A sliding layer rotates with `rope_local_base_freq` (10,000) unscaled; a global
   layer with `rope_theta` (1,000,000) divided by the `factor` of a `rope_scaling` of `rope_type` `linear`
@@ -319,24 +336,20 @@ building and readout stay in `ardana-core` and never call Candle.
 - `models::gemma3::Config` wants all 18 fields, `sliding_window_pattern` among them (both pins write 6 and no
   `layer_types`); a `config.json` that writes `layer_types` without the pattern, as transformers 4.54 and later
   save, does not read. Each layer builds its own rotary table over `max_position_embeddings` positions, as upstream
-  does: 26 tables of 32,768 rows for 1B (0.9 GB in F32), 34 of 131,072 for 4B (4.6 GB), and a global layer's
-  `KvCache` allocates that many positions on the clone's first append (gemma-3-4b-it: 1 GB a layer, six layers),
-  freed with the clone.
+  does: 26 tables of 32,768 rows for 1B (0.9 GB in F32), 34 of 131,072 for 4B (4.6 GB). The decoder keeps no
+  key-value cache, including the global layers; every call runs the whole prompt.
 - Checked against transformers 5.19.0 in F32 on the CPU (2026-10-11, by hand, `Gemma3ForCausalLM` and
   `Gemma3ForConditionalGeneration` loaded from the same snapshots): the label logits through Candle are within
   0.0002 of it for gemma-3-1b-it and for gemma-3-4b-it, each at 42 and at 2.2k tokens, past both sliding windows,
-  so what separates a checkpoint from its GGUF is the quantization. candle-nn 0.11.0's plain `KvCache::append`
-  (a global layer's) refuses a non-contiguous tensor, which the transposed value states of a checkpoint with more
-  than one key-value head are (4B: four; 1B: one): the copy makes them contiguous first.
-- Attention is matmul over `[heads, len, len]` scores in the model's dtype on every device, so memory and time
-  grow with the square of the prompt. In F32 on a 16-core x86 CPU (release build) gemma-3-1b-it answers the ticket
+  so what separates a checkpoint from its GGUF in those F32 checks is the quantization.
+- Attention uses the shared query chunks in the model's dtype. Earlier unchunked F32 measurements on a 16-core
+  x86 CPU (release build) had gemma-3-1b-it answer the ticket
   in 7.3 s, its Q8_0 GGUF through llama.cpp in 2.9 s, and the ticket's two rows over a 5.4k-token state in 148 s
   against the GGUF's 66 s; gemma-3-4b-it, whose text tower is 7.7 GB of BF16 read as F32, answers the ticket in
   31 s (the GGUF: 9.3 s) and the 5.4k-token state in 434 s (288 s), and holds 22.8 GB for a 42-token prompt and for
   one of 2.2k tokens.
-- Not measured on Metal (no Apple machine, 2026-10-11): both keep the BF16 rule. The rotary table is computed in the
-  model's dtype as upstream does, so in BF16 its positions past 256 are not exact, and the attention runs in the
-  model's dtype; measure a long prompt against the GGUF before relying on Gemma 3 on Metal.
+- The rotary tables follow the F32-before-conversion rule above; attention keeps the BF16 rule on Metal and
+  completes each query chunk before another can retain its temporary scores.
 
 ### Olmo 3 in the vendored module
 - `Olmo3ForCausalLM` (Olmo-3-7B-Instruct, `model_type` `olmo3`) is OLMo 2's graph (post-norms, `q_norm` and `k_norm`
@@ -362,7 +375,7 @@ building and readout stay in `ardana-core` and never call Candle.
   `yarn_attn_factor` is cancelled and reapplied inside `rope_yarn`).
 - Memory: the 7B's 7.3 billion parameters are 29.3 GB in F32, and candle's `[heads, len, len]` attention would add
   3.5 GB per score tensor and 5.5 GB of stored keys and values for a 5.2k-token prompt, past what this machine has
-  beside the weights. The copy therefore computes the attention over 512 query rows at a time (`QUERY_CHUNK`: each
+  beside the weights. The copy therefore uses the shared attention over 512 query rows at a time (each
   chunk's scores masked, softmaxed and multiplied by the values before the next, the chunks concatenated, the same
   numbers as one matmul) and stores no key-value cache (a prompt is decoded whole, at offset 0). On a 16-core x86 CPU
   (release build) the ticket's answers and the 2,490-token state's are identical to the unchunked copy's.
@@ -377,9 +390,8 @@ building and readout stay in `ardana-core` and never call Candle.
   past the sliding window (slots at 1, 1469, 2204, 4406 and 4407), so what separates the checkpoint from its GGUF is
   the quantization. That 4.4k-token prompt took Candle 465 s at a 37.8 GB peak (dev profile, Candle's crates
   optimised; the peak is the load's, F32 weights beside the mapped BF16 pages) and transformers about 2 minutes.
-- Not measured on Metal (no Apple machine, 2026-10-12): it keeps the BF16 rule. The rotary tables are computed in the
-  model's dtype as upstream does, so in BF16 their positions past 256 are not exact, and the attention runs in the
-  model's dtype; measure a long prompt against the GGUF before relying on Olmo 3 on Metal.
+- Both rotary tables follow the F32-before-conversion rule above, including the YaRN attention factor; attention
+  stays in the model's dtype and completes each Metal query chunk.
 
 ### Logits
 - Return label logits only: index the hidden states at the slots and the head's rows at the label ids
@@ -415,6 +427,10 @@ building and readout stay in `ardana-core` and never call Candle.
   the file as in memory and on a second call, the noul bucket at 5.0 flatter than at 0.5, and an empty sequence, a
   marker past the end and a sequence past the positions errors). "supports_the_architectures_config_json_names"
   covers the name. The real checkpoint is the suite's.
+- `ops` pins long rotary positions (255/256/257 and 4096/4097/5483), F32 trig followed by BF16 conversion, and
+  query-chunk equivalence to dense attention at 1/511/512/513/1025 queries with no mask, causal/sliding masks and
+  attention softcapping. Native Apple silicon also runs these in Metal BF16 and checks retained Metal allocation
+  immediately after repeated attention calls, before a CPU readback can release temporary scores.
 - A change a vendored module carries gets a plain unit test over random weights (`candle_nn::VarMap`, a model a few
   values wide built through `configuration` and `Architecture::build`), which pins the change and nothing about a
   real model's answers: "llama_reads_a_written_head_dim" (the projections' shapes, a state at every position, each
