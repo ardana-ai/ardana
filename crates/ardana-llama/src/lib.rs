@@ -216,10 +216,14 @@ fn worker(
             return;
         }
     };
+    // llama.cpp's API default `swa_full = true` gives every sliding-window layer (Gemma) a cache of `n_ctx` cells
+    // so that a sequence can be rewound past the window. `decode` never rewinds: it clears the cache and decodes
+    // one prompt, so the layers keep their window only.
     let ctx_params = LlamaContextParams::default()
         .with_n_ctx(Some(n_ctx))
         .with_n_batch(n_ctx.get())
-        .with_n_ubatch(n_ctx.get().min(MAX_UBATCH));
+        .with_n_ubatch(n_ctx.get().min(MAX_UBATCH))
+        .with_swa_full(false);
     let mut ctx = match model.new_context(backend, ctx_params) {
         Ok(ctx) => ctx,
         Err(err) => {
@@ -273,7 +277,33 @@ fn decode(
         .iter()
         .map(|&slot| {
             let row = ctx.get_logits_ith(i32::try_from(slot)?);
-            Ok(job.label_ids.iter().map(|&id| row[id as usize]).collect())
+            let logits: Vec<f32> = job.label_ids.iter().map(|&id| row[id as usize]).collect();
+            ensure!(
+                written(&logits),
+                "llama.cpp returned no logits: the GPU decode failed, most likely out of memory"
+            );
+            Ok(logits)
         })
         .collect()
+}
+
+/// Whether a decode wrote these label logits. A Metal command buffer that fails (out of GPU memory) is found only
+/// when llama.cpp synchronises to read the logits, which reports nothing: `llama_decode` has already returned 0, and
+/// every later decode fails. llama.cpp zeroes its logits buffer when it allocates it, so a row no decode has written
+/// is all zeros, which no model gives. That is the first decode of a model that does not fit: clearing the cache
+/// writes the whole KV buffer, so a context's memory is in use from its first prompt.
+fn written(logits: &[f32]) -> bool {
+    logits.iter().any(|&logit| logit != 0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::written;
+
+    #[test]
+    fn an_all_zero_row_was_not_written() {
+        assert!(!written(&[0.0, 0.0, 0.0]));
+        assert!(written(&[0.0, -3.5, 0.0]));
+        assert!(written(&[27.8, 23.3, 21.4]));
+    }
 }
