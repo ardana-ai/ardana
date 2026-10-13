@@ -44,7 +44,8 @@ test('first_run', async ({ page }, testInfo) => {
   );
   await expect(picker.locator('optgroup[label="Pulled"]')).toHaveCount(0);
   await expect(runKey(page)).toHaveAttribute('aria-disabled', 'false');
-  expect((await visibleText(page)).toLowerCase()).not.toContain('jev');
+  // Reject the legacy brand and `jev-*` aliases, while allowing real model names such as `jevk5:2b`.
+  expect(await visibleText(page)).not.toMatch(/\bjev\b/i);
   await screenshot(page, testInfo, 'first_run', 'opened');
 
   // The first Run answers in this tab: no request goes to /v1/systemone, and the server pulls no model.
@@ -69,6 +70,6 @@ test('first_run', async ({ page }, testInfo) => {
   const after = (await (await page.request.get(`${base}/v1/models`)).json()) as { models: ModelInfo[] };
   expect(after.models.every((m) => m.x_pulled === false)).toBe(true);
   await expect(picker).toHaveValue(browserRow('decider:0.8b'));
-  expect((await visibleText(page)).toLowerCase()).not.toContain('jev');
+  expect(await visibleText(page)).not.toMatch(/\bjev\b/i);
   await screenshot(page, testInfo, 'first_run', 'answered');
 });

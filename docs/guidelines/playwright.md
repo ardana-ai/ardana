@@ -48,6 +48,8 @@ share-link decoding.
 - Use only auto-retrying, awaited assertions on the page: `await expect(locator).toHaveText(...)`,
   `toHaveAttribute('data-value', ...)`, `toHaveCount`, `toBeVisible`, `toHaveURL`. Never
   `expect(await locator.textContent())` and never `page.waitForTimeout`.
+- After opening the sidebar drawer, await its close button's focus before pressing Tab: the page moves focus on the
+  next animation frame. Forcing focus first can race that pending move and undo the Tab.
 - Compare displayed values with the API response the page itself received: capture it with
   `page.waitForResponse(r => r.url().endsWith('/v1/systemone'))` started before the click, read `await response.json()`,
   then assert each field's `data-value` equals the raw JSON value (one shared serializer for numbers/strings) and its
@@ -144,9 +146,10 @@ share-link decoding.
   both projects find the registry empty. The case checks `/v1/models` (nothing pulled, decider:2b the default,
   decider:0.8b alone `x_browser_default`), opens a Jev-style share link (`jev-latest`), checks the picker opens on
   decider:0.8b's "In browser" row with its note and that no readable text (`visibleText`: body text, option and
-  optgroup labels, `placeholder`, `aria-label`, `title`) contains "jev", then presses Run: the answer comes from the
-  tab (`decider-0.8b-v1`, "in this tab on"), every `data-value` matches its raw panel, no request goes to
-  `/v1/systemone`, and the registry is still empty.
+  optgroup labels, `placeholder`, `aria-label`, `title`) contains the legacy word "Jev" or a `jev-*` alias (case
+  insensitive, at word boundaries; canonical model names such as `jevk5:2b` remain visible), then presses Run: the
+  answer comes from the tab (`decider-0.8b-v1`, "in this tab on"), every `data-value` matches its raw panel, no request
+  goes to `/v1/systemone`, and the registry is still empty.
 - A model the server cannot run (`run_command`, R3.3 as the user amended it, in `tests/cli.spec.ts`): on the
   decider:2b server, a share link naming decider:4b opens on its server row; Run is held (`aria-disabled`, its
   description and the banner say "This server has not pulled decider:4b: pull it with the ardana CLI"), the snippets

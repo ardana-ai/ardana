@@ -187,7 +187,8 @@ test.describe('standalone', { tag: '@standalone' }, () => {
       expect(own(url), url).toBe(true);
     }
     expect(failed).toEqual([]);
-    expect((await visibleText(page)).toLowerCase()).not.toContain('jev');
+    // Canonical names such as `jevk5:2b` are models, not the legacy brand or a `jev-*` compatibility alias.
+    expect(await visibleText(page)).not.toMatch(/\bjev\b/i);
     await screenshot(page, testInfo, 'standalone_first_run');
   });
 

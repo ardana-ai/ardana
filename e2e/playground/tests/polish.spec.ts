@@ -202,19 +202,24 @@ test('page_weight', async ({ page }, testInfo) => {
   await page.goto(`/${shareHash(fixture('ticket.json'))}`);
   await expect(runKey(page)).toHaveAttribute('aria-disabled', 'false');
   const opener = page.getByRole('button', { name: 'Open sidebar' });
-  if (await opener.isVisible()) {
+  const closer = page.getByRole('button', { name: 'Close sidebar' });
+  const drawer = await opener.isVisible();
+  if (drawer) {
     await opener.click();
+    // Opening moves focus on the next animation frame; let it finish before testing Tab.
+    await expect(closer).toBeFocused();
+  } else {
+    await closer.focus();
   }
   await expect(page.locator('.sidebar-foot')).toContainText('Ctrl+Enter');
   // The sidebar's own key, then Run, each with its tooltip, by the keyboard: Tab to the model picker and back, inside
   // the page (Shift+Tab from the sidebar's first key leaves the document, and where the next Tab lands depends on when
   // the window takes the focus back, which the page then also answers by listing its models again).
-  await page.getByRole('button', { name: 'Close sidebar' }).focus();
   await page.keyboard.press('Tab');
   await expect(page.locator('#model')).toBeFocused();
   await page.keyboard.press('Shift+Tab');
-  await expect(page.getByRole('button', { name: 'Close sidebar' })).toBeFocused();
-  if (await opener.isVisible()) {
+  await expect(closer).toBeFocused();
+  if (drawer) {
     await page.keyboard.press('Escape');
     await expect(page.locator('#sidebar')).toBeHidden();
   }
