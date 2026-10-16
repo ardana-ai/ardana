@@ -20,9 +20,10 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   (`/archive/<commit>.tar.gz`, sha256 `1d0fcd22eb0fb31b1f75de2cc9e585a3338b8937043662a0c222a1e9261fed29`); the
   converter imports `gguf` from that `gguf-py/`, never an installed one.
 - The venv's pins (Q29), `env.rs#PACKAGES`, their own dependencies what uv resolves for them:
-  `torch` 2.14.1 (PyTorch's CPU wheel, `2.14.1+cpu`), `transformers` 5.18.0, `peft` 0.21.2, `trl` 1.16.0,
-  `accelerate` 1.15.0, `datasets` 5.1.0, `safetensors` 0.8.0, `tokenizers` 0.23.2, `sentencepiece` 0.2.2,
-  `protobuf` 7.36.2, `numpy` 2.5.3; `bitsandbytes` 0.50.2 joins a CUDA venv alone (W5).
+  `torch` 2.14.1 (the machine's build, R5.1: PyTorch's CPU wheel `2.14.1+cpu`, a CUDA wheel `2.14.1+cu126`, `+cu130` or
+  `+cu132`, or PyPI's `2.14.1`), `transformers` 5.18.0, `peft` 0.21.2, `trl` 1.16.0, `accelerate` 1.15.0,
+  `datasets` 5.1.0, `safetensors` 0.8.0, `tokenizers` 0.23.2, `sentencepiece` 0.2.2, `protobuf` 7.36.2, `numpy` 2.5.3;
+  and `bitsandbytes` 0.50.2 (`env.rs#BITSANDBYTES`, QLoRA's 4-bit NF4) in a CUDA venv alone.
 
 ## Rules
 
@@ -35,16 +36,28 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   error naming both, and nothing is unpacked. Only the four parts of the llama.cpp archive are unpacked, each path
   made of plain components.
 - The first run builds what is missing; later runs reuse it: `bin/uv` when `uv --version` says 0.13.1, the venv when
-  its `pyvenv.cfg` names uv's 3.12 under `python/`, the converter's directory when it exists. `uv pip install` of
-  the pins runs every time, which checks the installed distributions and downloads nothing when they are there.
+  its `pyvenv.cfg` names uv's 3.12 under `python/` and its `ardana-torch-build` names this machine's torch build, the
+  converter's directory when it exists. `uv pip install` of the pins runs every time, which checks the installed
+  distributions and downloads nothing when they are there.
 - Nothing a run does changes the environment's files (R2.5): `uv pip install --compile-bytecode` writes every
   module's bytecode when it installs (a satisfied install, `Checked 11 packages`, compiles and touches nothing), and
   every Python process runs with `-B`, so no import writes a `__pycache__` into the venv or the converter's
   directory. Without both, each new architecture's first run would add the bytecode of the modules it imports.
-- torch comes from PyTorch's CPU index through `uv pip install --torch-backend cpu`, which routes the PyTorch
-  packages alone to `https://download.pytorch.org/whl/cpu`; `--extra-index-url` would not do: under uv's first-index
-  strategy every package that index mirrors (numpy among them) is then looked up there alone, and `numpy==2.5.3` is
-  not.
+- torch is the build the machine runs (`env.rs#TorchBuild`, R5.1, `TorchBuild::of(os, arch, nvidia)`, a pure function
+  `finetune::tests::torch_build_follows_the_machine` checks):
+  - Linux where `nvidia-smi` answers (exits 0, a GPU listed): CUDA's wheels through `--torch-backend auto`, which
+    reads the driver's version and tries PyTorch's CUDA indexes the driver runs, newest first (torch 2.14.1 has
+    `cu132`, `cu130` and `cu126`), then the CPU index; the CUDA venv alone also gets `bitsandbytes==0.50.2`;
+  - macOS arm64: PyPI's wheel (no `--torch-backend`), which runs MPS;
+  - the rest (Linux without the driver, Intel macOS): PyTorch's CPU wheels through `--torch-backend cpu`.
+  `--torch-backend` routes the PyTorch packages alone to PyTorch's index; `--extra-index-url` would not do: under uv's
+  first-index strategy every package that index mirrors (numpy among them) is then looked up there alone, and
+  `numpy==2.5.3` is not. `UV_TORCH_BACKEND` is removed from uv's environment, so the build is ardana's choice alone.
+- The venv records its build in `venv/ardana-torch-build` (`cuda`, `pypi` or `cpu`), written when it is created. A
+  venv made for another build (a CPU venv on a machine whose NVIDIA driver came later, or the other way) is created
+  again with `--clear`: `torch==2.14.1` matches `2.14.1+cpu` as well as `2.14.1+cu130`, so `uv pip install` alone
+  would keep the wrong wheel, and a venv that stops being CUDA's must lose bitsandbytes too. uv's cache keeps the
+  wheels, so going back costs no download.
 - Every Python process runs the venv's interpreter with `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` on the
   checkpoint's snapshot directory, which `ardana` downloaded with hf-hub; `HF_HOME` (the datasets cache among it) and
   `TMPDIR` point into the run's working directory. The trainer and `merge.py` run with `-I`; the converter with `-E
@@ -134,19 +147,67 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
 - Q23: `--use_peft True --lora_r 16 --lora_alpha 32 --lora_target_modules all-linear --learning_rate 1e-4
   --num_train_epochs <--epochs, 2> --seed 0`, `--eval_strategy epoch --save_strategy epoch --load_best_model_at_end
   True --metric_for_best_model eval_loss --greater_is_better False` (the epoch with the lowest calibration loss is the
-  adapter saved), `--dtype float32 --bf16 False --use_cpu True` (TRL turns bf16 on by default), `--max_length` the
-  longest row (TRL's default of 1,024 would cut a long state's answer token off), `--report_to none`.
+  adapter saved), `--dtype` the run's dtype (below), `--max_length` the longest row (TRL's default of 1,024 would cut
+  a long state's answer token off), `--report_to none`.
 - `--trust_remote_code True` only under `--trust-remote-code` (TRL's `SFTConfig` field, forwarded to
   `from_pretrained` and `AutoProcessor`): transformers then imports the checkpoint's own modules from its snapshot
   directory into `HF_HOME/modules`, the run's working directory, never the venv.
 - `--gradient_checkpointing False` on the CPU: TRL turns it on by default, which on Qwen3-0.6B costs 22 s a step of 8
-  rows instead of 16 s, and the CPU's memory is the system's.
+  rows instead of 16 s, and the CPU's memory is the system's. On CUDA and MPS it is passed `True`, TRL's default.
+
+### Device and memory
+- Once the environment is built, `devices.py` (`python -I`, in the run's working directory) asks torch which devices it
+  finds: the first CUDA device's name and `total_memory` (`torch.cuda.get_device_properties(0)`), whether
+  `torch.backends.mps.is_available()`, and the machine's physical memory (`os.sysconf`: `SC_PAGE_SIZE` ×
+  `SC_PHYS_PAGES`, on Linux and macOS alike, no psutil). `--device auto` (the default) takes `cuda`, then `mps`, then
+  `cpu` (Q4); `--device cuda` or `mps` on a machine whose torch does not find it exits 1, `--device cuda: torch finds no
+  CUDA device on this machine; it finds cpu` (the devices found in auto's order, a GPU with its name and memory).
+- Q23's dtype follows the device: `cpu` trains in float32 (`--dtype float32 --bf16 False --use_cpu True`), `cuda` and
+  `mps` in bfloat16 (`--dtype bfloat16 --bf16 True`; transformers takes bf16 on MPS from macOS 14,
+  `is_torch_bf16_gpu_available`). `merge.py` merges at that dtype and `--format safetensors` keeps it (the checkpoint's
+  `config.json` names it); the GGUF is converted at f32 whatever it was. `finetune.json` records `device` (`cuda`,
+  `mps`, `cpu`), `dtype` (`bfloat16`, `float32`) and `qlora`.
+- The memory estimate (Q16, `device.rs#Shape::needs`) is made after the device is picked and before the checkpoint
+  downloads, from the checkpoint's listing and `config.json` (`Base::weight_bytes`: the Hub's `paths-info` sizes of the
+  safetensors its index names, else of `model.safetensors`, at the listed commit; a directory's files; offline the
+  cached files) and the rows (`--max_length`, the longest, which the run's line about the data prints). With `P` the
+  parameters (the bytes over the stored dtype, 2 bytes unless `config.json` says float32), `E` the embeddings
+  (`vocab_size` × `hidden_size`, twice unless `tie_word_embeddings`), `L = P - E`, `h` `hidden_size`, `i`
+  `intermediate_size` (else 4h), `n` `num_hidden_layers` (the `text_config`'s for a multimodal checkpoint), `w` the
+  training dtype's bytes and `T` the longest row:
+  - weights `P·w`, or under QLoRA `L·9/16` (NF4 with a 4-byte scale per 64) `+ E·2`;
+  - the LoRA adapter, `L·2r/h` parameters (r = 16) at 16 bytes each (the weight, its gradient, Adam's two moments);
+  - activations of a step, TRL's 8 rows of `T` tokens: per token `n·23·(h+i)·w` without gradient checkpointing (the
+    CPU), `n·h·w + 23·(h+i)·w` with it (CUDA, MPS: each layer's input, one layer recomputed); TRL 1.16's fused LM head
+    scores only the answer positions, so no `(rows, T, vocab)` logits are held;
+  - 1 GB for Python, torch and a GPU's context.
+  The 23 bounds the trainer's peak resident memory (`VmHWM`, `/proc/<pid>/status`) measured on this CPU in float32,
+  beyond the weights, the adapter and the runtime: Qwen3-0.6B on 8 rows of up to 128 tokens of the commands data peaks
+  at 10.5 GB (13·(h+i) a token and layer; estimated 15.1 GB), decider:0.8b on rows of 261 tokens of the custom data at
+  25.0 GB (23·(h+i): Qwen3.5's linear-attention layers run transformers' pure-torch path off CUDA, without
+  flash-linear-attention; estimated 25.5 GB). On CUDA it puts Qwen3.5 bf16 LoRA at 3.3 GB (0.8B), 6.5 GB (2B) and
+  11.8 GB (4B) for rows of 128 tokens, against unsloth's published 3, 5 and 10 GB (its own kernels); qwen3.5:9b at
+  22.4 GB in bfloat16 and 11.4 GB with QLoRA, so a 16 GB card trains it with QLoRA. The suite's rows on this machine's
+  67.3 GB: qwen3:0.6b 15.8 GB, qwen3.5:0.8b 16.0 GB, spark-x2.5:1.7b 35.3 GB, decider:0.8b 31.6 GB (rows of 136, 138,
+  151 and 336 tokens).
+- The estimate is held against the GPU's memory on `cuda` and the machine's on `mps` and `cpu`. When it fits, the run
+  says `<base> trains on <device> in <dtype>, needing about <estimate> of the <memory> …`. On `cuda`, a run that does
+  not fit in bfloat16 is estimated again with its weights in 4-bit; when that fits it trains with QLoRA, saying so
+  (`… training with QLoRA, its weights in 4-bit NF4, needing about …`): TRL's `--load_in_4bit True
+  --bnb_4bit_quant_type nf4` (`ModelConfig`, turned into a `BitsAndBytesConfig` by `get_quantization_config`, its
+  compute dtype `--dtype`), the model placed on the GPU by `create_model_from_path`'s `device_map="auto"`, the adapter
+  cast to bfloat16 by `SFTTrainer`. Anything else that does not fit exits 1 before the checkpoint downloads, naming the
+  estimate and the memory: `qwen3.8:27b needs about 261.1 GB of memory to train on cpu in float32, more than the
+  67.3 GB this machine has; pick a smaller base` (on `cuda` both estimates and the GPU's memory).
 
 ### Merge, GGUF and quantization
 - `merge.py <checkpoint> <adapter> <out> <dtype> [--trust-remote-code]` loads the base with TRL's
-  `create_model_from_path` (the class and dtype the trainer used, `trust_remote_code` only under the flag), the adapter with `PeftModel.from_pretrained`, and saves `merge_and_unload()` with
-  `save_pretrained`: neither TRL nor PEFT has a merge command. The checkpoint's other root files (the tokenizer's) are
-  copied beside it for the converter.
+  `create_model_from_path` (the class and dtype the trainer used, `trust_remote_code` only under the flag) with
+  `device_map=None`, on the CPU whatever the device trained (the function's own choice on the CPU and MPS; on CUDA
+  `"auto"` would offload the bfloat16 base of a QLoRA run, larger than the GPU), the adapter with
+  `PeftModel.from_pretrained`, and saves `merge_and_unload()` with `save_pretrained`: neither TRL nor PEFT has a merge
+  command. A QLoRA adapter merges into the base at bfloat16, not 4-bit. The checkpoint's other root files (the
+  tokenizer's) are copied beside it for the converter.
 - `convert_hf_to_gguf.py <merged> --outtype f32 --model-name <name> --outfile <name>-float32.gguf`, at the training
   dtype (it has no remote-code flag: it reads `config.json` itself when `AutoConfig` will not, and its own
   architecture classes, `conversion/spark2_5.py` among them, convert the merged weights); `--no-nextn` only when `config.json` (or its `text_config`) declares `mtp_num_hidden_layers` or
@@ -154,9 +215,10 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
 - `--format safetensors` (Q9, Q10) skips the converter and the quantizer: the model is the merged checkpoint, the
   safetensors `merge.py` saved (with `model.safetensors.index.json` when sharded) moved into `out/` beside the
   `config.json` of the checkpoint as trained (the text tower's for a multimodal one), its `dtype` or `torch_dtype`
-  set to `float32`. `save_pretrained`'s own `config.json` is not kept: transformers 5 writes `rope_parameters`
-  (`{"rope_theta", "rope_type"}`) and no `rope_theta`, which candle-transformers 0.11.0's `qwen3::Config` requires
-  (`missing field rope_theta`), and merging changes no setting. Its `generation_config.json` is left out with it.
+  set to the training dtype (`float32` on the CPU). `save_pretrained`'s own `config.json` is not kept: transformers 5
+  writes `rope_parameters` (`{"rope_theta", "rope_type"}`) and no `rope_theta`, which candle-transformers 0.11.0's
+  `qwen3::Config` requires (`missing field rope_theta`), and merging changes no setting. Its `generation_config.json`
+  is left out with it.
   The format takes exactly the names of `ardana_candle::ARCHITECTURES` but `thx01::ARCHITECTURE`
   (`safetensors_architectures`, computed from the list, so a name Candle adds is taken with no other change): one of
   the checkpoint's `architectures` must be among them, as Candle picks the first it implements, else the run is
@@ -235,7 +297,10 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   `--quant` before its base, the hub cache unchanged), offline on the files `cargo xtask fetch` installs, the
   `Qwen/Qwen3-1.7B-GGUF` card and `Qwen/Qwen3.5-0.8B`'s `config.json` among them; `crates/ardana`'s
   `finetune::tests::safetensors_follows_candle_architectures` (every name of `ARCHITECTURES` but THX-01's taken, alone
-  and after another name; THX-01, `Qwen3_5ForConditionalGeneration` and no name refused).
+  and after another name; THX-01, `Qwen3_5ForConditionalGeneration` and no name refused) and
+  `finetune::tests::torch_build_follows_the_machine` (R5.1: `TorchBuild::of` for Linux x86_64 and aarch64 with and
+  without `nvidia-smi` answering and macOS arm64 and x86_64, its `--torch-backend` and its packages, bitsandbytes in the
+  CUDA build's alone).
 - `cargo xtask e2e finetune` runs `xtask/src/e2e.rs#FINETUNE_FIXTURES` in order with the release `ardana`, online, on
   one home `tmp/e2e/finetune/home` (removed when the suite ends, also on failure) over `tmp/hf`, under the home guard.
   It writes the first 1,000 lines of decider@23579f7's `teacher_data/commands.jsonl` (`tmp/src/decider`) as
@@ -251,12 +316,16 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   `qwen3.5:0.8b` (commands data, the multimodal checkpoint, chat layout, `Gain::Above`), `hf.co-gguf`
   (`hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, `cmd-risk-gguf`, `Gain::Unchecked`: R3.2 asks that it answers),
   `spark-x2.5:1.7b` (`Spark2_5ForCausalLM`, whose `config.json` has `auto_map`, `--trust-remote-code --epochs 1`,
-  `Gain::Unchecked`) and `safetensors` (`hf.co/Qwen/Qwen3-0.6B` on the commands data, `--format safetensors`,
-  `cmd-risk-st`, `Gain::Above`: the base answers through Candle too). A row whose args hold `--trust-remote-code`
-  first runs without it, which must exit 1 naming the flag with no weight file reaching the hub cache. A row whose
-  base is an `hf.co/` GGUF reference, once its runs are
-  checked, fine-tunes `<name>-local` from that GGUF's file in the hub cache with `--checkpoint <the snapshot
-  directory of the checkpoint its finetune.json recorded>` and `--epochs 1`, run to the end and checked the same way.
+  `Gain::Unchecked`), `safetensors` (`hf.co/Qwen/Qwen3-0.6B` on the commands data, `--format safetensors`,
+  `cmd-risk-st`, `Gain::Above`: the base answers through Candle too) and `limits` (`qwen3.8:27b` on the commands data
+  with `--device cpu`, `cmd-risk-27b`, `Expect::Refused` on the memory estimate, `Gain::Unchecked`). A refused row
+  whose args pass `--device` (R5.2, R5.3; the suite's machine has no CUDA) checks that its refusal names two sizes, the
+  estimate above the memory, then runs again with `--device cuda`, which must exit 1 with `--device cuda: torch finds
+  no CUDA device` and the devices found (`cpu`, or `mps, cpu`), no weight file reaching the hub cache either time. A
+  row whose args hold `--trust-remote-code` first runs without it, which must exit 1 naming the flag with no weight
+  file reaching the hub cache. A row whose base is an `hf.co/` GGUF reference, once its runs are checked, fine-tunes
+  `<name>-local` from that GGUF's file in the hub cache with `--checkpoint <the snapshot directory of the checkpoint
+  its finetune.json recorded>` and `--epochs 1`, run to the end and checked the same way.
 - What a model is checked against (`Cli::expected`): a library size's entry; for an `hf.co/` safetensors checkpoint
   the one cached snapshot of it holding `config.json` (`{"repo", "commit"}`, its tokenizer, its card's `license`, chat
   unless it has `decider_config.json`); for an `hf.co/` GGUF reference the card
@@ -295,6 +364,11 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
 - https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables — `HF_HUB_OFFLINE`, `HF_HOME`
 - https://docs.astral.sh/uv/reference/environment/ — `UV_CACHE_DIR`, `UV_PYTHON_INSTALL_DIR`, `UV_PYTHON_BIN_DIR`, `UV_MANAGED_PYTHON`, `UV_NO_CONFIG`
 - https://docs.astral.sh/uv/guides/integration/pytorch/ — `--torch-backend`, the PyTorch indexes, first-index resolution
+- https://github.com/astral-sh/uv/blob/0.13.1/crates/uv-torch/src/backend.rs — `auto`: the driver's version, then every CUDA index it runs, newest first, then the CPU index
+- https://github.com/huggingface/trl/blob/v1.16.0/trl/trainer/model_config.py — `load_in_4bit`, `bnb_4bit_quant_type` (`nf4` by default)
+- https://github.com/huggingface/trl/blob/v1.16.0/trl/trainer/utils.py — `get_quantization_config` (compute dtype `--dtype`), `create_model_from_path` (`device_map`), `add_fused_lm_head`
+- https://github.com/huggingface/transformers/blob/v5.18.0/src/transformers/utils/import_utils.py — `is_torch_bf16_gpu_available`: bf16 on MPS from macOS 14
+- https://huggingface.co/docs/hub/api — `POST /api/models/{repo}/paths-info/{revision}`: the sizes of the files a memory estimate reads
 - https://github.com/astral-sh/uv/releases/tag/0.13.1 — the pinned uv release and its `.sha256` files
 - https://github.com/ggml-org/llama.cpp/blob/26394b4e6749a41c3633db040e0987500a5f7013/convert_hf_to_gguf.py — the converter: `--outtype`, `--no-nextn`, `--model-name`
 - https://github.com/huggingface/transformers/blob/v5.18.0/src/transformers/conversion_mapping.py — the `qwen3_5_text` prefix change that loads the text tower from a multimodal checkpoint

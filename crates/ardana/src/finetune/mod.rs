@@ -8,8 +8,10 @@
 //! Candle runs (Q9, Q10). Its temperatures are then fitted on the calibration split through that model as `ardana run`
 //! loads it, and the base and the model answer the test split for the report ([`evaluate`]). The model is built in
 //! the run's working directory and only moved to `$ARDANA_HOME/models/<name>/` and registered once whole, so a run
-//! that stops (SIGINT, a failing trainer) leaves neither.
+//! that stops (SIGINT, a failing trainer) leaves neither. Before the checkpoint downloads, torch in the environment
+//! says which devices it finds, and the run is held against the memory of the one it trains on ([`device`]).
 
+mod device;
 mod env;
 mod evaluate;
 
@@ -31,6 +33,7 @@ use clap::{Args, ValueEnum};
 use serde_json::{Value, json};
 use tokio::process::Command;
 
+pub use device::Device;
 pub use env::{LLAMA_CPP_COMMIT, PYTHON, UV_VERSION};
 
 /// The Q23 settings: LoRA rank and alpha over every linear layer, the learning rate and the seed; the epochs are
@@ -46,9 +49,6 @@ pub const MODELS_DIR: &str = "models";
 pub const RECORD: &str = "finetune.json";
 /// The message of a run SIGINT stopped.
 const INTERRUPTED: &str = "interrupted; nothing was registered and the run's files were removed";
-/// The device and dtype every run trains on and in: the CPU, in float32 (Q23).
-const DEVICE: &str = "cpu";
-const DTYPE: &str = "float32";
 
 #[derive(Debug, Args)]
 pub struct FinetuneArgs {
@@ -83,6 +83,10 @@ pub struct FinetuneArgs {
     /// same name does
     #[arg(long)]
     pub trust_remote_code: bool,
+    /// Where to train: auto takes cuda, then mps, then cpu, as torch finds them; bfloat16 on cuda and mps, float32 on
+    /// cpu
+    #[arg(long, value_enum, default_value_t = Device::Auto)]
+    pub device: Device,
 }
 
 /// What `--format` writes (Q9).
@@ -132,7 +136,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     match (&args.quant, args.format) {
         (Some(_), Format::Safetensors) => bail!(
             "--quant names a GGUF's quant, and --format safetensors writes no GGUF: the checkpoint keeps the \
-             training dtype, {DTYPE}; drop --quant, or pass --format gguf"
+             training dtype, float32 on the CPU and bfloat16 on CUDA and MPS; drop --quant, or pass --format gguf"
         ),
         (Some(quant), Format::Gguf) => quant_is_written(quant, &format!("--quant {quant}"))?,
         (None, _) => {}
@@ -181,9 +185,15 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     }
     let train = rows(&decider, &split.train)?;
     let calibration = rows(&decider, &split.calibration)?;
+    let longest = train
+        .iter()
+        .chain(&calibration)
+        .map(|row| row.input_ids.len())
+        .max()
+        .unwrap_or(0);
     eprintln!(
         "{}: {} labelled lines ({} without labels skipped): {} to train on ({} rows), {} to calibrate on ({} rows), {} \
-         to test on",
+         to test on; the longest row {longest} tokens",
         args.data.display(),
         data.examples.len(),
         data.unlabelled,
@@ -195,6 +205,15 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     );
 
     let env = env::prepare(&home, &mut interrupt).await?;
+    let work = Work::create(env.work(name))?;
+    // The device and the memory it has, before the checkpoint downloads (Q4, Q16).
+    let found = device::probe(&env, &work, &mut interrupt).await?;
+    let device = device::pick(args.device, &found)?;
+    let bytes = interrupt
+        .or(async { Ok(base.weight_bytes().await?) })
+        .await?;
+    let shape = device::Shape::of(bytes, &base.config)?;
+    let training = device::fit(device, &found, shape, longest as u64, &base.name)?;
     match &base.checkpoint {
         Checkpoint::Hub(_) => eprintln!("downloading the checkpoint {}", base.checkpoint),
         Checkpoint::Dir { .. } => eprintln!("reading the checkpoint {}", base.checkpoint),
@@ -224,22 +243,18 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         }
     };
 
-    let work = Work::create(env.work(name))?;
     let trained = text_tower(&checkpoint, &work.dir)?;
     let out = work.dir.join("out");
     std::fs::create_dir_all(&out)?;
     write_rows(&work.dir.join("data/train.jsonl"), &train)?;
     write_rows(&work.dir.join("data/validation.jsonl"), &calibration)?;
-    let longest = train
-        .iter()
-        .chain(&calibration)
-        .map(|row| row.input_ids.len())
-        .max()
-        .unwrap_or(0);
 
+    let dtype = training.dtype;
     eprintln!(
-        "training {name} from {} on {DEVICE}: {} rows, {} epoch{}",
+        "training {name} from {} on {} in {dtype}{}: {} rows, {} epoch{}",
         base.name,
+        training.device.name(),
+        if training.qlora { " with QLoRA" } else { "" },
         train.len(),
         args.epochs,
         if args.epochs == 1 { "" } else { "s" }
@@ -273,10 +288,25 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
             "--greater_is_better",
             "False",
         ])
-        .args(["--dtype", DTYPE, "--bf16", "False", "--use_cpu", "True"])
-        // On the CPU, memory is the system's; recomputing activations would cost a quarter of the time.
-        .args(["--gradient_checkpointing", "False"])
+        .args(["--dtype", dtype])
         .args(["--report_to", "none"]);
+    if training.device == Device::Cpu {
+        // On the CPU, memory is the system's; recomputing activations would cost a quarter of the time.
+        trainer.args([
+            "--bf16",
+            "False",
+            "--use_cpu",
+            "True",
+            "--gradient_checkpointing",
+            "False",
+        ]);
+    } else {
+        trainer.args(["--bf16", "True", "--gradient_checkpointing", "True"]);
+    }
+    if training.qlora {
+        // Q16: the base's linear layers in 4-bit NF4 (bitsandbytes), computing in bfloat16, the adapter over them.
+        trainer.args(["--load_in_4bit", "True", "--bnb_4bit_quant_type", "nf4"]);
+    }
     if args.trust_remote_code {
         trainer.args(["--trust_remote_code", "True"]);
     }
@@ -292,7 +322,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         .arg(&trained)
         .arg(&adapter)
         .arg(&merged)
-        .arg(DTYPE);
+        .arg(dtype);
     if args.trust_remote_code {
         merge.arg("--trust-remote-code");
     }
@@ -302,7 +332,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     let file = match &quant {
         Some(quant) => {
             copy_tokenizer_files(&trained, &merged)?;
-            let converted = work.dir.join(format!("{name}-{DTYPE}.gguf"));
+            let converted = work.dir.join(format!("{name}-float32.gguf"));
             let mut convert = python(&env, &work);
             // Not isolated: the converter imports its `conversion/` package from beside itself.
             convert
@@ -332,7 +362,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
             Some(file)
         }
         None => {
-            write_checkpoint(&trained, &merged, &out)?;
+            write_checkpoint(&trained, &merged, &out, dtype)?;
             None
         }
     };
@@ -342,15 +372,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     };
 
     // Q11, Q30: the temperatures are fitted through the model itself, read as `ardana run` reads the entry it becomes.
-    write_model(
-        &out,
-        &base,
-        &split,
-        args.epochs,
-        args.format,
-        quant.as_deref(),
-        name,
-    )?;
+    write_model(&out, &base, &split, args, training, quant.as_deref())?;
     let model = resolve(&weights(&out), name, base.layout).await?;
     let calibration = owned(&split.calibration);
     eprintln!("calibrating {name} on {} lines", split.calibration.len());
@@ -400,7 +422,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     print!("{}", report.table());
     let what = match &quant {
         Some(quant) => quant.clone(),
-        None => format!("{} in {DTYPE}", args.format.name()),
+        None => format!("{} in {dtype}", args.format.name()),
     };
     println!(
         "fine-tuned {name} from {} ({what}, {}) in {} in {} min; try `ardana run {name}`",
@@ -665,10 +687,10 @@ fn candle_writes(what: &str, architectures: &[String]) -> Result<()> {
 }
 
 /// The merged checkpoint as the model (`--format safetensors`): the safetensors `merge.py` saved (with their index
-/// when sharded) moved into `out`, beside the `config.json` of the checkpoint as trained, its dtype the one merged in.
-/// Merging changes no setting of the model, and `save_pretrained`'s own `config.json` is transformers 5's
+/// when sharded) moved into `out`, beside the `config.json` of the checkpoint as trained, its dtype `dtype`, the one
+/// merged in. Merging changes no setting of the model, and `save_pretrained`'s own `config.json` is transformers 5's
 /// (`rope_parameters` for `rope_theta`), which candle-transformers' configurations do not read.
-fn write_checkpoint(trained: &Path, merged: &Path, out: &Path) -> Result<()> {
+fn write_checkpoint(trained: &Path, merged: &Path, out: &Path, dtype: &str) -> Result<()> {
     let mut files = snapshot::weight_files(merged).map_err(anyhow::Error::msg)?;
     let index = merged.join(snapshot::INDEX);
     if index.is_file() {
@@ -685,7 +707,7 @@ fn write_checkpoint(trained: &Path, merged: &Path, out: &Path) -> Result<()> {
     )?;
     for key in ["dtype", "torch_dtype"] {
         if config.get(key).is_some() {
-            config[key] = json!(DTYPE);
+            config[key] = json!(dtype);
         }
     }
     std::fs::write(
@@ -711,15 +733,14 @@ fn declares_mtp(checkpoint: &Path) -> Result<bool> {
 
 /// The model's files besides its weights: the base's tokenizer with its chat template files, `decider_config.json` in
 /// the base's layout and score-level mode (Q7) and `finetune.json`, the record of the run (`quant` null for a
-/// checkpoint).
+/// checkpoint; the device, dtype and QLoRA it trained with).
 fn write_model(
     out: &Path,
     base: &Base,
     split: &finetune::Split<'_>,
-    epochs: u32,
-    format: Format,
+    args: &FinetuneArgs,
+    training: device::Training,
     quant: Option<&str>,
-    name: &str,
 ) -> Result<()> {
     let dir = base
         .tokenizer
@@ -737,7 +758,7 @@ fn write_model(
         Layout::Chat { .. } => "chat",
     };
     let config = json!({
-        "version": name,
+        "version": args.name,
         "layout": layout,
         "isolated_levels": base.profile.isolated_levels,
         "temperature": 1.0,
@@ -746,12 +767,12 @@ fn write_model(
     let record = json!({
         "base": base.name,
         "checkpoint": base.checkpoint,
-        "format": format.name(),
+        "format": args.format.name(),
         "quant": quant,
-        "device": DEVICE,
-        "dtype": DTYPE,
-        "qlora": false,
-        "epochs": epochs,
+        "device": training.device.name(),
+        "dtype": training.dtype,
+        "qlora": training.qlora,
+        "epochs": args.epochs,
         "rows": {
             "train": split.train.len(),
             "calibration": split.calibration.len(),
@@ -928,6 +949,34 @@ impl Interrupt {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R5.1: CUDA's wheels, by uv's driver-aware `--torch-backend auto`, on Linux where `nvidia-smi` answers, and only
+    /// there bitsandbytes; PyPI's wheels (no `--torch-backend`) on macOS arm64; PyTorch's CPU wheels on the rest.
+    #[test]
+    fn torch_build_follows_the_machine() {
+        use env::{BITSANDBYTES, PACKAGES, TorchBuild};
+        for (os, arch, nvidia, build, backend) in [
+            ("linux", "x86_64", true, TorchBuild::Cuda, Some("auto")),
+            ("linux", "aarch64", true, TorchBuild::Cuda, Some("auto")),
+            ("linux", "x86_64", false, TorchBuild::Cpu, Some("cpu")),
+            ("linux", "aarch64", false, TorchBuild::Cpu, Some("cpu")),
+            ("macos", "aarch64", false, TorchBuild::Pypi, None),
+            ("macos", "x86_64", false, TorchBuild::Cpu, Some("cpu")),
+        ] {
+            let machine = format!("{arch} {os}, nvidia-smi answering: {nvidia}");
+            let picked = TorchBuild::of(os, arch, nvidia);
+            assert_eq!(picked, build, "{machine}");
+            assert_eq!(picked.backend(), backend, "{machine}");
+            let packages = picked.packages();
+            assert_eq!(packages[..PACKAGES.len()], PACKAGES, "{machine}");
+            let extra = &packages[PACKAGES.len()..];
+            if build == TorchBuild::Cuda {
+                assert_eq!(extra, [BITSANDBYTES], "{machine}");
+            } else {
+                assert!(extra.is_empty(), "{machine}: {extra:?}");
+            }
+        }
+    }
 
     /// R4.3: `--format safetensors` accepts every name of `ardana_candle::ARCHITECTURES` but THX-01's decision model,
     /// read from the list itself, also as one of several names; anything else is refused naming it and `--format gguf`.

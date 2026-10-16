@@ -226,9 +226,12 @@ change them) and its Requirements are the definition of done.
   checkpoint's `config.json` in float32 and the merged `model.safetensors`, every tensor F32, besides the tokenizer
   files, `decider_config.json` and `finetune.json` (`"format": "safetensors"`, `quant` null), `ardana show` prints
   runtime `candle`, the run says it calibrated through `candle`, the base answering as `ardana pull` resolves the
-  checkpoint, through Candle too, above the base). Every row's run says the runtime it calibrated through, llama.cpp
-  for a GGUF. Each row removes every entry it added (its model, the base it pulled), its model directory and every
-  path it added under `tmp/hf/hub` when its checks end, also when one failed; a failed row does not stop the others).
+  checkpoint, through Candle too, above the base), and `limits` (on this machine, which has no CUDA: `qwen3.8:27b` with
+  `--device cuda` exits 1 naming the devices torch finds, `cpu`, and with `--device cpu` exits 1 naming the memory
+  estimate, about 260 GB in float32, and the machine's memory, the first the larger; neither run puts a weight file
+  into `tmp/hf`). Every row's run says the runtime it calibrated through, llama.cpp for a GGUF. Each row removes
+  every entry it added (its model, the base it pulled), its model directory and every path it added under
+  `tmp/hf/hub` when its checks end, also when one failed; a failed row does not stop the others).
 - `ardana pull <name|ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model
   in `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo), printing download progress on
   stderr. The library is a list of families with their sizes inside (`decider`: `0.8b`, `2b`, `4b`), each size one
@@ -328,7 +331,8 @@ change them) and its Requirements are the definition of done.
   `models.toml` is reread when it changes, so a model `ardana pull` adds while `serve` runs is servable at once;
   models load on their first request and unload after `--keep-alive` idle.
 - `ardana finetune <base> <data.jsonl|data.csv> --name N [--questions F] [--epochs 2] [--format gguf|safetensors]
-  [--quant Q] [--checkpoint hf.co/<org>/<repo>|<dir>] [--trust-remote-code]` (Linux and macOS; elsewhere exit 1)
+  [--quant Q] [--checkpoint hf.co/<org>/<repo>|<dir>] [--trust-remote-code] [--device auto|cuda|mps|cpu]` (Linux and
+  macOS; elsewhere exit 1)
   trains a LoRA of the base's transformers checkpoint into a System One model (Q7). The base is any model `ardana`
   runs, looked up as a library size, then a registry entry, then a reference: a library size trains from its pinned
   checkpoint (a decider size's
@@ -353,12 +357,23 @@ change them) and its Requirements are the definition of done.
   anything heavy. Then the first run builds
   `$ARDANA_HOME/finetune/` (uv 0.13.1 from its GitHub release and llama.cpp 26394b4's source archive for
   `convert_hf_to_gguf.py`, `conversion/` and `gguf-py/`, both sha256-checked against digests compiled in; uv's
-  CPython 3.12 and a venv with the Q29 pins, torch from PyTorch's CPU wheels), which later runs reuse; the checkpoint
+  CPython 3.12 and a venv with the Q29 pins, its torch the machine's build: CUDA's wheels (uv's `--torch-backend
+  auto`) with bitsandbytes 0.50.2 on Linux where `nvidia-smi` answers, PyPI's on macOS arm64, PyTorch's CPU wheels
+  elsewhere, a venv made for another build created again), which later runs reuse. torch in it then says which
+  devices it finds: `--device auto` takes cuda, then mps, then cpu, and `--device cuda` (or `mps`) torch does not find
+  exits 1 naming the devices it does; cuda and mps train in bfloat16, cpu in float32. Before the checkpoint downloads,
+  a memory estimate (the checkpoint's safetensors bytes from its Hub listing at the training dtype, the LoRA adapter
+  with Adam's state, and the activations of 8 rows of the longest row, 23·(hidden + intermediate) values a token and
+  layer, every layer's on the CPU and with gradient checkpointing one layer's on cuda and mps, plus 1 GB) is held
+  against the GPU's memory on cuda and the machine's on mps and cpu: on cuda a run that fits only with its weights in
+  4-bit trains with QLoRA (TRL's `--load_in_4bit --bnb_4bit_quant_type nf4`) and says so, and any other run that does
+  not fit exits 1 naming the estimate and the memory. The checkpoint
   downloads to the HF cache; TRL's `sft` script trains on the very rows `Decider::plan` builds (LoRA r16, alpha 32,
-  all linear layers, lr 1e-4, the epochs, seed 0, the epoch with the lowest calibration loss kept, float32 on the
-  CPU, offline); `merge.py` merges (`merge_and_unload`); the converter writes an f32 GGUF and the linked
-  `llama_model_quantize` the `--quant`, default the base's own GGUF quant. `--format safetensors` writes no GGUF: the
-  model is the merged checkpoint, its safetensors in float32 beside the checkpoint's own `config.json` (dtype float32;
+  all linear layers, lr 1e-4, the epochs, seed 0, the epoch with the lowest calibration loss kept, offline);
+  `merge.py` merges (`merge_and_unload`, on the CPU at the training dtype); the converter writes an f32 GGUF and the
+  linked `llama_model_quantize` the `--quant`, default the base's own GGUF quant. `--format safetensors` writes no
+  GGUF: the model is the merged checkpoint, its safetensors at the training dtype beside the checkpoint's own
+  `config.json` (that dtype;
   transformers 5's `save_pretrained` config, `rope_parameters` for `rope_theta`, does not read in Candle), registered
   with its directory as the weights and runtime `candle`. It takes exactly the causal architectures of
   `ardana_candle::ARCHITECTURES` (all but `THXDecisionModel`, so it grows with Candle): any other, read from the
@@ -376,11 +391,11 @@ change them) and its Requirements are the definition of done.
   `$ARDANA_HOME/models/<name>/` then holds `<name>-<QUANT>.gguf` (or `config.json` and the safetensors), the base's
   tokenizer and chat template files, `decider_config.json` (the base's layout and score-level mode, the fitted
   temperatures, which `ardana show` prints) and `finetune.json`
-  (`{base, checkpoint, format, quant, device, dtype, qlora, epochs, rows, license, report}`, `report` the same
-  numbers), and it is registered as `<name>`, which `ardana run` and a running `ardana serve` answer. The model is
-  built in `$ARDANA_HOME/finetune/work/<name>/`, removed whatever the end; SIGINT (listened for, children killed) and
-  a failing step leave no entry and no `models/<name>/`. The venv compiles its bytecode at install and Python runs
-  with `-B`, so later runs change none of the environment's files.
+  (`{base, checkpoint, format, quant, device, dtype, qlora, epochs, rows, license, report}`, the device, dtype and QLoRA
+  it trained with, `report` the same numbers), and it is registered as `<name>`, which `ardana run` and a running
+  `ardana serve` answer. The model is built in `$ARDANA_HOME/finetune/work/<name>/`, removed whatever the end; SIGINT
+  (listened for, children killed) and a failing step leave no entry and no `models/<name>/`. The venv compiles its
+  bytecode at install and Python runs with `-B`, so later runs change none of the environment's files.
 - `ardana update` installs the latest GitHub Release over an ardana the installers placed, through axoupdater: it
   reads dist's install receipt (`ardana-receipt.json` in `$XDG_CONFIG_HOME/ardana`, then `~/.config/ardana`;
   `%LOCALAPPDATA%\ardana` on Windows), looks ardana-ai/ardana's `releases/latest` up once and prints `ardana is up to

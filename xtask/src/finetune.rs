@@ -11,9 +11,11 @@
 //! `--trust-remote-code` is first refused without it, before any weight downloads; a row whose base is an `hf.co/` GGUF
 //! reference then fine-tunes again from that GGUF's file in the hub cache with `--checkpoint <the checkpoint's
 //! snapshot directory>` and `--epochs 1`. The rows after the first that answers find the training environment as that
-//! row left it. A refused row's run exits 1 naming why, before any weight downloads. Whatever a row's checks found, the entries, model directories and hub
-//! paths it added are removed when they end; the training environment in the home stays for the next row, and the
-//! suite removes the home when it ends, also when a row failed.
+//! row left it. A refused row's run exits 1 naming why, before any weight downloads; one passing `--device` names the
+//! memory estimate above the machine's, and the same run with `--device cuda` is refused naming the devices torch
+//! finds. Whatever a row's checks found, the entries, model directories and hub paths it added are removed when they
+//! end; the training environment in the home stays for the next row, and the suite removes the home when it ends, also
+//! when a row failed.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufReader, Read};
@@ -296,7 +298,8 @@ fn row(
                     }
                 }
             }),
-        Expect::Refused(why) => refused(cli, &run, why, &before, ""),
+        Expect::Refused(why) => refused(cli, &run, why, &before, "")
+            .and_then(|message| limits(cli, &run, &message, &before)),
     };
     let removed = cli
         .remove(&[run.name.as_str(), local.as_str()], &entries)
@@ -331,7 +334,63 @@ fn untrusted(cli: &Cli, run: &Run, before: &BTreeSet<PathBuf>) -> Result<()> {
             .collect(),
         ..run.clone()
     };
-    refused(cli, &without, FLAG, before, "-untrusted")
+    refused(cli, &without, FLAG, before, "-untrusted").map(drop)
+}
+
+/// R5.2 and R5.3 for a refused row that passes `--device`: its refusal `message` names the memory the run needs and
+/// the memory it has, the first the larger, and the same run with `--device cuda` exits 1 naming the devices torch
+/// finds, before any weight downloads (the suite's machine has no CUDA). Nothing for any other row.
+fn limits(cli: &Cli, run: &Run, message: &str, before: &BTreeSet<PathBuf>) -> Result<()> {
+    if run.flag("--device").is_none() {
+        return Ok(());
+    }
+    let sizes = sizes(message);
+    ensure!(
+        matches!(sizes[..], [needs, has] if needs > has),
+        "the refusal names the sizes {sizes:?}, not the memory the run needs and the smaller memory it has: {message}"
+    );
+    let mut args = run.args.clone();
+    let at = args
+        .iter()
+        .position(|arg| arg == "--device")
+        .context("the row passes no --device")?;
+    args[at + 1] = "cuda".into();
+    let cuda = Run {
+        args,
+        ..run.clone()
+    };
+    let message = refused(
+        cli,
+        &cuda,
+        "--device cuda: torch finds no CUDA device",
+        before,
+        "-cuda",
+    )?;
+    ensure!(
+        message.ends_with("it finds cpu") || message.ends_with("it finds mps, cpu"),
+        "the refusal of --device cuda names no devices torch finds: {message}"
+    );
+    Ok(())
+}
+
+/// The sizes `text` names as `human_size` writes them (`62.6 GB`), in bytes, in order.
+fn sizes(text: &str) -> Vec<f64> {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    words
+        .windows(2)
+        .filter_map(|pair| {
+            let value: f64 = pair[0].parse().ok()?;
+            let unit = pair[1].trim_end_matches(|c: char| !c.is_ascii_alphabetic());
+            let scale = match unit {
+                "KB" => 1e3,
+                "MB" => 1e6,
+                "GB" => 1e9,
+                "TB" => 1e12,
+                _ => return None,
+            };
+            Some(value * scale)
+        })
+        .collect()
 }
 
 /// R1.1, R1.2, R1.7 and R2.2 to R2.4 for a row that answers: a run stopped by SIGINT mid-training and a run whose
@@ -692,14 +751,14 @@ fn training(log: &str) -> bool {
 
 /// A refused run: `ardana finetune` exits 1 with `why` in its message, before any weight download (no file the hub
 /// cache gained since `before` is a weight file), and leaves no entry and no model directory; its log is
-/// `<name><suffix>.log`.
+/// `<name><suffix>.log`. Returns the line of its message holding `why`.
 fn refused(
     cli: &Cli,
     run: &Run,
     why: &str,
     before: &BTreeSet<PathBuf>,
     suffix: &str,
-) -> Result<()> {
+) -> Result<String> {
     let name = run.name.as_str();
     let log = cli.dir.join(format!("{name}{suffix}.log"));
     let status = cli.spawn(run, &log, None)?.wait()?;
@@ -721,7 +780,7 @@ fn refused(
         .find(|line| line.contains(why))
         .unwrap_or_default();
     println!("e2e finetune {}: refused, {message}", run.row);
-    Ok(())
+    Ok(message.to_string())
 }
 
 fn is_weights(path: &Path) -> bool {

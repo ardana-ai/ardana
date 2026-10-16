@@ -1,11 +1,12 @@
 //! The training environment in `$ARDANA_HOME/finetune/` (Q2, Q3, Q25, Q29), which the first `ardana finetune` builds
 //! and later runs reuse: uv 0.13.1 from its GitHub release and llama.cpp's converter from the source archive of the
 //! commit `llama-cpp-sys-2` vendors, each checked against a sha256 compiled in here, and one venv on uv's CPython 3.12
-//! holding the pinned packages. uv's interpreters, cache and venv stay in the same directory, and so does the
-//! working directory of each run.
+//! holding the pinned packages, its torch the build the machine runs ([`TorchBuild`]). uv's interpreters, cache and venv
+//! stay in the same directory, and so does the working directory of each run.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -38,8 +39,7 @@ const UV_DIGESTS: [(&str, &str); 4] = [
 ];
 /// The interpreter of the venv.
 pub const PYTHON: &str = "3.12";
-/// The venv's packages (Q29), each pinned exactly. torch comes from PyTorch's CPU wheels (`--torch-backend cpu`):
-/// PyPI's Linux wheel carries CUDA.
+/// The venv's packages (Q29), each pinned exactly, torch from the index its [`TorchBuild`] names.
 pub const PACKAGES: [&str; 11] = [
     "torch==2.14.1",
     "transformers==5.18.0",
@@ -53,6 +53,10 @@ pub const PACKAGES: [&str; 11] = [
     "protobuf==7.36.2",
     "numpy==2.5.3",
 ];
+/// QLoRA's 4-bit quantization (Q16, Q29), which a CUDA venv alone holds.
+pub const BITSANDBYTES: &str = "bitsandbytes==0.50.2";
+/// The file in the venv naming the [`TorchBuild`] it was made for.
+const TORCH_BUILD: &str = "ardana-torch-build";
 /// The llama.cpp commit `llama-cpp-sys-2` 0.1.159 vendors (b11074), whose converter writes the GGUFs (Q25).
 pub const LLAMA_CPP_COMMIT: &str = "26394b4e6749a41c3633db040e0987500a5f7013";
 /// The sha256 of GitHub's source archive of that commit.
@@ -65,6 +69,70 @@ const CONVERTER_PARTS: [&str; 4] = [
     "gguf-py/",
     "LICENSE",
 ];
+
+/// The torch build the venv carries (R5.1): CUDA's on Linux with an NVIDIA driver, PyPI's on macOS arm64 (which runs
+/// MPS), PyTorch's CPU wheels on the rest (PyPI's Linux wheel carries CUDA).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TorchBuild {
+    /// PyTorch's CUDA wheels from the newest of its CUDA indexes the driver runs (uv's `--torch-backend auto`, which
+    /// reads the driver's version), with bitsandbytes for QLoRA.
+    Cuda,
+    /// PyPI's wheels.
+    Pypi,
+    /// PyTorch's CPU wheels.
+    Cpu,
+}
+
+impl TorchBuild {
+    /// The build of a machine: its OS and architecture as `std::env::consts` names them, and whether `nvidia-smi`
+    /// answers on it.
+    pub fn of(os: &str, arch: &str, nvidia: bool) -> TorchBuild {
+        match (os, arch) {
+            ("linux", _) if nvidia => TorchBuild::Cuda,
+            ("macos", "aarch64") => TorchBuild::Pypi,
+            _ => TorchBuild::Cpu,
+        }
+    }
+
+    /// This machine's build.
+    async fn here() -> TorchBuild {
+        let nvidia = std::env::consts::OS == "linux"
+            && Command::new("nvidia-smi")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await
+                .is_ok_and(|status| status.success());
+        TorchBuild::of(std::env::consts::OS, std::env::consts::ARCH, nvidia)
+    }
+
+    /// `uv pip install --torch-backend`, none for PyPI's wheels.
+    pub fn backend(self) -> Option<&'static str> {
+        match self {
+            TorchBuild::Cuda => Some("auto"),
+            TorchBuild::Pypi => None,
+            TorchBuild::Cpu => Some("cpu"),
+        }
+    }
+
+    /// The pinned packages of its venv: [`PACKAGES`], and [`BITSANDBYTES`] for CUDA alone.
+    pub fn packages(self) -> Vec<&'static str> {
+        let mut packages = PACKAGES.to_vec();
+        if self == TorchBuild::Cuda {
+            packages.push(BITSANDBYTES);
+        }
+        packages
+    }
+
+    /// The name [`TORCH_BUILD`] holds.
+    fn name(self) -> &'static str {
+        match self {
+            TorchBuild::Cuda => "cuda",
+            TorchBuild::Pypi => "pypi",
+            TorchBuild::Cpu => "cpu",
+        }
+    }
+}
 
 /// `$ARDANA_HOME/finetune/`, built.
 #[derive(Debug, Clone)]
@@ -92,8 +160,9 @@ impl Env {
 }
 
 /// The environment in `<home>/finetune/`: what is missing of it downloaded and built, what is there reused (a uv
-/// binary that says another version, and a venv on another interpreter, are replaced), and the pinned packages
-/// installed into the venv, which uv leaves as they are when the venv holds them.
+/// binary that says another version, and a venv on another interpreter or made for another torch build, as when a
+/// driver came after it, are replaced), and the pinned packages installed into the venv, which uv leaves as they are
+/// when the venv holds them.
 pub async fn prepare(home: &Path, interrupt: &mut Interrupt) -> Result<Env> {
     let env = Env {
         root: home.join("finetune"),
@@ -133,22 +202,31 @@ pub async fn prepare(home: &Path, interrupt: &mut Interrupt) -> Result<Env> {
     }
 
     let venv = root.join("venv");
-    if !venv_is_pinned(root, &venv) {
-        eprintln!("creating the training environment in {}", venv.display());
+    let build = TorchBuild::here().await;
+    let made_for = std::fs::read_to_string(venv.join(TORCH_BUILD)).unwrap_or_default();
+    if !venv_is_pinned(root, &venv) || made_for != build.name() {
+        eprintln!(
+            "creating the training environment in {} (torch for {})",
+            venv.display(),
+            build.name()
+        );
         let mut create = uv_command(root, &uv);
         create
             .args(["venv", "--quiet", "--clear", "--python", PYTHON])
             .arg(&venv);
         run(&mut create, interrupt, "uv venv").await?;
+        std::fs::write(venv.join(TORCH_BUILD), build.name())?;
     }
     // Compiled at install, so a run reads every module's bytecode and writes none: a venv that holds the pins is
     // left as it is, which uv only checks.
     let mut install = uv_command(root, &uv);
     install
         .args(["pip", "install", "--compile-bytecode", "--python"])
-        .arg(env.python())
-        .args(["--torch-backend", "cpu"])
-        .args(PACKAGES);
+        .arg(env.python());
+    if let Some(backend) = build.backend() {
+        install.args(["--torch-backend", backend]);
+    }
+    install.args(build.packages());
     run(&mut install, interrupt, "uv pip install").await?;
 
     let converter = env.converter();
@@ -233,7 +311,8 @@ fn venv_is_pinned(root: &Path, venv: &Path) -> bool {
             .is_some_and(|version| version == PYTHON || version.starts_with(&format!("{PYTHON}.")))
 }
 
-/// `uv` with its interpreters, cache and links in `root`, uv-managed interpreters only and no configuration file read.
+/// `uv` with its interpreters, cache and links in `root`, uv-managed interpreters only, no configuration file read and
+/// torch's index the [`TorchBuild`]'s alone.
 fn uv_command(root: &Path, uv: &Path) -> Command {
     let mut cmd = Command::new(uv);
     cmd.env("UV_CACHE_DIR", root.join("cache"))
@@ -241,6 +320,7 @@ fn uv_command(root: &Path, uv: &Path) -> Command {
         .env("UV_PYTHON_BIN_DIR", root.join("bin"))
         .env("UV_MANAGED_PYTHON", "1")
         .env("UV_NO_CONFIG", "1")
+        .env_remove("UV_TORCH_BACKEND")
         .env_remove("VIRTUAL_ENV");
     cmd
 }

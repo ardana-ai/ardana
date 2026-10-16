@@ -134,17 +134,23 @@ than {MIN_OPTION_EXAMPLES} training examples is warned about.
 
 Training: a LoRA of rank {LORA_RANK} and alpha {LORA_ALPHA} on every linear layer, trained with TRL's sft on the rows
 ardana reads at run time, the loss on the answer token alone: learning rate {LEARNING_RATE}, {DEFAULT_EPOCHS} epochs
-(--epochs), seed {SEED}, the epoch with the lowest calibration loss kept, float32 on the CPU. The merged model is
-converted to GGUF and quantized to --quant, by default the quant of the base's own GGUF (the library's, the one
-an hf.co/ reference or the file name names), else q4_k_m.
+(--epochs), seed {SEED}, the epoch with the lowest calibration loss kept. It runs on --device: auto takes an NVIDIA
+GPU (cuda), then Apple's GPU (mps), then the CPU, as PyTorch finds them, and a device it does not find is refused
+naming those it does. It trains in bfloat16 on cuda and mps and in float32 on the CPU. A run whose estimated memory
+(the checkpoint's weights, the adapter and the longest rows' activations) is more than the device has (the GPU's
+on cuda, the machine's on mps and the CPU) is refused before the checkpoint downloads; on cuda, a base that fits
+only with its weights in 4-bit trains with QLoRA (NF4) instead. The merged model is converted to GGUF and quantized
+to --quant, by default the quant of the base's own GGUF (the library's, the one an hf.co/ reference or the file
+name names), else q4_k_m.
 
 Calibration and report: the GGUF's temperatures are fitted on the calibration lines (one over every answer, and one
 per answer type with at least {MIN_ANSWERS} answers), and `ardana show <name>` prints them. Then the base, pulled as
 `ardana run <base>` pulls it, and the model answer the test lines; stdout prints the accuracy, NLL, Brier score and
 {ECE_BINS}-bin ECE of both per answer type and overall, which finetune.json's report holds too.
 
-Files: the first run downloads uv {UV_VERSION}, CPython {PYTHON}, PyTorch, Transformers, PEFT and TRL, and llama.cpp's
-converter ({llama_cpp}) into $ARDANA_HOME/finetune/, which later runs reuse; the base's checkpoint goes to the
+Files: the first run downloads uv {UV_VERSION}, CPython {PYTHON}, PyTorch (CUDA's build with an NVIDIA driver, and
+bitsandbytes), Transformers, PEFT and TRL, and llama.cpp's converter ({llama_cpp}) into $ARDANA_HOME/finetune/, which
+later runs reuse; the base's checkpoint goes to the
 Hugging Face cache. The model is written to $ARDANA_HOME/models/<name>/ (the GGUF, the tokenizer and chat template,
 decider_config.json with the fitted temperatures, and finetune.json) and registered as <name>; `ardana rm <name>`
 removes both, and a run that stops leaves neither. Fine-tuning runs on Linux and macOS."

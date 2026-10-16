@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use hf_hub::progress::{DownloadEvent, FileStatus, Progress, ProgressEvent, ProgressHandler};
+use hf_hub::repository::RepoTreeEntry;
 use hf_hub::{HFClient, HFError};
 
 use crate::RegistryError;
@@ -188,6 +189,47 @@ impl Hub {
             commit,
             files,
         })
+    }
+
+    /// The bytes of `files` together, none downloaded: the sizes the Hub's listing gives them at the snapshot's commit,
+    /// or offline those of the cached files.
+    pub async fn sizes(&self, snapshot: &Snapshot, files: &[String]) -> Result<u64, RegistryError> {
+        if self.offline {
+            let mut bytes = 0;
+            for file in files {
+                let path = self.file(snapshot, file).await?;
+                bytes += std::fs::metadata(&path)
+                    .map_err(|err| RegistryError::Io { path, err })?
+                    .len();
+            }
+            return Ok(bytes);
+        }
+        let listed = self
+            .client
+            .model(&snapshot.org, &snapshot.repo)
+            .get_paths_info()
+            .paths(files.to_vec())
+            .revision(snapshot.commit.clone())
+            .send()
+            .await
+            .map_err(|err| RegistryError::Hub {
+                repo: snapshot.id(),
+                err,
+            })?;
+        let mut bytes = 0;
+        for file in files {
+            bytes += listed
+                .iter()
+                .find_map(|entry| match entry {
+                    RepoTreeEntry::File { path, size, .. } if path == file => Some(*size),
+                    _ => None,
+                })
+                .ok_or_else(|| RegistryError::Invalid {
+                    what: snapshot.id(),
+                    msg: format!("the Hub lists no size of {file}"),
+                })?;
+        }
+        Ok(bytes)
     }
 
     /// The cache path (`snapshots/<commit>/<file>`) of `file`, downloaded unless offline.

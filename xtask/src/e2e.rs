@@ -356,6 +356,24 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
         expect: Expect::Answers,
         gain: Gain::Above,
     },
+    // The device and memory limits, on a machine without CUDA: qwen3.8:27b on the CPU, about 260 GB in float32, exits 1
+    // naming that estimate and the machine's memory, and with `--device cuda` exits 1 naming the devices torch finds;
+    // neither run downloads a weight.
+    FinetuneFixture {
+        name: "limits",
+        base: "qwen3.8:27b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-27b",
+            "--device",
+            "cpu",
+        ],
+        expect: Expect::Refused("of memory to train on cpu in float32, more than the"),
+        gain: Gain::Unchecked,
+    },
 ];
 
 /// One row of the `rust` suite: the `#[ignore]`d workspace tests that need the same weights.

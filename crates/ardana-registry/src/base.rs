@@ -50,6 +50,8 @@ pub struct Base {
     pub checkpoint: Checkpoint,
     /// The checkpoint's `config.json#architectures`.
     pub architectures: Vec<String>,
+    /// The checkpoint's `config.json`.
+    pub config: serde_json::Value,
     /// The quant of the base's own GGUF, when the library or the reference names one.
     pub quant: Option<String>,
     /// The file name of the base's own GGUF, when it is one with a name of its own (not an Ollama blob).
@@ -170,7 +172,7 @@ async fn library_base(
             ));
         }
     };
-    let (checkpoint, architectures) = open(hub, &files, opts.trust_remote_code).await?;
+    let (checkpoint, model_config) = open(hub, &files, opts.trust_remote_code).await?;
 
     // The GGUF repository is read, at its commit, for what `ardana pull` takes from it besides the weights: its
     // tokenizer when the size pins none, and `decider_config.json` when the size names no layout (Q7).
@@ -212,7 +214,8 @@ async fn library_base(
     Ok(Base {
         name,
         checkpoint,
-        architectures,
+        architectures: ardana_core::snapshot::architectures(&model_config),
+        config: model_config,
         quant: Some(pick.quant.quant.clone()),
         gguf: Some(pick.quant.file.clone()),
         license: size.license.clone(),
@@ -251,7 +254,7 @@ async fn entry_base(
             ));
         }
     };
-    let (checkpoint, architectures) = open(hub, &files, opts.trust_remote_code).await?;
+    let (checkpoint, model_config) = open(hub, &files, opts.trust_remote_code).await?;
     let license = license(hub, card, &files).await?;
     let quant = match source {
         Ok(Ref::Hf {
@@ -267,7 +270,8 @@ async fn entry_base(
     Ok(Base {
         name: entry.name.clone(),
         checkpoint,
-        architectures,
+        architectures: ardana_core::snapshot::architectures(&model_config),
+        config: model_config,
         quant,
         gguf: entry
             .weights
@@ -357,7 +361,7 @@ async fn reference_base(
             (files, beside(DECIDER_CONFIG), beside(TOKENIZER_FILE))
         }
     };
-    let (checkpoint, architectures) = open(hub, &files, opts.trust_remote_code).await?;
+    let (checkpoint, model_config) = open(hub, &files, opts.trust_remote_code).await?;
     let (tokenizer, pull_tokenizer) = match own_tokenizer {
         Some(path) => (path, None),
         None => match &checkpoint {
@@ -391,7 +395,8 @@ async fn reference_base(
         },
         name,
         checkpoint,
-        architectures,
+        architectures: ardana_core::snapshot::architectures(&model_config),
+        config: model_config,
         quant,
         gguf,
         license: license(hub, card, &files).await?,
@@ -429,14 +434,14 @@ async fn named_checkpoint(hub: &Hub, checkpoint: &str) -> Result<Files, Registry
     }
 }
 
-/// `files` as a checkpoint to train from, with the architectures its `config.json` names: no decision model (Q17), a
-/// `config.json` (fetched, no weight) and its weights, and, unless `trust_remote_code`, no `auto_map` in its
-/// `config.json`, which would run the code it ships (Q14).
+/// `files` as a checkpoint to train from, with its `config.json`: no decision model (Q17), a `config.json` (fetched,
+/// no weight) and its weights, and, unless `trust_remote_code`, no `auto_map` in its `config.json`, which would run the
+/// code it ships (Q14).
 async fn open(
     hub: &Hub,
     files: &Files,
     trust_remote_code: bool,
-) -> Result<(Checkpoint, Vec<String>), RegistryError> {
+) -> Result<(Checkpoint, serde_json::Value), RegistryError> {
     let (checkpoint, config, code) = match files {
         Files::Hub(snapshot) => {
             let id = snapshot.id();
@@ -508,7 +513,7 @@ async fn open(
             ),
         });
     }
-    Ok((checkpoint, ardana_core::snapshot::architectures(&config)))
+    Ok((checkpoint, config))
 }
 
 /// The checkpoint the card of `snapshot` names: its one `base_model`, listed at `main`.
@@ -680,6 +685,33 @@ fn undecided(what: &str, holds: bool) -> Result<(), RegistryError> {
 }
 
 impl Base {
+    /// The bytes of the checkpoint's safetensors, which its memory estimate reads before any of them downloads: those
+    /// of a directory's files; for a Hub checkpoint, the sizes its listing gives the files its index names (else
+    /// `model.safetensors`), offline those of the files in the hub cache.
+    pub async fn weight_bytes(&self) -> Result<u64, RegistryError> {
+        let snapshot = match &self.files {
+            Files::Dir(dir) => {
+                let files = ardana_core::snapshot::weight_files(dir).map_err(|msg| {
+                    RegistryError::Invalid {
+                        what: dir.display().to_string(),
+                        msg,
+                    }
+                })?;
+                let mut bytes = 0;
+                for path in files {
+                    bytes += std::fs::metadata(&path)
+                        .map_err(|err| RegistryError::Io { path, err })?
+                        .len();
+                }
+                return Ok(bytes);
+            }
+            Files::Hub(snapshot) => snapshot,
+        };
+        let hub = Hub::from_env(false)?;
+        let files = safetensors(&hub, snapshot).await?;
+        hub.sizes(snapshot, &files).await
+    }
+
     /// The checkpoint's snapshot directory: a directory as it is; a Hub checkpoint downloaded at its commit into the hub
     /// cache (unless the cache holds it, or offline from the cache alone), `config.json`, its safetensors and every other
     /// file at the repository's root but weights of other formats.
