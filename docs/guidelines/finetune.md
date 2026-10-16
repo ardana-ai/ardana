@@ -12,8 +12,8 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
 
 ## Versions
 - `uv` 0.13.1 (Q3) — downloaded by `ardana` from `https://github.com/astral-sh/uv/releases/download/0.13.1/`, the
-  `uv-<target>.tar.gz` of `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin` and
-  `aarch64-apple-darwin`, each checked against the sha256 its release publishes (`.sha256` beside the archive),
+  `uv-<target>.tar.gz` of `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` and `aarch64-apple-darwin`, each
+  checked against the sha256 its release publishes (`.sha256` beside the archive),
   compiled into `crates/ardana/src/finetune/env.rs#UV_DIGESTS`.
 - `CPython` 3.12 — uv's managed build (3.12.15 when written), the venv's interpreter.
 - llama.cpp `26394b4` (`26394b4e6749a41c3633db040e0987500a5f7013`, b11074, Q25) — what `llama-cpp-sys-2` 0.1.159
@@ -30,12 +30,15 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
 
 ### Environment
 - Everything the command installs lives in `$ARDANA_HOME/finetune/`: `bin/uv`, `python/` (`UV_PYTHON_INSTALL_DIR`),
-  `cache/` (`UV_CACHE_DIR`), `venv/`, `llama.cpp-<commit>/`, and each run's working directory `work/<name>/`. uv runs
+  `cache/` (`UV_CACHE_DIR`), `venv/`, `llama.cpp-<commit>/`, and each run's working directory `work/<name>-<pid>/`
+  (the process's id, so two runs building one name never remove each other's files). uv runs
   with `UV_MANAGED_PYTHON=1` (no system interpreter), `UV_NO_CONFIG=1` (no `uv.toml` of the user's) and
   `UV_PYTHON_BIN_DIR` in the same directory, so nothing lands in `~/.cache/uv`, `~/.local/share/uv` or `~/.local/bin`.
 - Downloads go through `<file>.part`, renamed only once their sha256 is the compiled one; a digest that differs is an
   error naming both, and nothing is unpacked. Only the four parts of the llama.cpp archive are unpacked, each path
-  made of plain components.
+  made of plain components, and only regular files and directories: a kept link (symbolic or hard) or any other entry
+  is refused (`env::tests::unpack_refuses_links`). uv's archive holds a directory and two files, llama.cpp's
+  3,612 files and 375 directories, no link among them.
 - The first run builds what is missing; later runs reuse it: `bin/uv` when `uv --version` says 0.13.1, the venv when
   its `pyvenv.cfg` names uv's 3.12 under `python/` and its `ardana-torch-build` names this machine's torch build, the
   converter's directory when it exists. `uv pip install` of the pins runs every time, which checks the installed
@@ -50,7 +53,9 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
     reads the driver's version and tries PyTorch's CUDA indexes the driver runs, newest first (torch 2.14.1 has
     `cu132`, `cu130` and `cu126`), then the CPU index; the CUDA venv alone also gets `bitsandbytes==0.50.2`;
   - macOS arm64: PyPI's wheel (no `--torch-backend`), which runs MPS;
-  - the rest (Linux without the driver, Intel macOS): PyTorch's CPU wheels through `--torch-backend cpu`.
+  - Linux without the driver: PyTorch's CPU wheels through `--torch-backend cpu`.
+  Intel macOS is refused before anything (`runs_here`): torch 2.14.1 ships no macOS x86_64 wheel, so the install
+  would fail only after uv and CPython downloaded.
   `--torch-backend` routes the PyTorch packages alone to PyTorch's index; `--extra-index-url` would not do: under uv's
   first-index strategy every package that index mirrors (numpy among them) is then looked up there alone, and
   `numpy==2.5.3` is not. `UV_TORCH_BACKEND` is removed from uv's environment, so the build is ardana's choice alone.
@@ -83,7 +88,11 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
 - `read_jsonl` checks each labelled line with `Decider::plan` on the base's own tokenizer and profile and each label
   against its rendered question; an error is `<file>:<line>: question <id>: <msg>` (`DataError`). A line whose
   answers are all `null` is counted and skipped; fewer than 100 labelled lines are refused; an option with fewer
-  than 50 training examples is warned about.
+  than 50 training examples is warned about (`sparse_options`). A question is its id and its spec (the spec's JSON):
+  lines asking questions of their own (decider's custom data, `q1`, `q2`, ... on every line) give one id to different
+  questions, which are counted apart. A question labelled on 50 training lines or more gets a warning per sparse
+  option, naming the first line labelling it; the questions labelled on fewer, every option of which is sparse, are
+  counted in one line.
 - The split (Q26) is by line: a SplitMix64 shuffle seeded with 0 over the labelled lines, a tenth (rounded down) to
   calibration, a tenth to test, the rest to train, each in line order.
 - A `TrainingRow` is a planned row: `Decider::decodes`' ids with the gold option's label id appended, and the mask 1 on
@@ -109,6 +118,10 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   `rl_agent_config.json` (Q17), refused when it has no `config.json`, whose bytes are fetched (no weight) and read
   for `auto_map`: a checkpoint that has it loads by running the Python files it ships, so without
   `--trust-remote-code` it is refused naming the flag and those files (Q14), the hub cache holding no weight file.
+  Its `tokenizer_config.json`, when it has one, is fetched and read the same way (`base::remote_code`): an `auto_map`
+  there loads the tokenizer by the checkpoint's code, and llama.cpp's converter calls
+  `AutoTokenizer.from_pretrained(<dir>, trust_remote_code=True)` for many architectures (`conversion/base.py`,
+  `chatglm.py`, `glm.py`, `hunyuan.py`, `deepseek.py`, ...), so without the flag it is refused too.
 - `finetune.json#checkpoint` is `{"repo", "commit"}` for a Hub checkpoint (the commit its listing read) and
   `{"path"}` for a directory; the run prints `fine-tuning <base> from the checkpoint <it>` once the base is read.
 - The base's profile is the one `ardana pull` derives: a library size's from its tokenizer at its pin, else the GGUF
@@ -130,9 +143,9 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   --layout <its layout>` resolves it (`ardana_registry::pull`, downloading the GGUF), not recorded: a reference has no
   canonical name to record it under, and `ardana run` takes names.
 - A multimodal checkpoint (`config.json` names a `*ForConditionalGeneration` and holds a `text_config`, Qwen3.5's
-  `Qwen3_5ForConditionalGeneration`) trains its text tower alone, the model Ardana runs: `work/<name>/text/` holds the
-  `text_config` as `config.json` (its `architectures` the `*ForCausalLM` of the same prefix) and links to the
-  checkpoint's files but `config.json` and the processor's (`processor_config.json`, `preprocessor_config.json`,
+  `Qwen3_5ForConditionalGeneration`) trains its text tower alone, the model Ardana runs: `work/<name>-<pid>/text/`
+  holds the `text_config` as `config.json` (its `architectures` the `*ForCausalLM` of the same prefix) and links to
+  the checkpoint's files but `config.json` and the processor's (`processor_config.json`, `preprocessor_config.json`,
   `video_preprocessor_config.json`). transformers loads `Qwen3_5ForCausalLM` from the checkpoint's
   `model.language_model.*` tensors (`conversion_mapping.py`, `qwen3_5_text`: a `PrefixChange`), and TRL's
   `AutoProcessor` then finds the tokenizer: given the multimodal checkpoint it builds `Qwen3VLProcessor`, whose image
@@ -208,7 +221,8 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   `"auto"` would offload the bfloat16 base of a QLoRA run, larger than the GPU), the adapter with
   `PeftModel.from_pretrained`, and saves `merge_and_unload()` with `save_pretrained`: neither TRL nor PEFT has a merge
   command. A QLoRA adapter merges into the base at bfloat16, not 4-bit. The checkpoint's other root files (the
-  tokenizer's) are copied beside it for the converter.
+  tokenizer's) are copied beside it for the converter, its `*.py` only under `--trust-remote-code`: the converter loads
+  tokenizers with `trust_remote_code=True`, so a Python file beside them would run.
 - `convert_hf_to_gguf.py <merged> --outtype f32 --model-name <name> --outfile <name>-float32.gguf`, at the training
   dtype (it has no remote-code flag: it reads `config.json` itself when `AutoConfig` will not, and its own
   architecture classes, `conversion/spark2_5.py` among them, convert the merged weights); `--no-nextn` only when `config.json` (or its `text_config`) declares `mtp_num_hidden_layers` or
@@ -229,17 +243,18 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   `"quant": null`.
 - `ardana_llama::quantize` calls `llama_model_quantize` from `llama-cpp-sys-2` (llama-cpp-2 wraps no quantization)
   with llama.cpp's default parameters and the file type `--quant` names, by default the base's own GGUF quant (Q24).
-  `QUANTS` lists, lowercase, every type `llama-quantize` writes without an importance matrix.
+  `QUANTS` lists, lowercase, every type `llama-quantize` writes without an importance matrix, and `ALIASES` its three
+  aliases (`q3_k`, `q4_k`, `q5_k` for the `_m` types), which the library uses: phi-4:14b's default quant is `q4_k`.
 
 ### Calibration and report
-- Q11: the temperatures are fitted through the model itself, before it moves: the quantized GGUF in `work/<name>/out/`
-  is resolved as `ardana pull <that GGUF> --name <name> --layout <the base's>` would resolve it (not recorded); a
-  checkpoint is `out/` itself, its tokenizer and `decider_config.json` in it giving the profile (`read_profile`) and
-  `Runtimes::for_weights` its runtime, Candle. Either is loaded as `ardana run` loads an entry (the default window and
-  offload), and the run prints `calibrated <name> through <runtime>`, the id of the runtime that loaded it
-  (`evaluate::calibrate` returns it). Every calibration line is planned and answered by
-  `Decider::run` at temperature 1 through a recording `LoadedModel`; each labelled question is one `calibrate::Record`,
-  the label logits of its row or, for an isolated score question, of each level's `no`/`yes` row.
+- Q11: the temperatures are fitted through the model itself, before it moves: the quantized GGUF in
+  `work/<name>-<pid>/out/` is resolved as `ardana pull <that GGUF> --name <name> --layout <the base's>` would resolve
+  it (not recorded); a checkpoint is `out/` itself, its tokenizer and `decider_config.json` in it giving the profile
+  (`read_profile`) and `Runtimes::for_weights` its runtime, Candle. Either is loaded as `ardana run` loads an entry
+  (the default window and offload), and the run prints `calibrated <name> through <runtime>`, the id of the runtime
+  that loaded it (`evaluate::calibrate` returns it). Every calibration line is planned and answered by `Decider::run`
+  at temperature 1 through a recording `LoadedModel`; each labelled question is one `calibrate::Record`, the label
+  logits of its row or, for an isolated score question, of each level's `no`/`yes` row.
 - Q30 is decider's `calibrate.py#fit_by_type`: `temperature` fitted over every record, and per type a
   `temperature_by_type` entry when the type has at least 50 records (`MIN_ANSWERS`), else the type is left out and
   takes `temperature`; each rounded to 3 places. `fit` scores 801 temperatures spaced evenly in log from 0.05 to 20,
@@ -261,16 +276,15 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   between two lines, and the run then ends as any stopped run does.
 
 ### Output, registry and stopping
-- The model is built in `work/<name>/out/` and holds `<name>-<QUANT>.gguf` (under `--format safetensors`, `config.json`
-  and the safetensors), the base's `tokenizer.json` with its
-  `tokenizer_config.json` and `chat_template.jinja` as they are, `decider_config.json` (`version` the name, the base's
-  `layout` and `isolated_levels`, the fitted `temperature` and `temperature_by_type`, `release_date`) and
-  `finetune.json` (the Contract: `rows` counts the lines of each split, `report` the test report). Once calibrated and
-  reported it is renamed to `$ARDANA_HOME/models/<name>/` and registered as `ardana pull <that GGUF> --name <name>
-  --layout <the base's>` would record it, so the profile is read from `decider_config.json` beside it; a checkpoint is
-  registered with the directory as its weights and its source, runtime `candle`. A registration that fails removes
-  the directory. `$ARDANA_HOME` is made absolute first: the Python steps run in the working
-  directory.
+- The model is built in `work/<name>-<pid>/out/` and holds `<name>-<QUANT>.gguf` (under `--format safetensors`,
+  `config.json` and the safetensors), the base's `tokenizer.json` with its `tokenizer_config.json` and
+  `chat_template.jinja` as they are, `decider_config.json` (`version` the name, the base's `layout` and
+  `isolated_levels`, the fitted `temperature` and `temperature_by_type`, `release_date`) and `finetune.json` (the
+  Contract: `rows` counts the lines of each split, `report` the test report). Once calibrated and reported it is
+  renamed to `$ARDANA_HOME/models/<name>/` and registered as `ardana pull <that GGUF> --name <name> --layout <the
+  base's>` would record it, so the profile is read from `decider_config.json` beside it; a checkpoint is registered
+  with the directory as its weights and its source, runtime `candle`. A registration that fails removes the directory.
+  `$ARDANA_HOME` is made absolute first: the Python steps run in the working directory.
 - A name is refused (Q27) when an entry, a library family or a library name (any spelling) holds it, when its model
   directory exists, and when it holds whitespace, `/` or `\` or starts with `.`.
 - SIGINT is listened for from the start (`Interrupt`, a tokio unix signal): it stops the current child (killed),
@@ -278,7 +292,8 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   ends (`Work`'s `Drop`), so a stopped or failed run leaves no entry and no `models/<name>/` (R1.7).
 - `ardana rm <name>` of an entry whose weights are in `$ARDANA_HOME/models/<name>/` beside a `finetune.json` deletes
   that directory with the entry (Q20).
-- Linux and macOS only (Q21): elsewhere the command exits 1 saying so.
+- Linux, and macOS on Apple Silicon (Q21): elsewhere the command exits 1 saying so, on Intel macOS that PyTorch
+  2.14.1 ships no wheel for it. bf16 on MPS needs macOS 14 (transformers' `is_torch_bf16_gpu_available`).
 
 ### Push
 - `ardana push <name> hf.co/<org>/<repo> [--public] [--dry-run]` takes only an entry `finetune::made` says `ardana
@@ -325,8 +340,16 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   `finetune::tests::safetensors_follows_candle_architectures` (every name of `ARCHITECTURES` but THX-01's taken, alone
   and after another name; THX-01, `Qwen3_5ForConditionalGeneration` and no name refused) and
   `finetune::tests::torch_build_follows_the_machine` (R5.1: `TorchBuild::of` for Linux x86_64 and aarch64 with and
-  without `nvidia-smi` answering and macOS arm64 and x86_64, its `--torch-backend` and its packages, bitsandbytes in the
-  CUDA build's alone).
+  without `nvidia-smi` answering and macOS arm64, its `--torch-backend` and its packages, bitsandbytes in the
+  CUDA build's alone; Intel macOS and Windows refused by `runs_here`),
+  `finetune::device::tests::pick_takes_cuda_then_mps_then_cpu` (R5.2: `--device auto` over CUDA and MPS, MPS alone
+  and the CPU alone, and a device named that torch does not find refused naming those it finds),
+  `finetune::tests::library_quants_are_written` (every library size's default quant, phi-4:14b's `q4_k` among them),
+  `finetune::tests::merged_model_gets_python_only_when_trusted`, `finetune::env::tests::unpack_refuses_links`,
+  `ardana-llama`'s `quantize::tests::quants_are_named_like_the_library` (the aliases too), `ardana-registry`'s
+  `base::tests::auto_map_in_either_config_runs_remote_code` and `ardana-core`'s
+  `finetune::tests::sparse_options_count_each_question_apart` (`q1` given to a noul on 60 lines, a choice on 30 and a
+  question of its own on each of 100 more: 102 questions, each with its own lines and options).
 - `cargo xtask e2e finetune` runs `xtask/src/e2e.rs#FINETUNE_FIXTURES` in order with the release `ardana`, online, on
   one home `tmp/e2e/finetune/home` (removed when the suite ends, also on failure) over `tmp/hf`, under the home guard.
   It writes the first 1,000 lines of decider@23579f7's `teacher_data/commands.jsonl` (`tmp/src/decider`) as
@@ -342,9 +365,11 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   `qwen3.5:0.8b` (commands data, the multimodal checkpoint, chat layout, `Gain::Above`), `hf.co-gguf`
   (`hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, `cmd-risk-gguf`, `Gain::Unchecked`: R3.2 asks that it answers),
   `spark-x2.5:1.7b` (`Spark2_5ForCausalLM`, whose `config.json` has `auto_map`, `--trust-remote-code --epochs 1`,
-  `Gain::Unchecked`), `safetensors` (`hf.co/Qwen/Qwen3-0.6B` on the commands data, `--format safetensors`,
-  `cmd-risk-st`, `Gain::Above`: the base answers through Candle too) and `limits` (`qwen3.8:27b` on the commands data
-  with `--device cpu`, `cmd-risk-27b`, `Expect::Refused` on the memory estimate, `Gain::Unchecked`). A refused row
+  `Gain::Unchecked`: it checks the refusal, then the fine-tune with the flag, which fails under the pinned
+  transformers 5.18, the checkpoint's own code targeting transformers 4.57), `safetensors` (`hf.co/Qwen/Qwen3-0.6B` on
+  the commands data, `--format safetensors`, `cmd-risk-st`, `Gain::Above`: the base answers through Candle too) and
+  `limits` (`qwen3.8:27b` on the commands data with `--device cpu`, `cmd-risk-27b`, `Expect::Refused` on the memory
+  estimate, `Gain::Unchecked`). A refused row
   whose args pass `--device` (R5.2, R5.3; the suite's machine has no CUDA) checks that its refusal names two sizes, the
   estimate above the memory, then runs again with `--device cuda`, which must exit 1 with `--device cuda: torch finds
   no CUDA device` and the devices found (`cpu`, or `mps, cpu`), no weight file reaching the hub cache either time. A

@@ -102,7 +102,7 @@ store or where they were."
 pub fn finetune() -> String {
     use crate::finetune::{
         DEFAULT_EPOCHS, LEARNING_RATE, LLAMA_CPP_COMMIT, LORA_ALPHA, LORA_RANK, PYTHON, SEED,
-        UV_VERSION,
+        TORCH, UV_VERSION,
     };
     use ardana_core::calibrate::{ECE_BINS, MIN_ANSWERS};
     use ardana_core::finetune::{MIN_LINES, MIN_OPTION_EXAMPLES};
@@ -120,7 +120,8 @@ or a GGUF), an ollama: reference or a local GGUF file. Training reads the base's
 the library pins for a size, an hf.co/ checkpoint itself, and for an hf.co/ GGUF (or a model pulled from one) the
 base_model its repository's card names when it names exactly one. --checkpoint hf.co/<org>/<repo> or --checkpoint
 <dir> names it for any base, and a base whose checkpoint is unknown is refused naming it. A checkpoint whose
-config.json has auto_map loads by running the Python code it ships; it is refused unless --trust-remote-code.
+config.json or tokenizer_config.json has auto_map loads by running the Python code it ships; it is refused unless
+--trust-remote-code.
 
 Data: one JSON object a line,
   {{\"state\": <text or JSON>, \"questions\": {{<id>: <question spec>}}, \"answers\": {{<id>: <label>}}}}
@@ -136,10 +137,10 @@ Training: a LoRA of rank {LORA_RANK} and alpha {LORA_ALPHA} on every linear laye
 ardana reads at run time, the loss on the answer token alone: learning rate {LEARNING_RATE}, {DEFAULT_EPOCHS} epochs
 (--epochs), seed {SEED}, the epoch with the lowest calibration loss kept. It runs on --device: auto takes an NVIDIA
 GPU (cuda), then Apple's GPU (mps), then the CPU, as PyTorch finds them, and a device it does not find is refused
-naming those it does. It trains in bfloat16 on cuda and mps and in float32 on the CPU. A run whose estimated memory
-(the checkpoint's weights, the adapter and the longest rows' activations) is more than the device has (the GPU's
-on cuda, the machine's on mps and the CPU) is refused before the checkpoint downloads; on cuda, a base that fits
-only with its weights in 4-bit trains with QLoRA (NF4) instead. The merged model is converted to GGUF and quantized
+naming those it does. It trains in bfloat16 on cuda and mps (mps needs macOS 14 for it) and in float32 on the
+CPU. A run whose estimated memory (the checkpoint's weights, the adapter and the longest rows' activations) is more
+than the device has (the GPU's on cuda, the machine's on mps and the CPU) is refused before the checkpoint
+downloads; on cuda, a base that fits only with its weights in 4-bit trains with QLoRA (NF4) instead. The merged model is converted to GGUF and quantized
 to --quant, by default the quant of the base's own GGUF (the library's, the one an hf.co/ reference or the file
 name names), else q4_k_m.
 
@@ -153,7 +154,8 @@ bitsandbytes), Transformers, PEFT and TRL, and llama.cpp's converter ({llama_cpp
 later runs reuse; the base's checkpoint goes to the
 Hugging Face cache. The model is written to $ARDANA_HOME/models/<name>/ (the GGUF, the tokenizer and chat template,
 decider_config.json with the fitted temperatures, and finetune.json) and registered as <name>; `ardana rm <name>`
-removes both, and a run that stops leaves neither. Fine-tuning runs on Linux and macOS."
+removes both, and a run that stops leaves neither. Fine-tuning runs on Linux and on macOS with Apple Silicon (PyTorch
+{TORCH} ships no Intel macOS wheels)."
     )
 }
 

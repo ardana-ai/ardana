@@ -291,3 +291,59 @@ pub fn fit(
     );
     Ok(training)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// R5.2: `--device auto` takes CUDA when torch finds it, else MPS, else the CPU (Q4); a device named is taken when
+    /// torch finds it, and refused when it does not, naming the devices it finds in auto's order.
+    #[test]
+    fn pick_takes_cuda_then_mps_then_cpu() {
+        const GPU_MEMORY: u64 = 24_000_000_000;
+        let machine = |cuda: bool, mps: bool| Found {
+            cuda: cuda.then(|| ("NVIDIA L4".to_string(), GPU_MEMORY)),
+            mps,
+            memory: 64_000_000_000,
+        };
+        for (cuda, mps, auto) in [
+            (true, true, Device::Cuda),
+            (true, false, Device::Cuda),
+            (false, true, Device::Mps),
+            (false, false, Device::Cpu),
+        ] {
+            let found = machine(cuda, mps);
+            assert_eq!(pick(Device::Auto, &found).unwrap(), auto, "{found:?}");
+            assert_eq!(pick(Device::Cpu, &found).unwrap(), Device::Cpu, "{found:?}");
+        }
+        assert_eq!(
+            pick(Device::Cuda, &machine(true, true)).unwrap(),
+            Device::Cuda
+        );
+        assert_eq!(
+            pick(Device::Mps, &machine(true, true)).unwrap(),
+            Device::Mps
+        );
+
+        let refused = |asked, found: Found| pick(asked, &found).unwrap_err().to_string();
+        assert_eq!(
+            refused(Device::Cuda, machine(false, false)),
+            "--device cuda: torch finds no CUDA device on this machine; it finds cpu"
+        );
+        assert_eq!(
+            refused(Device::Cuda, machine(false, true)),
+            "--device cuda: torch finds no CUDA device on this machine; it finds mps, cpu"
+        );
+        assert_eq!(
+            refused(Device::Mps, machine(false, false)),
+            "--device mps: torch finds no MPS device on this machine; it finds cpu"
+        );
+        assert_eq!(
+            refused(Device::Mps, machine(true, false)),
+            format!(
+                "--device mps: torch finds no MPS device on this machine; it finds cuda (NVIDIA L4, {}), cpu",
+                human_size(GPU_MEMORY)
+            )
+        );
+    }
+}

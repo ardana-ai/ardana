@@ -223,7 +223,8 @@ change them) and its Requirements are the definition of done.
   with `--checkpoint <the checkpoint's snapshot directory>` and `--epochs 1`, recorded as `{"path"}`) and
   `spark-x2.5:1.7b` (`cmd-risk-spark`, `--trust-remote-code --epochs 1`: first run without the flag, which exits 1
   naming it with no weight file reaching `tmp/hf`, as `XHToken/Spark-X2.5-1.7B`'s `config.json` has `auto_map`; then
-  trained, converted and answering, Q8_0); both rows check that the model answers, not its accuracy; and `safetensors`
+  the fine-tune with the flag, which fails under the pinned transformers 5.18, the checkpoint's own code targeting
+  transformers 4.57); `hf.co-gguf` checks that the model answers, not its accuracy; and `safetensors`
   (`cmd-risk-st` from `hf.co/Qwen/Qwen3-0.6B` on the commands data, `--format safetensors`: its directory holds the
   checkpoint's `config.json` in float32 and the merged `model.safetensors`, every tensor F32, besides the tokenizer
   files, `decider_config.json` and `finetune.json` (`"format": "safetensors"`, `quant` null), `ardana show` prints
@@ -335,8 +336,8 @@ change them) and its Requirements are the definition of done.
   `models.toml` is reread when it changes, so a model `ardana pull` adds while `serve` runs is servable at once;
   models load on their first request and unload after `--keep-alive` idle.
 - `ardana finetune <base> <data.jsonl|data.csv> --name N [--questions F] [--epochs 2] [--format gguf|safetensors]
-  [--quant Q] [--checkpoint hf.co/<org>/<repo>|<dir>] [--trust-remote-code] [--device auto|cuda|mps|cpu]` (Linux and
-  macOS; elsewhere exit 1)
+  [--quant Q] [--checkpoint hf.co/<org>/<repo>|<dir>] [--trust-remote-code] [--device auto|cuda|mps|cpu]` (Linux, and
+  macOS on Apple Silicon, PyTorch 2.14.1 shipping no Intel macOS wheels; elsewhere exit 1)
   trains a LoRA of the base's transformers checkpoint into a System One model (Q7). The base is any model `ardana`
   runs, looked up as a library size, then a registry entry, then a reference: a library size trains from its pinned
   checkpoint (a decider size's
@@ -345,28 +346,32 @@ change them) and its Requirements are the definition of done.
   (`README.md` front matter: a scalar, a flow or a block list) names when it names exactly one repository;
   `--checkpoint` names it for any base (a Hub repository at `main`, or a directory with `config.json` and its
   safetensors, recorded `{"path"}`), and an `ollama:` reference, a local GGUF file, decider:4b or a card naming none or
-  several are refused naming `--checkpoint`. A checkpoint whose `config.json` has `auto_map` is refused naming
-  `--trust-remote-code` before any weight downloads; with the flag the trainer and `merge.py` get
-  `trust_remote_code`. A base other than a library size reads its tokenizer and profile as `ardana pull` derives them
-  (an entry's as recorded; a GGUF without a `tokenizer.json` beside it the checkpoint's), its license from its card,
-  else the checkpoint's, and its quant from the reference or the GGUF's file name, else `q4_k_m`. A data line is
-  `{"state", "questions"?, "answers": {<id>: <label>}}`, a line without questions asking `--questions` (a map, or a
-  `/v1/systemone` body), a label the option's name, `true`/`false`, a level's index or legend key, or `null`; a
-  `.csv` file holds the same lines as a `state` column and a column per question id of `--questions` (required), each
-  cell a label, an empty cell unlabelled, a missing `state`, an unknown or repeated column refused; the lines are
-  split by line, seeded, 80/10/10 into train, calibration and test, under 100 labelled lines refused and an option
-  under 50 training examples warned. The name (an entry's, a library family's or a library name's is refused, Q27),
-  the base's checkpoint (its listing and `config.json`; a checkpoint with `rl_agent_config.json` refused as a decision
+  several are refused naming `--checkpoint`. A checkpoint whose `config.json` or `tokenizer_config.json` has
+  `auto_map` is refused naming `--trust-remote-code` before any weight downloads; with the flag the trainer and
+  `merge.py` get `trust_remote_code` and the converter (which loads tokenizers with `trust_remote_code=True`) the
+  checkpoint's `*.py`, copied beside the merged model under the flag alone. A base other than a library size reads its
+  tokenizer and profile as `ardana pull` derives them (an entry's as recorded; a GGUF without a `tokenizer.json`
+  beside it the checkpoint's), its license from its card, else the checkpoint's, and its quant from the reference or
+  the GGUF's file name, else `q4_k_m`. A data line is `{"state", "questions"?, "answers": {<id>: <label>}}`, a line
+  without questions asking `--questions` (a map, or a `/v1/systemone` body), a label the option's name,
+  `true`/`false`, a level's index or legend key, or `null`; a `.csv` file holds the same lines as a `state` column and
+  a column per question id of `--questions` (required), each cell a label, an empty cell unlabelled, a missing
+  `state`, an unknown or repeated column refused; the lines are split by line, seeded, 80/10/10 into train,
+  calibration and test, under 100 labelled lines refused and an option under 50 training examples warned (a question
+  being its id and spec: one line each for those labelled on 50 training lines or more, one line counting the
+  questions labelled on fewer). The name (an entry's, a library family's or a library name's is refused, Q27), the
+  base's checkpoint (its listing and `config.json`; a checkpoint with `rl_agent_config.json` refused as a decision
   model), its tokenizer and profile and every line (errors name `<file>:<line>` and the question) are checked before
   anything heavy. Then the first run builds
   `$ARDANA_HOME/finetune/` (uv 0.13.1 from its GitHub release and llama.cpp 26394b4's source archive for
   `convert_hf_to_gguf.py`, `conversion/` and `gguf-py/`, both sha256-checked against digests compiled in; uv's
   CPython 3.12 and a venv with the Q29 pins, its torch the machine's build: CUDA's wheels (uv's `--torch-backend
   auto`) with bitsandbytes 0.50.2 on Linux where `nvidia-smi` answers, PyPI's on macOS arm64, PyTorch's CPU wheels
-  elsewhere, a venv made for another build created again), which later runs reuse. torch in it then says which
-  devices it finds: `--device auto` takes cuda, then mps, then cpu, and `--device cuda` (or `mps`) torch does not find
-  exits 1 naming the devices it does; cuda and mps train in bfloat16, cpu in float32. Before the checkpoint downloads,
-  a memory estimate (the checkpoint's safetensors bytes from its Hub listing at the training dtype, the LoRA adapter
+  on any other Linux, a venv made for another build created again), which later runs reuse. torch in it then says
+  which devices it finds: `--device auto` takes cuda, then mps, then cpu, and `--device cuda` (or `mps`) torch does
+  not find exits 1 naming the devices it does; cuda and mps train in bfloat16 (mps from macOS 14, transformers' rule),
+  cpu in float32. Before the checkpoint downloads, a memory estimate (the checkpoint's safetensors bytes from its Hub
+  listing at the training dtype, the LoRA adapter
   with Adam's state, and the activations of 8 rows of the longest row, 23·(hidden + intermediate) values a token and
   layer, every layer's on the CPU and with gradient checkpointing one layer's on cuda and mps, plus 1 GB) is held
   against the GPU's memory on cuda and the machine's on mps and cpu: on cuda a run that fits only with its weights in
@@ -375,8 +380,9 @@ change them) and its Requirements are the definition of done.
   downloads to the HF cache; TRL's `sft` script trains on the very rows `Decider::plan` builds (LoRA r16, alpha 32,
   all linear layers, lr 1e-4, the epochs, seed 0, the epoch with the lowest calibration loss kept, offline);
   `merge.py` merges (`merge_and_unload`, on the CPU at the training dtype); the converter writes an f32 GGUF and the
-  linked `llama_model_quantize` the `--quant`, default the base's own GGUF quant. `--format safetensors` writes no
-  GGUF: the model is the merged checkpoint, its safetensors at the training dtype beside the checkpoint's own
+  linked `llama_model_quantize` the `--quant` (`llama-quantize`'s aliases too: phi-4:14b's `q4_k` is Q4_K_M), default
+  the base's own GGUF quant. `--format safetensors` writes no GGUF: the model is the merged checkpoint, its
+  safetensors at the training dtype beside the checkpoint's own
   `config.json` (that dtype;
   transformers 5's `save_pretrained` config, `rope_parameters` for `rope_theta`, does not read in Candle), registered
   with its directory as the weights and runtime `candle`. It takes exactly the causal architectures of
@@ -397,9 +403,9 @@ change them) and its Requirements are the definition of done.
   temperatures, which `ardana show` prints) and `finetune.json`
   (`{base, checkpoint, format, quant, device, dtype, qlora, epochs, rows, license, report}`, the device, dtype and QLoRA
   it trained with, `report` the same numbers), and it is registered as `<name>`, which `ardana run` and a running
-  `ardana serve` answer. The model is built in `$ARDANA_HOME/finetune/work/<name>/`, removed whatever the end; SIGINT
-  (listened for, children killed) and a failing step leave no entry and no `models/<name>/`. The venv compiles its
-  bytecode at install and Python runs with `-B`, so later runs change none of the environment's files.
+  `ardana serve` answer. The model is built in `$ARDANA_HOME/finetune/work/<name>-<pid>/`, removed whatever the end;
+  SIGINT (listened for, children killed) and a failing step leave no entry and no `models/<name>/`. The venv compiles
+  its bytecode at install and Python runs with `-B`, so later runs change none of the environment's files.
 - `ardana push <name> hf.co/<org>/<repo> [--public] [--dry-run]` uploads a model `ardana finetune` made (an entry
   whose weights are in `$ARDANA_HOME/models/<name>/` beside a `finetune.json`; any other entry is refused) to that
   repository through hf-hub 1.0.0 (`ardana_registry::hub::push`, async on a runtime of its own): every file of the

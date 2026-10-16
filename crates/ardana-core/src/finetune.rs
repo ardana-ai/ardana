@@ -552,38 +552,62 @@ fn splitmix64(state: &mut u64) -> u64 {
     z ^ (z >> 31)
 }
 
-/// An option the training split labels fewer than [`MIN_OPTION_EXAMPLES`] times.
+/// A question of the training split that has options fewer than [`MIN_OPTION_EXAMPLES`] of its lines label.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sparse {
+    /// The id the question is asked under.
     pub question: String,
-    /// The option's name as a label writes it.
-    pub option: String,
-    pub examples: usize,
+    /// The first training line labelling it.
+    pub line: usize,
+    /// The training lines labelling it; under [`MIN_OPTION_EXAMPLES`], every option is sparse.
+    pub lines: usize,
+    /// Each sparse option, its name as a label writes it, with its training examples, in option order.
+    pub options: Vec<(String, usize)>,
 }
 
-/// Every option of a labelled question (a noul's `true` and `false` sides included) that fewer than
-/// [`MIN_OPTION_EXAMPLES`] of `train` label, in the order the questions and their options come.
+/// Every labelled question of `train` with an option (a noul's `true` and `false` sides included) that fewer than
+/// [`MIN_OPTION_EXAMPLES`] of its lines label, in the order the questions come. A question is its id and its spec:
+/// lines asking questions of their own may give one id to different questions, which are counted apart.
 pub fn sparse_options(train: &[&Example]) -> Vec<Sparse> {
-    let mut counts: IndexMap<(String, String), usize> = IndexMap::new();
+    struct Counts {
+        line: usize,
+        lines: usize,
+        options: IndexMap<String, usize>,
+    }
+    let mut questions: IndexMap<(&str, String), Counts> = IndexMap::new();
     for example in train {
         for (id, label) in &example.labels {
-            if !counts.keys().any(|(question, _)| question == id)
-                && let Ok(rq) = render_question(&example.request.questions[id])
-            {
-                for option in option_names(&rq) {
-                    counts.insert((id.clone(), option), 0);
-                }
-            }
-            *counts.entry((id.clone(), label.name())).or_default() += 1;
+            let spec = &example.request.questions[id];
+            let counts = questions
+                .entry((id.as_str(), spec.to_string()))
+                .or_insert_with(|| Counts {
+                    line: example.line,
+                    lines: 0,
+                    options: render_question(spec)
+                        .map(|rq| option_names(&rq))
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|option| (option, 0))
+                        .collect(),
+                });
+            counts.lines += 1;
+            *counts.options.entry(label.name()).or_default() += 1;
         }
     }
-    counts
+    questions
         .into_iter()
-        .filter(|(_, n)| *n < MIN_OPTION_EXAMPLES)
-        .map(|((question, option), examples)| Sparse {
-            question,
-            option,
-            examples,
+        .filter_map(|((id, _), counts)| {
+            let options: Vec<(String, usize)> = counts
+                .options
+                .into_iter()
+                .filter(|(_, n)| *n < MIN_OPTION_EXAMPLES)
+                .collect();
+            (!options.is_empty()).then(|| Sparse {
+                question: id.to_string(),
+                line: counts.line,
+                lines: counts.lines,
+                options,
+            })
         })
         .collect()
 }
@@ -848,16 +872,14 @@ mod tests {
         })))
         .unwrap();
         let train: Vec<&Example> = data.examples.iter().collect();
-        let sparse: Vec<(String, String, usize)> = sparse_options(&train)
-            .into_iter()
-            .map(|s| (s.question, s.option, s.examples))
-            .collect();
         assert_eq!(
-            sparse,
-            [
-                ("team".to_string(), "sales".to_string(), 15),
-                ("team".to_string(), "tech".to_string(), 0),
-            ]
+            sparse_options(&train),
+            [Sparse {
+                question: "team".into(),
+                line: 1,
+                lines: 150,
+                options: vec![("sales".into(), 15), ("tech".into(), 0)],
+            }]
         );
 
         // A questions file is a map, or a body whose questions it gives.
@@ -1083,5 +1105,63 @@ mod tests {
             (odd.train.len(), odd.calibration.len(), odd.test.len()),
             (85, 10, 10)
         );
+    }
+
+    /// Q26 on lines asking questions of their own: an id each line gives to another question counts every question
+    /// apart, by its spec, so no option of one is another's, and a question whose spec repeats is one question.
+    #[test]
+    fn sparse_options_count_each_question_apart() {
+        let own = |line: usize, spec: Value, label: Label| Example {
+            line,
+            request: SystemOneRequest {
+                model: None,
+                state: json!(format!("ticket {line}")),
+                questions: [("q1".to_string(), spec)].into_iter().collect(),
+            },
+            labels: [("q1".to_string(), label)].into_iter().collect(),
+        };
+        let refund = json!({"type": "noul", "instructions": "Does the customer ask for a refund?"});
+        let team = json!({"type": "choice", "instructions": "Which team?", "criteria": ["billing", "tech"]});
+        let mut examples = Vec::new();
+        // q1 the refund on 60 lines, all labelled true; the team on 30; a question of the line's own on 100.
+        for line in 1..=60 {
+            examples.push(own(line, refund.clone(), Label::Noul(true)));
+        }
+        for line in 61..=90 {
+            examples.push(own(line, team.clone(), Label::Choice("tech".into())));
+        }
+        for line in 91..=190 {
+            let spec =
+                json!({"type": "noul", "instructions": format!("Is ticket {line} a duplicate?")});
+            examples.push(own(line, spec, Label::Noul(line % 2 == 0)));
+        }
+        let train: Vec<&Example> = examples.iter().collect();
+        let sparse = sparse_options(&train);
+        assert_eq!(sparse.len(), 102);
+        assert_eq!(
+            sparse[..2],
+            [
+                Sparse {
+                    question: "q1".into(),
+                    line: 1,
+                    lines: 60,
+                    options: vec![("false".into(), 0)],
+                },
+                Sparse {
+                    question: "q1".into(),
+                    line: 61,
+                    lines: 30,
+                    options: vec![("billing".into(), 0), ("tech".into(), 30)],
+                },
+            ]
+        );
+        for (sparse, line) in sparse[2..].iter().zip(91..) {
+            let yes = usize::from(line % 2 == 0);
+            let options = vec![("false".to_string(), 1 - yes), ("true".to_string(), yes)];
+            assert_eq!(
+                (sparse.line, sparse.lines, &sparse.options),
+                (line, 1, &options)
+            );
+        }
     }
 }

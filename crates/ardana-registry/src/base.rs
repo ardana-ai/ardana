@@ -6,14 +6,14 @@
 //! names it for any base, and without it an `ollama:` reference, a local GGUF file and a library size without a pin
 //! (decider:4b) are refused, naming the flag. [`base`] reads what the fine-tune needs before any weight: the
 //! checkpoint's listing and `config.json`, the tokenizer and profile `ardana pull` derives for the base; it refuses a
-//! decision model (THX-01, Q17) and, without `--trust-remote-code`, a checkpoint whose `config.json` has `auto_map`
-//! (Q14). [`Base::download`] then fetches the checkpoint into the hub cache.
+//! decision model (THX-01, Q17) and, without `--trust-remote-code`, a checkpoint whose `config.json` or
+//! `tokenizer_config.json` has `auto_map` (Q14). [`Base::download`] then fetches the checkpoint into the hub cache.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
 
 use ardana_core::snapshot::CONFIG;
-use ardana_core::{Layout, LayoutKind, ModelProfile, RepoPin, thx01};
+use ardana_core::{Layout, LayoutKind, ModelProfile, RepoPin, chat, thx01};
 use serde::Serialize;
 
 use crate::hub::{Hub, Snapshot};
@@ -34,7 +34,8 @@ pub struct BaseOptions<'a> {
     /// `--checkpoint`: `hf.co/<org>/<repo>` (read at `main`) or a directory, the checkpoint to train from whatever the
     /// base names.
     pub checkpoint: Option<&'a str>,
-    /// `--trust-remote-code`: a checkpoint whose `config.json` has `auto_map` may run the code it ships.
+    /// `--trust-remote-code`: a checkpoint whose `config.json` or `tokenizer_config.json` has `auto_map` may run the
+    /// code it ships.
     pub trust_remote_code: bool,
     /// Print each download's progress to stderr.
     pub progress: bool,
@@ -436,14 +437,14 @@ async fn named_checkpoint(hub: &Hub, checkpoint: &str) -> Result<Files, Registry
 }
 
 /// `files` as a checkpoint to train from, with its `config.json`: no decision model (Q17), a `config.json` (fetched,
-/// no weight) and its weights, and, unless `trust_remote_code`, no `auto_map` in its `config.json`, which would run the
-/// code it ships (Q14).
+/// no weight) and its weights, and, unless `trust_remote_code`, no `auto_map` in its `config.json` or its
+/// `tokenizer_config.json` (fetched too), which would run the code it ships (Q14, [`remote_code`]).
 async fn open(
     hub: &Hub,
     files: &Files,
     trust_remote_code: bool,
 ) -> Result<(Checkpoint, serde_json::Value), RegistryError> {
-    let (checkpoint, config, code) = match files {
+    let (checkpoint, config, tokenizer_config, code) = match files {
         Files::Hub(snapshot) => {
             let id = snapshot.id();
             undecided(&id, snapshot.has(thx01::DECISION_CONFIG))?;
@@ -454,6 +455,11 @@ async fn open(
                 ));
             }
             let config = hub.file(snapshot, CONFIG).await?;
+            let tokenizer_config = if snapshot.has(chat::CONFIG_FILE) {
+                Some(hub.file(snapshot, chat::CONFIG_FILE).await?)
+            } else {
+                None
+            };
             let code: Vec<String> = snapshot
                 .files
                 .iter()
@@ -464,7 +470,7 @@ async fn open(
                 repo: id,
                 commit: snapshot.commit().to_string(),
             };
-            (Checkpoint::Hub(pin), config, code)
+            (Checkpoint::Hub(pin), config, tokenizer_config, code)
         }
         Files::Dir(dir) => {
             let what = dir.display().to_string();
@@ -496,25 +502,53 @@ async fn open(
                 }
             }
             code.sort();
-            (Checkpoint::Dir { path: dir.clone() }, config, code)
+            let tokenizer_config = Some(dir.join(chat::CONFIG_FILE)).filter(|path| path.is_file());
+            (
+                Checkpoint::Dir { path: dir.clone() },
+                config,
+                tokenizer_config,
+                code,
+            )
         }
     };
     let config = read_json(&config)?;
-    if config.get("auto_map").is_some() && !trust_remote_code {
-        let shipped = if code.is_empty() {
-            "code from other repositories".to_string()
-        } else {
-            code.join(", ")
-        };
+    let tokenizer_config = tokenizer_config.map(|path| read_json(&path)).transpose()?;
+    if let Some(msg) = remote_code(&config, tokenizer_config.as_ref(), &code)
+        && !trust_remote_code
+    {
         return Err(RegistryError::Invalid {
             what: checkpoint.to_string(),
-            msg: format!(
-                "its {CONFIG} has auto_map, so transformers loads it by running the Python code it names \
-                 ({shipped}); pass --trust-remote-code to run that code"
-            ),
+            msg,
         });
     }
     Ok((checkpoint, config))
+}
+
+/// Why a checkpoint runs Python code it ships, `code` its root `*.py` files, when it does: its `config.json` has
+/// `auto_map`, so transformers loads the model by running that code, or its `tokenizer_config.json` has, so
+/// transformers loads the tokenizer by it, and llama.cpp's converter loads every such tokenizer with
+/// `trust_remote_code=True` (Q14). The reason ends naming `--trust-remote-code`.
+fn remote_code(
+    config: &serde_json::Value,
+    tokenizer_config: Option<&serde_json::Value>,
+    code: &[String],
+) -> Option<String> {
+    let shipped = if code.is_empty() {
+        "code from other repositories".to_string()
+    } else {
+        code.join(", ")
+    };
+    let (file, what) = if config.get("auto_map").is_some() {
+        (CONFIG, "it")
+    } else if tokenizer_config.is_some_and(|config| config.get("auto_map").is_some()) {
+        (chat::CONFIG_FILE, "its tokenizer")
+    } else {
+        return None;
+    };
+    Some(format!(
+        "its {file} has auto_map, so transformers loads {what} by running the Python code it names ({shipped}); \
+         pass --trust-remote-code to run that code"
+    ))
 }
 
 /// The checkpoint the card of `snapshot` names: its one `base_model`, listed at `main`.
@@ -582,17 +616,17 @@ async fn card(hub: &Hub, snapshot: &Snapshot) -> Result<Card, RegistryError> {
 
 /// What the front matter of a model card says that a fine-tune reads.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct Card {
+pub struct Card {
     /// The repositories `base_model` names, `<org>/<repo>` each.
-    base_models: Vec<String>,
-    license: Option<String>,
+    pub base_models: Vec<String>,
+    pub license: Option<String>,
 }
 
 impl Card {
     /// The card `text`: of the YAML between its first line, `---`, and the next `---` line, the top-level keys
     /// `base_model` and `license`, each a plain or quoted scalar, a flow list (`[a, b]`) or a block list (`- a` lines
     /// under the key).
-    fn parse(text: &str) -> Card {
+    pub fn parse(text: &str) -> Card {
         let mut lines = text.lines();
         if lines.next().map(str::trim_end) != Some("---") {
             return Card::default();
@@ -783,6 +817,33 @@ mod tests {
         assert_eq!(
             Card::parse("# A card\nbase_model: a/one\n"),
             Card::default()
+        );
+    }
+
+    /// Q14: an `auto_map` in `config.json` or in `tokenizer_config.json` runs the checkpoint's own code (the second
+    /// through llama.cpp's converter, which loads the tokenizer with `trust_remote_code=True`), so either is refused
+    /// without `--trust-remote-code`, naming the file and the code; neither, or no `tokenizer_config.json`, is not.
+    #[test]
+    fn auto_map_in_either_config_runs_remote_code() {
+        let auto_map =
+            serde_json::json!({"auto_map": {"AutoTokenizer": ["tokenization_x.XTokenizer", null]}});
+        let plain = serde_json::json!({"architectures": ["Qwen3ForCausalLM"]});
+        let code = ["tokenization_x.py".to_string()];
+        assert_eq!(remote_code(&plain, None, &code), None);
+        assert_eq!(remote_code(&plain, Some(&plain), &code), None);
+        assert_eq!(
+            remote_code(&auto_map, None, &code).as_deref(),
+            Some(
+                "its config.json has auto_map, so transformers loads it by running the Python code it names \
+                 (tokenization_x.py); pass --trust-remote-code to run that code"
+            )
+        );
+        assert_eq!(
+            remote_code(&plain, Some(&auto_map), &[]).as_deref(),
+            Some(
+                "its tokenizer_config.json has auto_map, so transformers loads its tokenizer by running the Python \
+                 code it names (code from other repositories); pass --trust-remote-code to run that code"
+            )
         );
     }
 }

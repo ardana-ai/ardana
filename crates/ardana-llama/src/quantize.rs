@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use llama_cpp_sys_2 as sys;
 
 /// The llama.cpp file types [`quantize`] writes, lowercase as the library names its quants: every type
-/// `llama-quantize` lists that needs no importance matrix, its aliases left out.
+/// `llama-quantize` lists that needs no importance matrix, its aliases in [`ALIASES`].
 pub const QUANTS: &[(&str, sys::llama_ftype)] = &[
     ("q4_0", sys::LLAMA_FTYPE_MOSTLY_Q4_0),
     ("q4_1", sys::LLAMA_FTYPE_MOSTLY_Q4_1),
@@ -31,20 +31,29 @@ pub const QUANTS: &[(&str, sys::llama_ftype)] = &[
     ("f32", sys::LLAMA_FTYPE_ALL_F32),
 ];
 
-/// The file type `quant` names, ASCII case ignored; `None` for a name [`QUANTS`] lacks.
+/// The aliases `llama-quantize` takes for a [`QUANTS`] name, lowercase: the library names phi-4:14b's default quant
+/// `q4_k`, as its GGUF's file name does.
+pub const ALIASES: &[(&str, &str)] = &[("q3_k", "q3_k_m"), ("q4_k", "q4_k_m"), ("q5_k", "q5_k_m")];
+
+/// The file type `quant` names, or the quant it is an alias of, ASCII case ignored; `None` for a name [`QUANTS`] and
+/// [`ALIASES`] lack.
 fn file_type(quant: &str) -> Option<sys::llama_ftype> {
+    let quant = ALIASES
+        .iter()
+        .find(|(alias, _)| alias.eq_ignore_ascii_case(quant))
+        .map_or(quant, |&(_, name)| name);
     QUANTS
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case(quant))
         .map(|&(_, ftype)| ftype)
 }
 
-/// Whether [`quantize`] writes `quant`.
+/// Whether [`quantize`] writes `quant`, a [`QUANTS`] name or an alias of one.
 pub fn is_quant(quant: &str) -> bool {
     file_type(quant).is_some()
 }
 
-/// Writes the GGUF `input` quantized to `quant` (a [`QUANTS`] name) into `output`, with llama.cpp's
+/// Writes the GGUF `input` quantized to `quant` (a [`QUANTS`] name or an alias) into `output`, with llama.cpp's
 /// defaults for that type (its output and embedding tensors as the type's mix picks them).
 pub fn quantize(input: &Path, output: &Path, quant: &str) -> Result<()> {
     let Some(ftype) = file_type(quant) else {
@@ -82,15 +91,24 @@ pub fn quantize(input: &Path, output: &Path, quant: &str) -> Result<()> {
 mod tests {
     use super::*;
 
-    /// The names are the library's lowercase quants, each once, read whatever their case; one that needs an
-    /// importance matrix is refused, naming the others.
+    /// The names are the library's lowercase quants, each once, read whatever their case, and `llama-quantize`'s
+    /// aliases the type of the quant they stand for (`q4_k`, phi-4:14b's library quant, is `q4_k_m`); one that needs
+    /// an importance matrix is refused, naming the others.
     #[test]
     fn quants_are_named_like_the_library() {
         assert!(is_quant("q8_0") && is_quant("Q4_K_M") && is_quant("bf16"));
-        assert!(!is_quant("iq2_xxs") && !is_quant("q4_k"));
+        assert!(!is_quant("iq2_xxs") && !is_quant("q4_k_l"));
         for (i, (name, _)) in QUANTS.iter().enumerate() {
             assert_eq!(*name, name.to_ascii_lowercase());
             assert!(QUANTS[..i].iter().all(|(other, _)| other != name));
+        }
+        assert_eq!(file_type("q4_k"), Some(sys::LLAMA_FTYPE_MOSTLY_Q4_K_M));
+        assert_eq!(file_type("Q4_K"), Some(sys::LLAMA_FTYPE_MOSTLY_Q4_K_M));
+        assert_eq!(file_type("q3_k"), Some(sys::LLAMA_FTYPE_MOSTLY_Q3_K_M));
+        assert_eq!(file_type("q5_k"), Some(sys::LLAMA_FTYPE_MOSTLY_Q5_K_M));
+        for (alias, name) in ALIASES {
+            assert!(QUANTS.iter().all(|(quant, _)| quant != alias), "{alias}");
+            assert_eq!(file_type(alias), file_type(name), "{alias}");
         }
         let err = quantize(Path::new("in.gguf"), Path::new("out.gguf"), "iq2_xxs").unwrap_err();
         assert!(err.to_string().contains("q8_0"), "{err}");

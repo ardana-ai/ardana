@@ -27,6 +27,7 @@ use std::time::{Duration, Instant, SystemTime};
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
+use ardana_registry::base::Card;
 use ardana_registry::library::{Library, LibraryPick};
 use ardana_registry::refs::{HfFile, Ref, matches_quant};
 
@@ -858,14 +859,27 @@ impl Cli<'_> {
         Ok(self.entries()?.iter().any(|entry| entry == name))
     }
 
-    /// R1.7: no entry named `name`, no model directory and no working directory of a run that builds it.
+    /// R1.7: no entry named `name`, no model directory and no working directory of a run that builds it
+    /// (`finetune/work/<name>-<pid>`).
     fn left_nothing(&self, name: &str) -> Result<()> {
         ensure!(!self.listed(name)?, "the run left the entry {name}");
-        for dir in [
-            self.home.join("models").join(name),
-            self.home.join("finetune/work").join(name),
-        ] {
-            ensure!(!dir.exists(), "the run left {}", dir.display());
+        let models = self.home.join("models").join(name);
+        ensure!(!models.exists(), "the run left {}", models.display());
+        let work = self.home.join("finetune/work");
+        if work.is_dir() {
+            for entry in std::fs::read_dir(&work)? {
+                let dir = entry?.file_name();
+                let pid = dir
+                    .to_str()
+                    .and_then(|dir| dir.strip_prefix(name)?.strip_prefix('-'));
+                ensure!(
+                    !pid.is_some_and(
+                        |pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit())
+                    ),
+                    "the run left {}",
+                    work.join(&dir).display()
+                );
+            }
         }
         Ok(())
     }
@@ -1028,17 +1042,21 @@ impl Cli<'_> {
                 file: Some(file),
             } => {
                 let gguf = cached_gguf(&hub, &org, &repo, &file)?;
-                let card = gguf.with_file_name("README.md");
-                let base_models = card_values(&card, "base_model")?;
-                let [checkpoint] = &base_models[..] else {
-                    bail!("{} names the base models {base_models:?}", card.display());
+                let path = gguf.with_file_name("README.md");
+                let card = card(&path)?;
+                let [checkpoint] = &card.base_models[..] else {
+                    bail!(
+                        "{} names the base models {:?}",
+                        path.display(),
+                        card.base_models
+                    );
                 };
                 let quant = match (&quant, &file) {
                     (Some(quant), _) => quant.clone(),
                     (None, HfFile::Quant(named)) => named.to_ascii_lowercase(),
                     (None, HfFile::Name(name)) => of_file(name)?,
                 };
-                let license = card_values(&card, "license")?.into_iter().next();
+                let license = card.license.clone();
                 (
                     gguf.parent().context("the GGUF's directory")?.to_path_buf(),
                     cached_checkpoint(&hub, checkpoint)?,
@@ -1053,9 +1071,7 @@ impl Cli<'_> {
                 file: None,
             } => {
                 let (checkpoint, dir) = cached_checkpoint(&hub, &format!("{org}/{repo}"))?;
-                let license = card_values(&dir.join("README.md"), "license")?
-                    .into_iter()
-                    .next();
+                let license = card(&dir.join("README.md"))?.license;
                 // Q24: a base without a GGUF of its own is quantized to q4_k_m.
                 let quant = quant.unwrap_or_else(|| "q4_k_m".into());
                 (
@@ -1079,9 +1095,7 @@ impl Cli<'_> {
                     Some(quant) => quant,
                     None => of_file(&name)?,
                 };
-                let license = card_values(&dir.join("README.md"), "license")?
-                    .into_iter()
-                    .next();
+                let license = card(&dir.join("README.md"))?.license;
                 (
                     gguf.parent().context("the GGUF's directory")?.to_path_buf(),
                     (json!({"path": dir}), dir),
@@ -1731,34 +1745,11 @@ struct Expected {
     pick: Option<LibraryPick>,
 }
 
-/// The values the front matter of the card at `path` gives the top-level `key`: a scalar, or the `- ` items under it.
-fn card_values(path: &Path, key: &str) -> Result<Vec<String>> {
+/// The card at `path`, read as `ardana finetune` reads one.
+fn card(path: &Path) -> Result<Card> {
     let text =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let front: Vec<&str> = text
-        .lines()
-        .skip(1)
-        .take_while(|line| line.trim_end() != "---")
-        .collect();
-    let Some(at) = front
-        .iter()
-        .position(|line| line.starts_with(&format!("{key}:")))
-    else {
-        return Ok(Vec::new());
-    };
-    let inline = front[at][key.len() + 1..].trim();
-    let values: Vec<&str> = if inline.is_empty() {
-        front[at + 1..]
-            .iter()
-            .map_while(|line| line.trim_start().strip_prefix("- "))
-            .collect()
-    } else {
-        vec![inline]
-    };
-    Ok(values
-        .iter()
-        .map(|value| value.trim().trim_matches(['"', '\'']).to_string())
-        .collect())
+    Ok(Card::parse(&text))
 }
 
 /// The dtypes of the tensors of the safetensors file at `path`, from its header: a little-endian `u64` length, then that

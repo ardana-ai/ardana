@@ -19,7 +19,7 @@ use super::Interrupt;
 /// The uv release the environment is built with.
 pub const UV_VERSION: &str = "0.13.1";
 /// The sha256 of uv's release archive for each target it runs on, from the release's `.sha256` files.
-const UV_DIGESTS: [(&str, &str); 4] = [
+const UV_DIGESTS: [(&str, &str); 3] = [
     (
         "x86_64-unknown-linux-gnu",
         "eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220",
@@ -29,17 +29,15 @@ const UV_DIGESTS: [(&str, &str); 4] = [
         "9041c73c99fdc5892cf128140beb354eca9231d502068cc36e6cb53a8e59ad14",
     ),
     (
-        "x86_64-apple-darwin",
-        "bb7b805bdcf3d0bc8c74ceb94569e6b3e8aa35bd492acdbb9d46bf46d9d4ff6b",
-    ),
-    (
         "aarch64-apple-darwin",
         "cfe454573412ff7380d15fc7dae5997ab53ffce72fce0a78e91ddbc84001acd2",
     ),
 ];
 /// The interpreter of the venv.
 pub const PYTHON: &str = "3.12";
-/// The venv's packages (Q29), each pinned exactly, torch from the index its [`TorchBuild`] names.
+/// The torch release [`PACKAGES`] pins, which publishes no Intel macOS wheel.
+pub const TORCH: &str = "2.14.1";
+/// The venv's packages (Q29), each pinned exactly, torch ([`TORCH`]) from the index its [`TorchBuild`] names.
 pub const PACKAGES: [&str; 11] = [
     "torch==2.14.1",
     "transformers==5.18.0",
@@ -71,7 +69,8 @@ const CONVERTER_PARTS: [&str; 4] = [
 ];
 
 /// The torch build the venv carries (R5.1): CUDA's on Linux with an NVIDIA driver, PyPI's on macOS arm64 (which runs
-/// MPS), PyTorch's CPU wheels on the rest (PyPI's Linux wheel carries CUDA).
+/// MPS), PyTorch's CPU wheels on Linux without it (PyPI's Linux wheel carries CUDA). Intel macOS has no torch 2.14.1
+/// wheel and is refused before ([`super::runs_here`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TorchBuild {
     /// PyTorch's CUDA wheels from the newest of its CUDA indexes the driver runs (uv's `--torch-backend auto`, which
@@ -153,9 +152,12 @@ impl Env {
             .join(CONVERTER_PARTS[0])
     }
 
-    /// The working directory of a run that builds `name`.
+    /// The working directory of this process's run that builds `name`, `work/<name>-<pid>`: two runs building the same
+    /// name each have their own, and neither removes the other's.
     pub fn work(&self, name: &str) -> PathBuf {
-        self.root.join("work").join(name)
+        self.root
+            .join("work")
+            .join(format!("{name}-{}", std::process::id()))
     }
 }
 
@@ -275,12 +277,11 @@ pub async fn prepare(home: &Path, interrupt: &mut Interrupt) -> Result<Env> {
     Ok(env)
 }
 
-/// uv's target triple for this machine (Q21: Linux and macOS).
+/// uv's target triple for this machine (Q21: Linux, and macOS on Apple Silicon).
 fn uv_target() -> Result<&'static str> {
     Ok(match (std::env::consts::OS, std::env::consts::ARCH) {
         ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
         ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
-        ("macos", "x86_64") => "x86_64-apple-darwin",
         ("macos", "aarch64") => "aarch64-apple-darwin",
         (os, arch) => bail!("uv {UV_VERSION} is not built for {arch} {os}"),
     })
@@ -385,7 +386,8 @@ async fn download(url: &str, digest: &str, to: &Path, what: &str) -> Result<()> 
 }
 
 /// Unpacks into `into` every file and directory of the `.tar.gz` `archive` that `keep` gives a path (relative to
-/// `into`, made of plain components only) for.
+/// `into`, made of plain components only) for. A kept entry of another kind (a symbolic or hard link, a device) is
+/// refused: neither archive holds one, and a link could reach outside `into`.
 fn unpack(archive: &Path, into: &Path, keep: impl Fn(&Path) -> Option<PathBuf>) -> Result<()> {
     let file =
         std::fs::File::open(archive).with_context(|| format!("opening {}", archive.display()))?;
@@ -406,6 +408,13 @@ fn unpack(archive: &Path, into: &Path, keep: impl Fn(&Path) -> Option<PathBuf>) 
             archive.display(),
             path.display()
         );
+        let kind = entry.header().entry_type();
+        ensure!(
+            kind.is_file() || kind.is_dir(),
+            "{} holds {} as a {kind:?} entry; only files and directories are unpacked",
+            archive.display(),
+            path.display()
+        );
         let dest = into.join(&rel);
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent)?;
@@ -415,4 +424,60 @@ fn unpack(archive: &Path, into: &Path, keep: impl Fn(&Path) -> Option<PathBuf>) 
             .with_context(|| format!("unpacking {} into {}", path.display(), dest.display()))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `unpack` writes the files and directories it keeps and refuses a kept link, which it never creates: a symbolic
+    /// link to a path outside the directory, and a hard link.
+    #[test]
+    fn unpack_refuses_links() {
+        let dir = std::env::temp_dir().join(format!("ardana-unpack-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let archive = |name: &str, link: Option<tar::EntryType>| {
+            let path = dir.join(name);
+            let gz = flate2::write::GzEncoder::new(
+                std::fs::File::create(&path).unwrap(),
+                flate2::Compression::fast(),
+            );
+            let mut tar = tar::Builder::new(gz);
+            let mut header = tar::Header::new_gnu();
+            header.set_size(3);
+            header.set_mode(0o644);
+            tar.append_data(&mut header, "top/kept.txt", &b"yes"[..])
+                .unwrap();
+            if let Some(kind) = link {
+                let mut header = tar::Header::new_gnu();
+                header.set_entry_type(kind);
+                header.set_size(0);
+                header.set_mode(0o644);
+                tar.append_link(&mut header, "top/link", "/etc/passwd")
+                    .unwrap();
+            }
+            tar.into_inner().unwrap().finish().unwrap();
+            path
+        };
+        let keep = |path: &Path| path.strip_prefix("top").ok().map(Path::to_path_buf);
+
+        let into = dir.join("plain");
+        unpack(&archive("plain.tar.gz", None), &into, keep).unwrap();
+        assert_eq!(std::fs::read(into.join("kept.txt")).unwrap(), b"yes");
+        for kind in [tar::EntryType::Symlink, tar::EntryType::Link] {
+            let into = dir.join(format!("{kind:?}"));
+            let err = unpack(&archive("link.tar.gz", Some(kind)), &into, keep)
+                .expect_err("a link unpacked")
+                .to_string();
+            assert!(
+                err.ends_with(&format!(
+                    "holds top/link as a {kind:?} entry; only files and directories are unpacked"
+                )),
+                "{err}"
+            );
+            assert!(into.join("kept.txt").is_file());
+            assert!(std::fs::symlink_metadata(into.join("link")).is_err());
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

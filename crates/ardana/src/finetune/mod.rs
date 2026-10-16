@@ -34,7 +34,7 @@ use serde_json::{Value, json};
 use tokio::process::Command;
 
 pub use device::Device;
-pub use env::{LLAMA_CPP_COMMIT, PYTHON, UV_VERSION};
+pub use env::{LLAMA_CPP_COMMIT, PYTHON, TORCH, UV_VERSION};
 
 /// The Q23 settings: LoRA rank and alpha over every linear layer, the learning rate and the seed; the epochs are
 /// `--epochs`.
@@ -79,12 +79,12 @@ pub struct FinetuneArgs {
     /// The transformers checkpoint to train from, hf.co/<org>/<repo> or a directory; default the one the base names
     #[arg(long, value_name = "CHECKPOINT")]
     pub checkpoint: Option<String>,
-    /// Let a checkpoint whose config.json has auto_map run the Python code it ships, as transformers' option of the
-    /// same name does
+    /// Let a checkpoint whose config.json or tokenizer_config.json has auto_map run the Python code it ships, as
+    /// transformers' option of the same name does
     #[arg(long)]
     pub trust_remote_code: bool,
-    /// Where to train: auto takes cuda, then mps, then cpu, as torch finds them; bfloat16 on cuda and mps, float32 on
-    /// cpu
+    /// Where to train: auto takes cuda, then mps, then cpu, as torch finds them; bfloat16 on cuda and mps (macOS 14 or
+    /// later), float32 on cpu
     #[arg(long, value_enum, default_value_t = Device::Auto)]
     pub device: Device,
 }
@@ -108,19 +108,26 @@ impl Format {
     }
 }
 
-/// `ardana finetune`, on Linux and macOS (Q21).
+/// `ardana finetune`, on Linux and on macOS with Apple Silicon (Q21).
 pub fn finetune(args: &FinetuneArgs) -> Result<()> {
-    if !matches!(std::env::consts::OS, "linux" | "macos") {
-        bail!(
-            "fine-tuning runs on Linux and macOS; this is {}",
-            std::env::consts::OS
-        );
-    }
+    runs_here(std::env::consts::OS, std::env::consts::ARCH)?;
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("starting the async runtime")?;
     runtime.block_on(run(args))
+}
+
+/// Refuses a machine, its OS and architecture as `std::env::consts` names them, that fine-tuning does not run on
+/// (Q21): anything but Linux and macOS, and Intel macOS, which no [`TORCH`] wheel is built for.
+fn runs_here(os: &str, arch: &str) -> Result<()> {
+    match (os, arch) {
+        ("linux", _) | ("macos", "aarch64") => Ok(()),
+        ("macos", _) => bail!(
+            "fine-tuning on macOS needs Apple Silicon; PyTorch {TORCH} ships no Intel macOS wheels"
+        ),
+        (os, _) => bail!("fine-tuning runs on Linux and macOS; this is {os}"),
+    }
 }
 
 async fn run(args: &FinetuneArgs) -> Result<()> {
@@ -174,15 +181,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     )?;
     let data = read_data(args, &decider)?;
     let split = finetune::split(&data.examples);
-    for sparse in finetune::sparse_options(&split.train) {
-        eprintln!(
-            "warning: question {} has {} training examples of {}, fewer than {}",
-            sparse.question,
-            sparse.examples,
-            sparse.option,
-            finetune::MIN_OPTION_EXAMPLES
-        );
-    }
+    warn_sparse(&finetune::sparse_options(&split.train));
     let train = rows(&decider, &split.train)?;
     let calibration = rows(&decider, &split.calibration)?;
     let longest = train
@@ -331,7 +330,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     // The GGUF's file in the model's directory; a checkpoint is the directory itself.
     let file = match &quant {
         Some(quant) => {
-            copy_tokenizer_files(&trained, &merged)?;
+            copy_tokenizer_files(&trained, &merged, args.trust_remote_code)?;
             let converted = work.dir.join(format!("{name}-float32.gguf"));
             let mut convert = python(&env, &work);
             // Not isolated: the converter imports its `conversion/` package from beside itself.
@@ -600,6 +599,35 @@ fn read_data(args: &FinetuneArgs, decider: &Decider) -> Result<finetune::Data> {
     })
 }
 
+/// Warns about the options under 50 training examples (Q26): each one of a question labelled on at least 50 training
+/// lines, and in one line how many questions are labelled on fewer, every option of which is under 50 (as is every
+/// question a line asks of its own).
+fn warn_sparse(sparse: &[finetune::Sparse]) {
+    let min = finetune::MIN_OPTION_EXAMPLES;
+    let (common, rare): (Vec<_>, Vec<_>) =
+        sparse.iter().partition(|question| question.lines >= min);
+    for question in common {
+        for (option, examples) in &question.options {
+            eprintln!(
+                "warning: question {} (first labelled on line {}) has {examples} training examples of {option}, \
+                 fewer than {min}",
+                question.question, question.line
+            );
+        }
+    }
+    match rare.len() {
+        0 => {}
+        1 => eprintln!(
+            "warning: 1 question is labelled on fewer than {min} training lines, so each of its options has fewer \
+             than {min} examples"
+        ),
+        n => eprintln!(
+            "warning: {n} questions are labelled on fewer than {min} training lines, so each of their options has \
+             fewer than {min} examples"
+        ),
+    }
+}
+
 /// The training rows of `examples`, in line order.
 fn rows(decider: &Decider, examples: &[&Example]) -> Result<Vec<TrainingRow>> {
     let mut rows = Vec::new();
@@ -643,8 +671,9 @@ fn python(env: &env::Env, work: &Work) -> Command {
 }
 
 /// Copies the checkpoint's files that `save_pretrained` does not write (the tokenizer's) into the merged model, which
-/// the converter reads them from.
-fn copy_tokenizer_files(checkpoint: &Path, merged: &Path) -> Result<()> {
+/// the converter reads them from. Its Python files only under `--trust-remote-code`: the converter loads tokenizers
+/// with `trust_remote_code=True`, so a `*.py` beside them would run (Q14).
+fn copy_tokenizer_files(checkpoint: &Path, merged: &Path, trust_remote_code: bool) -> Result<()> {
     for entry in std::fs::read_dir(checkpoint)? {
         let path = entry?.path();
         let Some(file) = path.file_name().and_then(|f| f.to_str()) else {
@@ -655,6 +684,7 @@ fn copy_tokenizer_files(checkpoint: &Path, merged: &Path) -> Result<()> {
             && !written.exists()
             && !file.ends_with(".safetensors")
             && !file.ends_with(".index.json")
+            && (trust_remote_code || !file.ends_with(".py"))
         {
             std::fs::copy(&path, &written)
                 .with_context(|| format!("copying {}", path.display()))?;
@@ -958,19 +988,36 @@ mod tests {
     use super::*;
 
     /// R5.1: CUDA's wheels, by uv's driver-aware `--torch-backend auto`, on Linux where `nvidia-smi` answers, and only
-    /// there bitsandbytes; PyPI's wheels (no `--torch-backend`) on macOS arm64; PyTorch's CPU wheels on the rest.
+    /// there bitsandbytes; PyPI's wheels (no `--torch-backend`) on macOS arm64; PyTorch's CPU wheels on Linux without
+    /// the driver. Intel macOS, which no torch 2.14.1 wheel is built for, and Windows are refused first (Q21).
     #[test]
     fn torch_build_follows_the_machine() {
         use env::{BITSANDBYTES, PACKAGES, TorchBuild};
+        assert_eq!(PACKAGES[0], format!("torch=={TORCH}"));
+        for (os, arch, refused) in [
+            (
+                "macos",
+                "x86_64",
+                "fine-tuning on macOS needs Apple Silicon",
+            ),
+            (
+                "windows",
+                "x86_64",
+                "fine-tuning runs on Linux and macOS; this is windows",
+            ),
+        ] {
+            let err = runs_here(os, arch).expect_err("refused").to_string();
+            assert!(err.starts_with(refused), "{arch} {os}: {err}");
+        }
         for (os, arch, nvidia, build, backend) in [
             ("linux", "x86_64", true, TorchBuild::Cuda, Some("auto")),
             ("linux", "aarch64", true, TorchBuild::Cuda, Some("auto")),
             ("linux", "x86_64", false, TorchBuild::Cpu, Some("cpu")),
             ("linux", "aarch64", false, TorchBuild::Cpu, Some("cpu")),
             ("macos", "aarch64", false, TorchBuild::Pypi, None),
-            ("macos", "x86_64", false, TorchBuild::Cpu, Some("cpu")),
         ] {
             let machine = format!("{arch} {os}, nvidia-smi answering: {nvidia}");
+            runs_here(os, arch).unwrap_or_else(|err| panic!("{machine}: {err}"));
             let picked = TorchBuild::of(os, arch, nvidia);
             assert_eq!(picked, build, "{machine}");
             assert_eq!(picked.backend(), backend, "{machine}");
@@ -982,6 +1029,63 @@ mod tests {
             } else {
                 assert!(extra.is_empty(), "{machine}: {extra:?}");
             }
+        }
+    }
+
+    /// Q14: the merged model gets the checkpoint's tokenizer files and no weights, and its Python files only under
+    /// `--trust-remote-code`, since the converter loads a tokenizer with `trust_remote_code=True`.
+    #[test]
+    fn merged_model_gets_python_only_when_trusted() {
+        let dir = std::env::temp_dir().join(format!("ardana-copy-{}", std::process::id()));
+        let checkpoint = dir.join("checkpoint");
+        std::fs::create_dir_all(&checkpoint).unwrap();
+        for file in [
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "tokenization_x.py",
+            "model.safetensors",
+            "model.safetensors.index.json",
+        ] {
+            std::fs::write(checkpoint.join(file), file).unwrap();
+        }
+        for (trusted, wanted) in [
+            (false, &["tokenizer.json", "tokenizer_config.json"][..]),
+            (
+                true,
+                &[
+                    "tokenization_x.py",
+                    "tokenizer.json",
+                    "tokenizer_config.json",
+                ][..],
+            ),
+        ] {
+            let merged = dir.join(format!("merged-{trusted}"));
+            std::fs::create_dir_all(&merged).unwrap();
+            copy_tokenizer_files(&checkpoint, &merged, trusted).unwrap();
+            let mut copied: Vec<String> = std::fs::read_dir(&merged)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+                .collect();
+            copied.sort();
+            assert_eq!(copied, wanted, "--trust-remote-code: {trusted}");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Q24: every library size's default quant is one the linked llama.cpp writes, `llama-quantize`'s aliases among
+    /// them (phi-4:14b's `q4_k`, Q4_K_M), so no run without `--quant` is refused on its base's own quant.
+    #[test]
+    fn library_quants_are_written() {
+        let snapshot =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../ardana-registry/tests/data/models.json");
+        let sizes = Library::from_file(&snapshot).unwrap().sizes();
+        assert!(
+            sizes
+                .iter()
+                .any(|pick| pick.name() == "phi-4:14b" && pick.quant.quant == "q4_k")
+        );
+        for pick in sizes {
+            quant_is_written(&pick.quant.quant, &pick.name()).unwrap_or_else(|err| panic!("{err}"));
         }
     }
 
