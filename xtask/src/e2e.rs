@@ -227,6 +227,8 @@ pub struct FinetuneFixture {
     /// names relative to it, `--name` and any other flag.
     pub args: &'static [&'static str],
     pub expect: Expect,
+    /// What the model's test accuracy must be against the base's.
+    pub gain: Gain,
 }
 
 /// What a fine-tune row expects of `ardana finetune`.
@@ -236,6 +238,17 @@ pub enum Expect {
     Answers,
     /// It exits 1 before downloading any weight, its message holding this text.
     Refused(&'static str),
+}
+
+/// The overall test accuracy a fine-tune row expects of its model against the base's.
+#[derive(Debug, Clone, Copy)]
+pub enum Gain {
+    /// Above the base's.
+    Above,
+    /// At least the base's minus this.
+    Within(f64),
+    /// Not compared: the row makes no model.
+    Unchecked,
 }
 
 /// The fine-tunes `cargo xtask e2e finetune` runs, in run order, on one suite home.
@@ -251,6 +264,7 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
             "cmd-risk",
         ],
         expect: Expect::Answers,
+        gain: Gain::Above,
     },
     FinetuneFixture {
         name: "thx-01",
@@ -263,6 +277,35 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
             "thx-risk",
         ],
         expect: Expect::Refused("is a decision model"),
+        gain: Gain::Unchecked,
+    },
+    // decider's plain layout with isolated score levels, on questions of its own training mixture: no loss.
+    FinetuneFixture {
+        name: "decider:0.8b",
+        base: "decider:0.8b",
+        args: &[
+            finetune::CUSTOM,
+            "--name",
+            "custom-decider",
+            "--epochs",
+            "1",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Within(0.05),
+    },
+    // A multimodal checkpoint (`Qwen3_5ForConditionalGeneration`) in the chat layout.
+    FinetuneFixture {
+        name: "qwen3.5:0.8b",
+        base: "qwen3.5:0.8b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-qwen3.5",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Above,
     },
 ];
 

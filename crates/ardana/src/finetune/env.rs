@@ -141,9 +141,11 @@ pub async fn prepare(home: &Path, interrupt: &mut Interrupt) -> Result<Env> {
             .arg(&venv);
         run(&mut create, interrupt, "uv venv").await?;
     }
+    // Compiled at install, so a run reads every module's bytecode and writes none: a venv that holds the pins is
+    // left as it is, which uv only checks.
     let mut install = uv_command(root, &uv);
     install
-        .args(["pip", "install", "--python"])
+        .args(["pip", "install", "--compile-bytecode", "--python"])
         .arg(env.python())
         .args(["--torch-backend", "cpu"])
         .args(PACKAGES);

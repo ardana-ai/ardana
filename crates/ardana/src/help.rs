@@ -104,6 +104,7 @@ pub fn finetune() -> String {
         DEFAULT_EPOCHS, LEARNING_RATE, LLAMA_CPP_COMMIT, LORA_ALPHA, LORA_RANK, PYTHON, SEED,
         UV_VERSION,
     };
+    use ardana_core::calibrate::{ECE_BINS, MIN_ANSWERS};
     use ardana_core::finetune::{MIN_LINES, MIN_OPTION_EXAMPLES};
     let llama_cpp = &LLAMA_CPP_COMMIT[..7];
     format!(
@@ -125,11 +126,16 @@ ardana reads at run time, the loss on the answer token alone: learning rate {LEA
 (--epochs), seed {SEED}, the epoch with the lowest calibration loss kept, float32 on the CPU. The merged model is
 converted to GGUF and quantized to --quant, by default the quant of the base's own GGUF.
 
+Calibration and report: the GGUF's temperatures are fitted on the calibration lines (one over every answer, and one
+per answer type with at least {MIN_ANSWERS} answers), and `ardana show <name>` prints them. Then the base, pulled as
+`ardana run <base>` pulls it, and the model answer the test lines; stdout prints the accuracy, NLL, Brier score and
+{ECE_BINS}-bin ECE of both per answer type and overall, which finetune.json's report holds too.
+
 Files: the first run downloads uv {UV_VERSION}, CPython {PYTHON}, PyTorch, Transformers, PEFT and TRL, and llama.cpp's
 converter ({llama_cpp}) into $ARDANA_HOME/finetune/, which later runs reuse; the base's checkpoint goes to the
 Hugging Face cache. The model is written to $ARDANA_HOME/models/<name>/ (the GGUF, the tokenizer and chat template,
-decider_config.json and finetune.json) and registered as <name>; `ardana rm <name>` removes both, and a run that
-stops leaves neither. Fine-tuning runs on Linux and macOS."
+decider_config.json with the fitted temperatures, and finetune.json) and registered as <name>; `ardana rm <name>`
+removes both, and a run that stops leaves neither. Fine-tuning runs on Linux and macOS."
     )
 }
 

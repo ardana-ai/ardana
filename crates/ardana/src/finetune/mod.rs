@@ -3,24 +3,29 @@
 //! becoming the rows `Decider::plan` builds ([`ardana_core::finetune`]); then the environment in
 //! `$ARDANA_HOME/finetune/` is built or reused ([`env`]), the base's checkpoint downloads to the Hugging Face cache,
 //! TRL's `sft` script trains the adapter on those rows, `merge.py` merges it, llama.cpp's converter writes the GGUF and
-//! the linked llama.cpp quantizes it. The model is built in the run's working directory and only moved to
-//! `$ARDANA_HOME/models/<name>/` and registered once whole, so a run that stops (SIGINT, a failing trainer) leaves
-//! neither.
+//! the linked llama.cpp quantizes it. Its temperatures are then fitted on the calibration split through that GGUF,
+//! and the base and the model answer the test split for the report ([`evaluate`]). The model is built in the run's
+//! working directory and only moved to `$ARDANA_HOME/models/<name>/` and registered once whole, so a run that stops
+//! (SIGINT, a failing trainer) leaves neither.
 
 mod env;
+mod evaluate;
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail, ensure};
+use ardana_core::calibrate::Fitted;
 use ardana_core::finetune::{self, Example, TrainingRow};
 use ardana_core::{Decider, Layout};
 use ardana_registry::base::Base;
 use ardana_registry::library::{LibraryClient, library_name};
-use ardana_registry::{LayoutKind, PullOptions, Registry, TOKENIZER_EXTRAS};
+use ardana_registry::{LayoutKind, Named, PullOptions, Registry, ResolvedModel, TOKENIZER_EXTRAS};
 use clap::Args;
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::process::Command;
 
 pub use env::{LLAMA_CPP_COMMIT, PYTHON, UV_VERSION};
@@ -82,7 +87,8 @@ pub fn finetune(args: &FinetuneArgs) -> Result<()> {
 async fn run(args: &FinetuneArgs) -> Result<()> {
     let started = Instant::now();
     let mut interrupt = Interrupt::listen()?;
-    let home = Registry::home()?;
+    // Absolute: the Python steps run in the run's working directory.
+    let home = std::path::absolute(Registry::home()?)?;
     let client = LibraryClient::from_env()?;
     let name = args.name.as_str();
     let models = home.join(MODELS_DIR).join(name);
@@ -136,8 +142,14 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     let checkpoint = interrupt
         .or(async { Ok(base.download(true).await?) })
         .await?;
+    // The base the report reads, as `ardana run <base>` reads it: its default quant and profile, pulled when missing.
+    let pulled = match Registry::open(&home)?.named(&base.name, &library)? {
+        Named::Pulled(model) => model.clone(),
+        Named::Library(pick) => interrupt.or(crate::pull_first(&pick)).await?,
+    };
 
     let work = Work::create(env.work(name))?;
+    let trained = text_tower(&checkpoint, &work.dir)?;
     let out = work.dir.join("out");
     std::fs::create_dir_all(&out)?;
     write_rows(&work.dir.join("data/train.jsonl"), &train)?;
@@ -160,7 +172,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     let mut trainer = python(&env, &work);
     trainer
         .args(["-I", "-m", "trl.scripts.sft", "--model_name_or_path"])
-        .arg(&checkpoint)
+        .arg(&trained)
         .arg("--dataset_name")
         .arg(work.dir.join("data"))
         .args(["--dataset_train_split", "train"])
@@ -198,12 +210,12 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     merge
         .arg("-I")
         .arg(&script)
-        .arg(&checkpoint)
+        .arg(&trained)
         .arg(&adapter)
         .arg(&merged)
         .arg(DTYPE);
     env::run(&mut merge, &mut interrupt, "merging the adapter (merge.py)").await?;
-    copy_tokenizer_files(&checkpoint, &merged)?;
+    copy_tokenizer_files(&trained, &merged)?;
 
     let converted = work.dir.join(format!("{name}-{DTYPE}.gguf"));
     let mut convert = python(&env, &work);
@@ -223,21 +235,51 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     let file = format!("{name}-{}.gguf", quant.to_ascii_uppercase());
     let gguf = out.join(&file);
     eprintln!("quantizing {name} to {quant}");
-    let quantized = tokio::task::spawn_blocking({
-        let (converted, gguf, quant) = (converted.clone(), gguf.clone(), quant.clone());
-        move || ardana_llama::quantize(&converted, &gguf, &quant)
-    });
-    tokio::pin!(quantized);
-    tokio::select! {
-        done = &mut quantized => done.context("quantizing")??,
-        () = interrupt.recv() => {
-            // llama.cpp cannot be stopped mid-file: the run ends once it is done.
-            let _ = quantized.await;
-            bail!(INTERRUPTED);
-        }
-    }
+    // llama.cpp cannot be stopped mid-file: SIGINT ends the run once it is done.
+    interrupt
+        .blocking({
+            let (gguf, quant) = (gguf.clone(), quant.clone());
+            move |_| ardana_llama::quantize(&converted, &gguf, &quant)
+        })
+        .await
+        .context("quantizing")?;
 
+    // Q11, Q30: the temperatures are fitted through the GGUF itself, read as `ardana run` reads the entry it becomes.
     write_model(&out, &base, &split, args.epochs, &quant, name)?;
+    let model = resolve(&gguf, name, base.layout).await?;
+    let calibration = owned(&split.calibration);
+    eprintln!("calibrating {name} on {} lines", split.calibration.len());
+    let fitted = interrupt
+        .blocking(move |stop| evaluate::calibrate(&model, &calibration, stop))
+        .await?;
+    eprintln!("{name} answers at {}", temperatures(&fitted));
+    set_temperatures(&out, &fitted)?;
+    let model = resolve(&gguf, name, base.layout).await?;
+
+    eprintln!(
+        "answering the {} test lines with {} and {name}",
+        split.test.len(),
+        pulled.name
+    );
+    let test = owned(&split.test);
+    let (base_graded, graded) = interrupt
+        .blocking(move |stop| {
+            Ok((
+                evaluate::answer(&pulled, &test, stop)?,
+                evaluate::answer(&model, &test, stop)?,
+            ))
+        })
+        .await?;
+    let report = evaluate::Report::new(
+        split.test.len(),
+        (&base.name, &base_graded),
+        (name, &graded),
+    );
+    let record = out.join(RECORD);
+    let mut written: Value = serde_json::from_str(&std::fs::read_to_string(&record)?)?;
+    written["report"] = report.to_json();
+    std::fs::write(&record, serde_json::to_string_pretty(&written)? + "\n")?;
+
     std::fs::create_dir_all(home.join(MODELS_DIR))?;
     std::fs::rename(&out, &models)
         .with_context(|| format!("moving the model to {}", models.display()))?;
@@ -249,6 +291,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         }
     };
     drop(work);
+    print!("{}", report.table());
     println!(
         "fine-tuned {name} from {} ({quant}, {}) in {} in {} min; try `ardana run {name}`",
         base.name,
@@ -257,6 +300,67 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         started.elapsed().as_secs() / 60
     );
     Ok(())
+}
+
+/// The examples of a split, owned, for a thread of their own.
+fn owned(examples: &[&Example]) -> Vec<Example> {
+    examples.iter().map(|&example| example.clone()).collect()
+}
+
+/// The checkpoint as the trainer and `merge.py` load it. A multimodal checkpoint (its `config.json` names a
+/// `*ForConditionalGeneration` and holds a `text_config`) trains its text tower alone, the model Ardana runs: `<work>/
+/// text/` holds the text tower's `config.json` (the `text_config`, its architecture the `*ForCausalLM` of the same
+/// name) and links to the checkpoint's files but its processor's, so transformers loads the text model from the
+/// checkpoint's `language_model` tensors and TRL reads the tokenizer, not a multimodal processor. Any other checkpoint
+/// is read as it is.
+fn text_tower(checkpoint: &Path, work: &Path) -> Result<PathBuf> {
+    const PROCESSOR_FILES: [&str; 3] = [
+        "processor_config.json",
+        "preprocessor_config.json",
+        "video_preprocessor_config.json",
+    ];
+    let path = checkpoint.join(ardana_core::snapshot::CONFIG);
+    let config: Value = serde_json::from_str(
+        &std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?,
+    )?;
+    let multimodal = config["architectures"][0]
+        .as_str()
+        .and_then(|arch| arch.strip_suffix("ForConditionalGeneration"));
+    let (Some(prefix), Value::Object(text)) = (multimodal, &config["text_config"]) else {
+        return Ok(checkpoint.to_path_buf());
+    };
+    let mut text = text.clone();
+    text.insert(
+        "architectures".into(),
+        json!([format!("{prefix}ForCausalLM")]),
+    );
+    let dir = work.join("text");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(
+        dir.join(ardana_core::snapshot::CONFIG),
+        serde_json::to_string_pretty(&text)?,
+    )?;
+    for entry in std::fs::read_dir(checkpoint)? {
+        let path = entry?.path();
+        let Some(file) = path.file_name().and_then(|f| f.to_str()) else {
+            continue;
+        };
+        if file != ardana_core::snapshot::CONFIG && !PROCESSOR_FILES.contains(&file) {
+            link(&std::fs::canonicalize(&path)?, &dir.join(file))?;
+        }
+    }
+    Ok(dir)
+}
+
+#[cfg(unix)]
+fn link(target: &Path, path: &Path) -> Result<()> {
+    std::os::unix::fs::symlink(target, path)
+        .with_context(|| format!("linking {} to {}", path.display(), target.display()))
+}
+
+#[cfg(not(unix))]
+fn link(_: &Path, _: &Path) -> Result<()> {
+    bail!("fine-tuning runs on Linux and macOS")
 }
 
 /// Refuses a name that is no single directory name, and one that is taken (Q27): an entry's, a library family's or
@@ -367,10 +471,11 @@ fn write_rows(path: &Path, rows: &[TrainingRow]) -> Result<()> {
 }
 
 /// The venv's interpreter, offline on the hub cache (Q29), with its Hugging Face home and temporary files in the
-/// run's working directory.
+/// run's working directory; it writes no bytecode (`-B`), so the environment's files stay as they were built.
 fn python(env: &env::Env, work: &Work) -> Command {
     let mut cmd = Command::new(env.python());
-    cmd.current_dir(&work.dir)
+    cmd.arg("-B")
+        .current_dir(&work.dir)
         .env("HF_HUB_OFFLINE", "1")
         .env("TRANSFORMERS_OFFLINE", "1")
         .env("HF_HOME", work.dir.join("hf"))
@@ -469,13 +574,9 @@ fn write_model(
     Ok(())
 }
 
-/// Records the GGUF in the registry as `ardana pull <gguf> --name <name> --layout <layout>` would: the tokenizer and
-/// `decider_config.json` beside it give the profile.
-async fn register(
-    gguf: &Path,
-    name: &str,
-    layout: LayoutKind,
-) -> Result<ardana_registry::ResolvedModel> {
+/// The entry `ardana pull <gguf> --name <name> --layout <layout>` would record for the GGUF, not recorded: the
+/// tokenizer and `decider_config.json` beside it give the profile.
+async fn resolve(gguf: &Path, name: &str, layout: LayoutKind) -> Result<ResolvedModel> {
     let reference = gguf
         .to_str()
         .with_context(|| format!("{} is no UTF-8 path", gguf.display()))?;
@@ -484,15 +585,49 @@ async fn register(
         layout: Some(layout),
         ..PullOptions::default()
     };
-    let model = ardana_registry::pull(
+    Ok(ardana_registry::pull(
         reference,
         &opts,
         &crate::runtimes(),
         &ardana_registry::library::Library::empty(),
     )
-    .await?;
-    let (model, _) = crate::record(model)?;
+    .await?)
+}
+
+/// Records the GGUF in the registry as [`resolve`] reads it.
+async fn register(gguf: &Path, name: &str, layout: LayoutKind) -> Result<ResolvedModel> {
+    let (model, _) = crate::record(resolve(gguf, name, layout).await?)?;
     Ok(model)
+}
+
+/// Writes the fitted temperatures into the model's `decider_config.json`: `temperature`, and `temperature_by_type`
+/// for the types that have their own (Q30).
+fn set_temperatures(out: &Path, fitted: &Fitted) -> Result<()> {
+    let path = out.join(ardana_registry::DECIDER_CONFIG);
+    let mut config: Value = serde_json::from_str(&std::fs::read_to_string(&path)?)?;
+    config["temperature"] = json!(fitted.temperature);
+    config["temperature_by_type"] = json!(fitted.temperature_by_type);
+    std::fs::write(&path, serde_json::to_string_pretty(&config)? + "\n")?;
+    Ok(())
+}
+
+/// The fitted temperatures as the run reports them: `temperature T over N answers`, then each type's own.
+fn temperatures(fitted: &Fitted) -> String {
+    let answers: usize = fitted.answers.values().sum();
+    let mut text = format!(
+        "temperature {} over {answers} calibration answers",
+        fitted.temperature
+    );
+    for (kind, n) in &fitted.answers {
+        match fitted.temperature_by_type.get(kind) {
+            Some(t) => text.push_str(&format!("; {kind} {t} over {n}")),
+            None => text.push_str(&format!(
+                "; {kind} takes it ({n}, fewer than {})",
+                ardana_core::calibrate::MIN_ANSWERS
+            )),
+        }
+    }
+    text
 }
 
 /// A run's working directory, removed with everything in it when the run ends, whatever its end.
@@ -547,6 +682,28 @@ impl Interrupt {
         tokio::select! {
             done = work => done,
             () = self.recv() => bail!(INTERRUPTED),
+        }
+    }
+
+    /// `work` on a blocking thread. SIGINT raises the flag it is given, which it may check to stop early; the run then
+    /// ends once `work` returns.
+    async fn blocking<T: Send + 'static>(
+        &mut self,
+        work: impl FnOnce(&AtomicBool) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let task = tokio::task::spawn_blocking({
+            let stop = stop.clone();
+            move || work(&stop)
+        });
+        tokio::pin!(task);
+        tokio::select! {
+            done = &mut task => done.context("a blocking step panicked")?,
+            () = self.recv() => {
+                stop.store(true, Ordering::Relaxed);
+                let _ = task.await;
+                bail!(INTERRUPTED);
+            }
         }
     }
 }

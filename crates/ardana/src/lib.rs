@@ -19,7 +19,7 @@ use ardana_core::{DecideError, Decider, Layout, Limits, LoadOptions, Loaded, Run
 use ardana_registry::library::{
     DEFAULT_MODEL, LibraryClient, LibraryPick, LibrarySource, MODELS_PAGE,
 };
-use ardana_registry::{LayoutKind, Named, PullOptions, Registry, RegistryError, ResolvedModel};
+use ardana_registry::{LayoutKind, Named, PullOptions, Registry, ResolvedModel};
 use clap::{ArgAction, ArgMatches, Args, Parser, Subcommand, ValueEnum};
 use serde_json::json;
 use tokenizers::Tokenizer;
@@ -709,23 +709,7 @@ fn run_named(name: &str, args: &RunArgs, request: &SystemOneRequest) -> Result<A
     let registry = Registry::open_default()?;
     let name = match named(&registry, name)? {
         Named::Pulled(model) => model.name.clone(),
-        Named::Library(pick) => {
-            eprintln!(
-                "pulling {} ({}, {})",
-                pick.name(),
-                pick.reference(),
-                human_size(pick.quant.bytes)
-            );
-            let opts = PullOptions {
-                progress: true,
-                ..PullOptions::default()
-            };
-            let pulled: Result<ResolvedModel, RegistryError> =
-                block_on(ardana_registry::pull_library(&pick, &opts, &runtimes()))?;
-            let (model, _) = record(pulled?)?;
-            eprintln!("pulled {}", model.name);
-            model.name
-        }
+        Named::Library(pick) => block_on(pull_first(&pick))??.name,
     };
     let model = Registry::open_default()?.resolve(&name)?;
     let tokenizer = ardana_registry::load_tokenizer(&model.tokenizer)?;
@@ -733,6 +717,25 @@ fn run_named(name: &str, args: &RunArgs, request: &SystemOneRequest) -> Result<A
     decide(tokenizer, model.profile.clone(), args, request, |opts| {
         Ok(model.load(&runtimes, opts)?)
     })
+}
+
+/// Pulls `pick`, a library model not pulled yet, as `ardana run` does before it answers with it: its progress on
+/// stderr, recorded under its canonical name.
+async fn pull_first(pick: &LibraryPick) -> Result<ResolvedModel> {
+    eprintln!(
+        "pulling {} ({}, {})",
+        pick.name(),
+        pick.reference(),
+        human_size(pick.quant.bytes)
+    );
+    let opts = PullOptions {
+        progress: true,
+        ..PullOptions::default()
+    };
+    let pulled = ardana_registry::pull_library(pick, &opts, &runtimes()).await?;
+    let (model, _) = record(pulled)?;
+    eprintln!("pulled {}", model.name);
+    Ok(model)
 }
 
 /// `ardana run --gguf`: the profile from `--config` and `--layout`, then the weights.

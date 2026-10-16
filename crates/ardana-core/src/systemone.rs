@@ -393,12 +393,16 @@ pub fn score_confidence(p: &[f64]) -> f64 {
     clip01(1.0 - spread / uniform)
 }
 
-/// `format_answer`: probabilities in option order -> the typed answer with decider's rounding, extras `x_`-prefixed.
-pub fn format_answer(rq: &RenderedQuestion, p: &[f64]) -> Answer {
-    let p = &p[..rq.options.len().min(p.len())];
+/// The probabilities [`format_answer`] reports: divided by their sum, a zero sum leaving them as they are.
+pub fn scaled(p: &[f64]) -> Vec<f64> {
     let s = py::sum(p.iter().copied());
     let s = if s == 0.0 { 1.0 } else { s };
-    let p: Vec<f64> = p.iter().map(|x| x / s).collect();
+    p.iter().map(|x| x / s).collect()
+}
+
+/// `format_answer`: probabilities in option order -> the typed answer with decider's rounding, extras `x_`-prefixed.
+pub fn format_answer(rq: &RenderedQuestion, p: &[f64]) -> Answer {
+    let p = scaled(&p[..rq.options.len().min(p.len())]);
     let j = argmax(&p);
     let r4 = |x: f64| py::round(x, 4);
     match &rq.names {
@@ -436,6 +440,13 @@ pub fn format_answer(rq: &RenderedQuestion, p: &[f64]) -> Answer {
     }
 }
 
+/// `combine_isolated`: each isolated level's P(yes) over their sum (the fit mass, 1e-9 when it is 0), and that sum.
+pub fn combine_isolated(fit: &[f64]) -> (Vec<f64>, f64) {
+    let tot = py::sum(fit.iter().copied());
+    let tot = if tot == 0.0 { 1e-9 } else { tot };
+    (fit.iter().map(|x| x / tot).collect(), tot)
+}
+
 /// `assemble`: one probability list per planned row -> the answers in request order. Isolated levels are combined
 /// into one distribution, with each level's own fit and the fit mass as extras.
 pub fn assemble(
@@ -450,9 +461,7 @@ pub fn assemble(
             RowKind::List => format_answer(rq, &probs[span.first]),
             RowKind::Iso => {
                 let fit: Vec<f64> = (0..span.count).map(|j| probs[span.first + j][1]).collect();
-                let tot = py::sum(fit.iter().copied());
-                let tot = if tot == 0.0 { 1e-9 } else { tot };
-                let p: Vec<f64> = fit.iter().map(|x| x / tot).collect();
+                let (p, tot) = combine_isolated(&fit);
                 let mut answer = format_answer(rq, &p);
                 if let Answer::Score(score) = &mut answer {
                     score.x_level_fit = Some(

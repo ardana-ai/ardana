@@ -1,36 +1,52 @@
 //! `cargo xtask e2e finetune`: each row of [`crate::e2e::FINETUNE_FIXTURES`] in turn, with the release `ardana`, online,
 //! on one suite home, `tmp/e2e/finetune/home`, over the sandbox's hub cache. The suite first writes the data the rows
 //! name into its directory: the first 1,000 lines of decider@23579f7's `teacher_data/commands.jsonl` (Q22) as lines of
-//! `ardana finetune`'s format, their two shared questions in a questions file. A row that answers fine-tunes its base
-//! three times: stopped by SIGINT mid-training, then with a trainer that exits non-zero (its script moved out of the
-//! venv and back), neither leaving an entry or a model directory, then to the end, and its model answers through
-//! `ardana run` before `ardana rm` removes it; a refused row's run exits 1 naming why, before any weight downloads.
-//! Whatever a row's checks found, its entries, model directories and the hub paths it added are removed when they
-//! end; the training environment in the home stays for the next row, and the suite removes the home when it ends,
-//! also when a row failed.
+//! `ardana finetune`'s format, their two shared questions in a questions file, and the first 200 lines of its
+//! `teacher_data/custom_questions.jsonl`, each with its own questions; then it starts one `ardana serve` on the home,
+//! which runs until the suite ends. A row that answers fine-tunes its base three times: stopped by SIGINT
+//! mid-training, then with a trainer that exits non-zero (its script moved out of the venv and back), neither leaving
+//! an entry or a model directory, then to the end; its report of base against tuned on the test split is checked, its
+//! model answers through `ardana run` and through the running server alike, and `ardana rm` removes it. The rows
+//! after the first that answers find the training environment as that row left it. A refused row's run exits 1
+//! naming why, before any weight downloads. Whatever a row's checks found, the entries, model directories and hub
+//! paths it added are removed when they end; the training environment in the home stays for the next row, and the
+//! suite removes the home when it ends, also when a row failed.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
-use crate::e2e::{Expect, FinetuneFixture, read_json};
+use crate::e2e::{Expect, FinetuneFixture, Gain, read_json};
 use crate::hub;
 use crate::sandbox::{Sandbox, run_stdout};
-use crate::serve::build_ardana;
+use crate::serve::{Server, build_ardana};
 
 /// The commands data, in the suite's directory: its lines, and their shared questions.
 pub const COMMANDS: &str = "commands.jsonl";
 pub const COMMANDS_QUESTIONS: &str = "commands.questions.json";
+/// The custom questions data, in the suite's directory: lines that carry their own questions.
+pub const CUSTOM: &str = "custom.jsonl";
 /// The teacher data of the decider clone `cargo xtask fetch` makes (decider@23579f7, Apache-2.0).
 const TEACHER_COMMANDS: &str = "src/decider/teacher_data/commands.jsonl";
+const TEACHER_CUSTOM: &str = "src/decider/teacher_data/custom_questions.jsonl";
 /// The lines of it the commands data takes, and the ids its two questions get (the risk choice, then the noul).
 const COMMANDS_LINES: usize = 1000;
 const QUESTION_IDS: [&str; 2] = ["risk", "outside"];
+/// The lines the custom questions data takes (Q22); a line's questions get the ids `q1`, `q2`, ... in its order.
+const CUSTOM_LINES: usize = 200;
+/// What a run prints when it downloads or builds a part of the training environment: `ardana`'s own lines and uv's.
+const ENVIRONMENT_BUILT: [&str; 5] = [
+    "downloading uv",
+    "downloading llama.cpp",
+    "creating the training environment",
+    "Downloading ",
+    "Installed ",
+];
 /// The Q29 pins the venv must hold, as `importlib.metadata` reports them (torch from PyTorch's CPU wheels), and the
 /// interpreter (Q3) and converter (Q25) the environment is built with.
 const PINS: [(&str, &str); 11] = [
@@ -52,13 +68,14 @@ const CONVERTER: &str = "llama.cpp-26394b4e6749a41c3633db040e0987500a5f7013";
 /// The trainer's script in the venv, which the failing run moves aside.
 const TRAINER: &str = "venv/lib/python3.12/site-packages/trl/scripts/sft.py";
 /// The GGUF `general.file_type` of each quant a row checks, as llama.cpp numbers them.
-const FILE_TYPES: [(&str, u64); 2] = [("q8_0", 7), ("q4_k_m", 15)];
+const FILE_TYPES: [(&str, u64); 3] = [("q4_0", 2), ("q8_0", 7), ("q4_k_m", 15)];
 /// How long the interrupted run may take to reach its first training step (the environment and the checkpoint
 /// download first), and to exit once interrupted.
 const FIRST_STEP: Duration = Duration::from_secs(3600);
 const STOPPING: Duration = Duration::from_secs(120);
 
-/// Runs every row, a failed one counted but not ending the suite, then removes the suite's directory.
+/// Runs every row, a failed one counted but not ending the suite, then stops the server and removes the suite's
+/// directory.
 pub fn finetune(sandbox: &Sandbox, fixtures: &[FinetuneFixture]) -> Result<()> {
     let ardana = build_ardana(sandbox)?;
     let dir = sandbox.tmp().join("e2e/finetune");
@@ -74,11 +91,16 @@ pub fn finetune(sandbox: &Sandbox, fixtures: &[FinetuneFixture]) -> Result<()> {
         home,
     };
     let mut failed = Vec::new();
-    match commands_data(sandbox, &dir) {
-        Ok(()) => {
+    let started = commands_data(sandbox, &dir)
+        .and_then(|()| custom_data(sandbox, &dir))
+        .and_then(|()| Server::start_on(sandbox, &ardana, &cli.home));
+    match started {
+        Ok(server) => {
+            // The training environment as the first row that answers left it.
+            let mut environment = None;
             for fixture in fixtures {
                 let started = Instant::now();
-                match row(&cli, fixture) {
+                match row(&cli, &server, fixture, &mut environment) {
                     Ok(()) => println!(
                         "e2e finetune {}: passed in {:.1} min",
                         fixture.name,
@@ -90,9 +112,13 @@ pub fn finetune(sandbox: &Sandbox, fixtures: &[FinetuneFixture]) -> Result<()> {
                     }
                 }
             }
+            if let Err(err) = server.stop() {
+                println!("e2e finetune: stopping the server: {err:#}");
+                failed.push("serve");
+            }
         }
         Err(err) => {
-            println!("e2e finetune: writing the data failed: {err:#}");
+            println!("e2e finetune: writing the data or starting the server failed: {err:#}");
             failed.push("data");
         }
     }
@@ -165,18 +191,79 @@ fn commands_data(sandbox: &Sandbox, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// One row: its checks, then, whatever they found, the entry and model directory of the name it fine-tunes and every
-/// path it added to the hub cache removed.
-fn row(cli: &Cli, fixture: &FinetuneFixture) -> Result<()> {
+/// Q22's custom questions data in `dir`: each of the first [`CUSTOM_LINES`] lines of the teacher data as `{"state",
+/// "questions", "answers"}`, its questions under the ids `q1`, `q2`, ... and each answered with its teacher label.
+fn custom_data(sandbox: &Sandbox, dir: &Path) -> Result<()> {
+    let source = sandbox.tmp().join(TEACHER_CUSTOM);
+    let text = std::fs::read_to_string(&source)
+        .with_context(|| format!("reading {}; run `cargo xtask fetch`", source.display()))?;
+    let mut lines = String::new();
+    for (i, line) in text.lines().take(CUSTOM_LINES).enumerate() {
+        let teacher: Value = serde_json::from_str(line)
+            .with_context(|| format!("{}:{}", source.display(), i + 1))?;
+        let asked = teacher["questions"]
+            .as_array()
+            .with_context(|| format!("{}:{} asks no questions", source.display(), i + 1))?;
+        let mut questions = serde_json::Map::new();
+        let mut answers = serde_json::Map::new();
+        for (j, question) in asked.iter().enumerate() {
+            let id = format!("q{}", j + 1);
+            let mut spec = serde_json::Map::new();
+            for key in ["type", "instructions", "criteria"] {
+                if let Some(value) = question.get(key) {
+                    spec.insert(key.into(), value.clone());
+                }
+            }
+            questions.insert(id.clone(), spec.into());
+            answers.insert(id, question["answer"].clone());
+        }
+        lines.push_str(
+            &json!({"state": teacher["state"], "questions": questions, "answers": answers})
+                .to_string(),
+        );
+        lines.push('\n');
+    }
+    std::fs::write(dir.join(CUSTOM), lines)?;
+    println!(
+        "e2e finetune: wrote {CUSTOM} ({CUSTOM_LINES} lines of {})",
+        source.display()
+    );
+    Ok(())
+}
+
+/// One row: its checks, then, whatever they found, every entry it added (the model it fine-tunes, the base it pulled),
+/// the model's directory and every path it added to the hub cache removed. A row that answers after the first finds
+/// the training environment as it was (R2.5); the first records it in `environment`.
+fn row(
+    cli: &Cli,
+    server: &Server,
+    fixture: &FinetuneFixture,
+    environment: &mut Option<Files>,
+) -> Result<()> {
     let hub = hub::dir(cli.sandbox);
     let before = hub::paths(&hub)?;
+    let entries = cli.entries()?;
     let name = flag(fixture, "--name").context("the row names no --name")?;
     let checked = match fixture.expect {
-        Expect::Answers => answers(cli, fixture, name),
+        Expect::Answers => answers(cli, server, fixture, name).and_then(|()| {
+            let files = cli.environment_files()?;
+            match environment {
+                Some(first) => cli.reused(fixture, name, first, &files),
+                None => {
+                    println!(
+                        "e2e finetune {}: the training environment holds {} files",
+                        fixture.name,
+                        files.len()
+                    );
+                    *environment = Some(files);
+                    Ok(())
+                }
+            }
+        }),
         Expect::Refused(why) => refused(cli, fixture, name, why, &before),
     };
     let removed = cli
-        .remove(name)
+        .remove(name, &entries)
         .and(hub::remove_added(&hub, &before))
         .context("removing what the row added");
     match &removed {
@@ -191,16 +278,17 @@ fn row(cli: &Cli, fixture: &FinetuneFixture) -> Result<()> {
     checked.and(removed.map(drop))
 }
 
-/// R1.1, R1.2 and R1.7 for a row that answers: a run stopped by SIGINT mid-training and a run whose trainer exits
-/// non-zero leave no entry and no model directory, the first having installed the environment; then the fine-tune
-/// runs to the end, its directory holds the GGUF in the expected quant, the tokenizer and chat template files of the
-/// base, `decider_config.json` in the base's layout and `finetune.json`, `ardana run` answers every question with it,
-/// and `ardana rm` removes the entry and the directory.
-fn answers(cli: &Cli, fixture: &FinetuneFixture, name: &str) -> Result<()> {
+/// R1.1, R1.2, R1.7 and R2.2 to R2.4 for a row that answers: a run stopped by SIGINT mid-training and a run whose
+/// trainer exits non-zero leave no entry and no model directory, the first having installed the environment; then
+/// the fine-tune runs to the end, its directory holds the GGUF in the expected quant, the tokenizer and chat template
+/// files of the base, `decider_config.json` in the base's layout with the fitted temperatures and `finetune.json`
+/// with the report its stdout prints, `ardana run` answers every question with it and the running server answers
+/// alike, and `ardana rm` removes the entry and the directory.
+fn answers(cli: &Cli, server: &Server, fixture: &FinetuneFixture, name: &str) -> Result<()> {
     let row = fixture.name;
     let log = cli.dir.join(format!("{name}-interrupted.log"));
     let started = Instant::now();
-    let mut child = cli.spawn(fixture, &log)?;
+    let mut child = cli.spawn(fixture, &log, None)?;
     let stopped = interrupt_mid_training(cli, &mut child, &log);
     let status = match stopped {
         Ok(status) => status,
@@ -234,7 +322,7 @@ fn answers(cli: &Cli, fixture: &FinetuneFixture, name: &str) -> Result<()> {
         .with_context(|| format!("moving {} aside", trainer.display()))?;
     let log = cli.dir.join(format!("{name}-failing.log"));
     let failing = cli
-        .spawn(fixture, &log)
+        .spawn(fixture, &log, None)
         .and_then(|mut child| Ok(child.wait()?));
     std::fs::rename(&aside, &trainer)
         .with_context(|| format!("putting {} back", trainer.display()))?;
@@ -251,12 +339,14 @@ fn answers(cli: &Cli, fixture: &FinetuneFixture, name: &str) -> Result<()> {
     );
 
     let log = cli.dir.join(format!("{name}.log"));
+    let out = cli.dir.join(format!("{name}.out"));
     let started = Instant::now();
-    let status = cli.spawn(fixture, &log)?.wait()?;
+    let status = cli.spawn(fixture, &log, Some(&out))?.wait()?;
     let text = std::fs::read_to_string(&log)?;
+    let printed = std::fs::read_to_string(&out)?;
     ensure!(
         status.success(),
-        "the fine-tune exited {status}:\n{}",
+        "the fine-tune exited {status}:\n{}{printed}",
         tail(&text)
     );
     println!(
@@ -278,7 +368,11 @@ fn answers(cli: &Cli, fixture: &FinetuneFixture, name: &str) -> Result<()> {
         println!("e2e finetune {row}: {metrics}");
     }
     cli.model(fixture, name)?;
-    cli.answered(name)?;
+    cli.calibrated(fixture, name, &text)?;
+    cli.reported(fixture, name, &printed)?;
+    let request = cli.request(fixture)?;
+    let response = cli.answered(name, &request)?;
+    cli.served(server, name, &request, &response)?;
     let removed = run_stdout(cli.command().args(["rm", name]))?;
     ensure!(
         !cli.home.join("models").join(name).exists() && !cli.listed(name)?,
@@ -370,7 +464,7 @@ fn refused(
     before: &BTreeSet<PathBuf>,
 ) -> Result<()> {
     let log = cli.dir.join(format!("{name}.log"));
-    let status = cli.spawn(fixture, &log)?.wait()?;
+    let status = cli.spawn(fixture, &log, None)?.wait()?;
     let text = std::fs::read_to_string(&log)?;
     ensure!(
         status.code() == Some(1) && text.contains(why),
@@ -408,6 +502,9 @@ fn tail(text: &str) -> String {
     lines[lines.len().saturating_sub(30)..].join("\n")
 }
 
+/// The files of the training environment, by path relative to it: their size and modification time.
+type Files = BTreeMap<PathBuf, (u64, SystemTime)>;
+
 /// The release `ardana` on the suite home, run from the suite's directory, where the rows' data files are.
 struct Cli<'a> {
     sandbox: &'a Sandbox,
@@ -425,26 +522,40 @@ impl Cli<'_> {
         cmd
     }
 
-    /// `ardana finetune <base> <args>`, its output going to `log`.
-    fn spawn(&self, fixture: &FinetuneFixture, log: &Path) -> Result<Child> {
-        let file =
-            std::fs::File::create(log).with_context(|| format!("creating {}", log.display()))?;
+    /// `ardana finetune <base> <args>`, its stderr going to `log` and its stdout to `out`, else to `log` too.
+    fn spawn(&self, fixture: &FinetuneFixture, log: &Path, out: Option<&Path>) -> Result<Child> {
+        let create = |path: &Path| {
+            std::fs::File::create(path).with_context(|| format!("creating {}", path.display()))
+        };
+        let file = create(log)?;
+        let stdout = match out {
+            Some(out) => create(out)?,
+            None => file.try_clone()?,
+        };
         let mut cmd = self.command();
         cmd.arg("finetune")
             .arg(fixture.base)
             .args(fixture.args)
             .stdin(Stdio::null())
-            .stdout(file.try_clone()?)
+            .stdout(stdout)
             .stderr(file);
         cmd.spawn().context("starting ardana finetune")
     }
 
-    /// Whether `ardana list` lists `name`.
-    fn listed(&self, name: &str) -> Result<bool> {
+    /// The names `ardana list` lists.
+    fn entries(&self) -> Result<Vec<String>> {
         let listed = run_stdout(self.command().arg("list"))?;
         Ok(listed
             .lines()
-            .any(|line| line.split_whitespace().next() == Some(name)))
+            .skip(1)
+            .filter_map(|line| line.split_whitespace().next())
+            .map(str::to_string)
+            .collect())
+    }
+
+    /// Whether `ardana list` lists `name`.
+    fn listed(&self, name: &str) -> Result<bool> {
+        Ok(self.entries()?.iter().any(|entry| entry == name))
     }
 
     /// R1.7: no entry named `name`, no model directory and no working directory of a run that builds it.
@@ -473,7 +584,11 @@ impl Cli<'_> {
             "import importlib.metadata as m, sys; print(sys.version.split()[0], sys.base_prefix); [print(p, m.version(p)) for p in {:?}]",
             PINS.iter().map(|(name, _)| *name).collect::<Vec<_>>()
         );
-        let report = run_stdout(self.sandbox.command(&python).args(["-I", "-c", &check]))?;
+        let report = run_stdout(
+            self.sandbox
+                .command(&python)
+                .args(["-B", "-I", "-c", &check]),
+        )?;
         let mut lines = report.lines();
         let (version, prefix) = lines
             .next()
@@ -536,19 +651,15 @@ impl Cli<'_> {
             gguf.display()
         );
 
-        let tokenizer = pick
-            .size
-            .tokenizer
-            .as_ref()
-            .or(pick.size.source.as_ref())
-            .context("the base pins no tokenizer repository")?;
-        let repo = tokenizer
-            .repo
-            .trim_start_matches("hf.co/")
-            .replace('/', "--");
+        // The tokenizer the size pins, else its GGUF repository's, as `ardana pull` reads it.
+        let (repo, commit) = match &pick.size.tokenizer {
+            Some(pin) => (&pin.repo, &pin.commit),
+            None => (&pick.size.gguf.repo, &pick.size.gguf.commit),
+        };
+        let repo = repo.trim_start_matches("hf.co/").replace('/', "--");
         let snapshot = hub::dir(self.sandbox)
             .join(format!("models--{repo}/snapshots"))
-            .join(&tokenizer.commit);
+            .join(commit);
         let mut files = vec![gguf.file_name().unwrap().to_string_lossy().into_owned()];
         for file in [
             "tokenizer.json",
@@ -583,6 +694,12 @@ impl Cli<'_> {
             .filter(|line| !line.trim().is_empty())
             .count();
         let tenth = lines / 10;
+        let mut record = record;
+        let report = record["report"].take();
+        ensure!(
+            report["lines"] == tenth,
+            "{name}'s finetune.json reports {report}, not the {tenth} test lines"
+        );
         let wanted = json!({
             "base": fixture.base,
             "checkpoint": checkpoint,
@@ -620,12 +737,24 @@ impl Cli<'_> {
         Ok(())
     }
 
-    /// R1.1: `ardana run <name> --request -` answers every question of a request on the shared questions, read from
-    /// stdin, and its `--json` gives each question an answer of its type.
-    fn answered(&self, name: &str) -> Result<()> {
-        let questions = read_json(&self.dir.join(COMMANDS_QUESTIONS))?;
-        let request =
-            json!({"state": "git push --force origin main", "questions": questions}).to_string();
+    /// The request a row's model answers: the first line of the row's data, its state with its own questions, else
+    /// those of the row's `--questions` file.
+    fn request(&self, fixture: &FinetuneFixture) -> Result<Value> {
+        let data = fixture.args.first().context("the row names no data")?;
+        let text = std::fs::read_to_string(self.dir.join(data))?;
+        let line: Value = serde_json::from_str(text.lines().next().context("the data is empty")?)?;
+        let questions = match (line.get("questions"), flag(fixture, "--questions")) {
+            (Some(own), _) => own.clone(),
+            (None, Some(file)) => read_json(&self.dir.join(file))?,
+            (None, None) => bail!("{data}'s first line asks no questions"),
+        };
+        Ok(json!({"state": line["state"], "questions": questions}))
+    }
+
+    /// R1.1: `ardana run <name> --request -` answers every question of `request`, read from stdin, and its `--json`
+    /// gives each question an answer of its type; returns that response.
+    fn answered(&self, name: &str, request: &Value) -> Result<Value> {
+        let text = request.to_string();
         let mut printed = String::new();
         for json in [false, true] {
             let mut cmd = self.command();
@@ -638,10 +767,7 @@ impl Cli<'_> {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .spawn()?;
-            std::io::Write::write_all(
-                &mut child.stdin.take().context("stdin")?,
-                request.as_bytes(),
-            )?;
+            std::io::Write::write_all(&mut child.stdin.take().context("stdin")?, text.as_bytes())?;
             let output = child.wait_with_output()?;
             ensure!(
                 output.status.success(),
@@ -657,20 +783,329 @@ impl Cli<'_> {
             }
         }
         let response: Value = serde_json::from_str(&printed)?;
-        for (id, question) in questions.as_object().context("the questions")? {
+        for (id, question) in request["questions"].as_object().context("the questions")? {
             ensure!(
                 response["answers"][id]["type"] == question["type"],
                 "{name} answered {id} with {}",
                 response["answers"][id]
             );
         }
+        Ok(response)
+    }
+
+    /// R2.4: the server, running since the suite started, lists `name` as pulled in `/v1/models` and answers `request`
+    /// with it at `/v1/systemone` as `ardana run --json` answered it (`response`), every probability the same.
+    fn served(&self, server: &Server, name: &str, request: &Value, response: &Value) -> Result<()> {
+        let curl = |args: &[&str]| -> Result<Value> {
+            let output = self
+                .sandbox
+                .command("curl")
+                .args(["-fsS", "--max-time", "600"])
+                .args(args)
+                .output()
+                .context("running curl")?;
+            ensure!(
+                output.status.success(),
+                "the server did not answer: {}\n{}",
+                String::from_utf8_lossy(&output.stderr).trim(),
+                server.log_text()
+            );
+            Ok(serde_json::from_slice(&output.stdout)?)
+        };
+        let models = curl(&[&format!("{}/v1/models", server.url)])?;
+        let listed = models["models"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|model| model["name"] == name);
+        ensure!(
+            listed.is_some_and(|model| model["x_pulled"] != false),
+            "the server's /v1/models lists {name} as {listed:?}: {models}"
+        );
+        let mut body = request.clone();
+        body["model"] = name.into();
+        let served = curl(&[
+            "-H",
+            "content-type: application/json",
+            "--data-binary",
+            &body.to_string(),
+            &format!("{}/v1/systemone", server.url),
+        ])?;
+        ensure!(
+            served["answers"] == response["answers"] && served["model"] == response["model"],
+            "the server answered {served}, ardana run --json {response}"
+        );
+        println!(
+            "e2e finetune: the server running since the suite started lists {name} and answers with it as `ardana run` does"
+        );
         Ok(())
     }
 
-    /// `ardana rm <name>` when it is listed, and its model directory when one is left.
-    fn remove(&self, name: &str) -> Result<()> {
-        if self.listed(name)? {
-            run_stdout(self.command().args(["rm", name]))?;
+    /// R2.1: the temperatures the run fitted, as its stderr says them (`temperature T over N calibration answers`, then
+    /// `; <type> T over n` or `; <type> takes it (n, fewer than 50)` per type), follow Q30, are those of the model's
+    /// `decider_config.json`, and `ardana show <name> --json` prints them in its profile.
+    fn calibrated(&self, fixture: &FinetuneFixture, name: &str, log: &str) -> Result<()> {
+        let said = log
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{name} answers at temperature ")))
+            .context("the run says no fitted temperatures")?;
+        let mut parts = said.split("; ");
+        let overall = parts.next().unwrap_or_default();
+        let temperature: f64 = overall
+            .split_once(' ')
+            .map_or(overall, |(t, _)| t)
+            .parse()
+            .with_context(|| format!("the temperature in `{said}`"))?;
+        let mut by_type = serde_json::Map::new();
+        for part in parts {
+            let words: Vec<&str> = part.split_whitespace().collect();
+            match words[..] {
+                [kind, t, "over", n] => {
+                    ensure!(
+                        n.parse::<usize>()? >= 50,
+                        "{kind} has its own temperature over {n} answers"
+                    );
+                    by_type.insert(kind.to_string(), json!(t.parse::<f64>()?));
+                }
+                [kind, "takes", "it", n, ..] => {
+                    let n: usize = n.trim_start_matches('(').trim_end_matches(',').parse()?;
+                    ensure!(
+                        n < 50,
+                        "{kind} takes the overall temperature over {n} answers"
+                    );
+                }
+                _ => bail!("the run says `{part}` of a type's temperature"),
+            }
+        }
+        let config = read_json(
+            &self
+                .home
+                .join("models")
+                .join(name)
+                .join("decider_config.json"),
+        )?;
+        let by_type = Value::Object(by_type);
+        ensure!(
+            config["temperature"] == json!(temperature) && config["temperature_by_type"] == by_type,
+            "{name}'s decider_config.json is {config}, the run said `{said}`"
+        );
+        let entry: Value =
+            serde_json::from_str(&run_stdout(self.command().args(["show", name, "--json"]))?)?;
+        let profile = &entry["profile"];
+        ensure!(
+            profile["temperature"] == config["temperature"]
+                && profile["temperature_by_type"] == config["temperature_by_type"],
+            "ardana show {name} --json prints the profile {profile}, its decider_config.json is {config}"
+        );
+        println!(
+            "e2e finetune {}: {name} answers at temperature {said}",
+            fixture.name
+        );
+        Ok(())
+    }
+
+    /// R2.2 and R2.3: `finetune.json#report` holds, for the base (pulled under its canonical name from its default
+    /// quant, as `ardana run <base>` pulls it) and for the model, the answers, accuracy, NLL, Brier score and ECE of
+    /// each answer type and overall on the test split, the table the run printed on stdout gives the same numbers,
+    /// and the model's overall accuracy is as the row's [`Gain`] expects against the base's.
+    fn reported(&self, fixture: &FinetuneFixture, name: &str, printed: &str) -> Result<()> {
+        let library = ardana_registry::library::Library::from_file(&self.sandbox.snapshot())?;
+        let pick = library
+            .find(fixture.base)?
+            .with_context(|| format!("{} is no library size", fixture.base))?;
+        let base = pick.name();
+        let entry: Value =
+            serde_json::from_str(&run_stdout(self.command().args(["show", &base, "--json"]))?)?;
+        ensure!(
+            entry["source"] == pick.reference(),
+            "the base {base} is pulled from {}, not from its default quant {}",
+            entry["source"],
+            pick.reference()
+        );
+        // Q7: the model reads its rows as the base does, in its layout and score-level mode.
+        let tuned: Value =
+            serde_json::from_str(&run_stdout(self.command().args(["show", name, "--json"]))?)?;
+        for key in ["layout", "isolated_levels"] {
+            let (base_mode, tuned_mode) = (&entry["profile"][key], &tuned["profile"][key]);
+            ensure!(
+                base_mode == tuned_mode
+                    || (key == "layout" && base_mode["kind"] == tuned_mode["kind"]),
+                "{name} reads {key} {tuned_mode}, the base {base_mode}"
+            );
+        }
+        let record = read_json(&self.home.join("models").join(name).join("finetune.json"))?;
+        let report = &record["report"];
+        ensure!(
+            report["base"]["name"] == base && report["tuned"]["name"] == name,
+            "{name}'s report compares {} with {}",
+            report["tuned"]["name"],
+            report["base"]["name"]
+        );
+        // Every row of the table, keyed by type and model, as the report holds it.
+        let mut table: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+        for line in printed
+            .lines()
+            .skip_while(|line| !line.starts_with("TYPE "))
+            .skip(1)
+        {
+            let cells: Vec<&str> = line.split_whitespace().collect();
+            if let [kind, model, numbers @ ..] = &cells[..]
+                && numbers.len() == 5
+            {
+                table.insert(
+                    (kind.to_string(), model.to_string()),
+                    numbers.iter().map(|n| n.to_string()).collect(),
+                );
+            }
+        }
+        let mut accuracy = BTreeMap::new();
+        for side in ["base", "tuned"] {
+            let metrics = report[side]["metrics"]
+                .as_object()
+                .with_context(|| format!("{name}'s report has no {side} metrics: {report}"))?;
+            let keys: Vec<&String> = metrics.keys().collect();
+            ensure!(
+                keys.last().is_some_and(|key| *key == "overall")
+                    && keys[..keys.len() - 1]
+                        .iter()
+                        .all(|key| ["choice", "noul", "score"].contains(&key.as_str())),
+                "{name}'s {side} report has the keys {keys:?}"
+            );
+            let model = report[side]["name"].as_str().unwrap_or_default();
+            for (kind, m) in metrics {
+                let number = |key: &str| {
+                    m[key]
+                        .as_f64()
+                        .with_context(|| format!("{side} {kind} {key}: {m}"))
+                };
+                let answers = m["answers"].as_u64().context("the answers")?;
+                let (acc, nll, brier, ece) = (
+                    number("accuracy")?,
+                    number("nll")?,
+                    number("brier")?,
+                    number("ece")?,
+                );
+                ensure!(
+                    answers > 0
+                        && (0.0..=1.0).contains(&acc)
+                        && nll >= 0.0
+                        && (0.0..=2.0).contains(&brier)
+                        && (0.0..=1.0).contains(&ece),
+                    "{name}'s {side} {kind} metrics are {m}"
+                );
+                ensure!(
+                    m["answers"] == report["base"]["metrics"][kind]["answers"],
+                    "the base and {name} answered different {kind} questions: {report}"
+                );
+                let wanted: Vec<String> = std::iter::once(answers.to_string())
+                    .chain([acc, nll, brier, ece].iter().map(|x| format!("{x:.4}")))
+                    .collect();
+                let row = table.get(&(kind.clone(), model.to_string()));
+                ensure!(
+                    row == Some(&wanted),
+                    "the run printed {row:?} for {model}'s {kind}, its report holds {wanted:?}:\n{printed}"
+                );
+                if kind == "overall" {
+                    accuracy.insert(side, acc);
+                }
+            }
+        }
+        let (before, after) = (accuracy["base"], accuracy["tuned"]);
+        match fixture.gain {
+            Gain::Above => ensure!(
+                after > before,
+                "{name}'s test accuracy {after} is not above the base's {before}"
+            ),
+            Gain::Within(drop) => ensure!(
+                after >= before - drop,
+                "{name}'s test accuracy {after} is more than {drop} below the base's {before}"
+            ),
+            Gain::Unchecked => {}
+        }
+        println!(
+            "e2e finetune {}: test accuracy {before} for {base}, {after} for {name}; the run printed\n{}",
+            fixture.name,
+            printed.trim_end()
+        );
+        Ok(())
+    }
+
+    /// Every file and link of the training environment but the runs' working directories, with its size and
+    /// modification time.
+    fn environment_files(&self) -> Result<Files> {
+        let root = self.home.join("finetune");
+        let mut files = Files::new();
+        let mut dirs = vec![root.clone()];
+        while let Some(dir) = dirs.pop() {
+            for entry in
+                std::fs::read_dir(&dir).with_context(|| format!("reading {}", dir.display()))?
+            {
+                let entry = entry?;
+                let path = entry.path();
+                let meta = entry.metadata()?;
+                if meta.is_dir() {
+                    if path != root.join("work") {
+                        dirs.push(path);
+                    }
+                    continue;
+                }
+                let rel = path.strip_prefix(&root)?.to_path_buf();
+                files.insert(rel, (meta.len(), meta.modified()?));
+            }
+        }
+        Ok(files)
+    }
+
+    /// R2.5: a row after the first that answers reused the training environment: no run of the row downloaded or
+    /// built a part of it, and every file of it is as the first row left it.
+    fn reused(
+        &self,
+        fixture: &FinetuneFixture,
+        name: &str,
+        first: &Files,
+        files: &Files,
+    ) -> Result<()> {
+        for run in ["-interrupted", "-failing", ""] {
+            let log = self.dir.join(format!("{name}{run}.log"));
+            let text = std::fs::read_to_string(&log)?;
+            if let Some(line) = text.lines().find(|line| {
+                ENVIRONMENT_BUILT
+                    .iter()
+                    .any(|said| line.trim_start().starts_with(said))
+            }) {
+                bail!("{} says `{line}`", log.display());
+            }
+        }
+        let changed: Vec<&PathBuf> = first
+            .iter()
+            .filter(|(path, meta)| files.get(*path) != Some(meta))
+            .map(|(path, _)| path)
+            .chain(files.keys().filter(|path| !first.contains_key(*path)))
+            .collect();
+        ensure!(
+            changed.is_empty(),
+            "the training environment changed since the first row: {} files, {:?}",
+            changed.len(),
+            &changed[..changed.len().min(10)]
+        );
+        println!(
+            "e2e finetune {}: reused uv, Python, the venv and the converter: nothing downloaded, the {} files unchanged",
+            fixture.name,
+            files.len()
+        );
+        Ok(())
+    }
+
+    /// `ardana rm` of every entry listed now but not in `before` (the model `name`, a base the row pulled), and the
+    /// model directory of `name` when one is left.
+    fn remove(&self, name: &str, before: &[String]) -> Result<()> {
+        let added: Vec<String> = self
+            .entries()?
+            .into_iter()
+            .filter(|entry| !before.contains(entry))
+            .collect();
+        if !added.is_empty() {
+            run_stdout(self.command().arg("rm").args(&added))?;
         }
         let dir = self.home.join("models").join(name);
         if dir.exists() {

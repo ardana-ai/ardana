@@ -4,8 +4,8 @@ Ardana is a local-first tool that pulls and runs open System 1 decision models (
 way Ollama does, from one `ardana` Rust binary that serves them over an HTTP API (compatible with Jev and TypeSafe
 clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime` abstraction (GGUF
 files) and Candle the second (safetensors causal LMs, and the THX-01 decision model); Qwen3.5 is the first model family.
-`ardana finetune` turns a library size into a model of the user's own (TRL in a venv it builds, llama.cpp's converter,
-the linked quantizer). Planning documents live in
+`ardana finetune` turns a library size into a calibrated model of the user's own (TRL in a venv it builds, llama.cpp's
+converter, the linked quantizer, temperatures fitted and a test report against the base). Planning documents live in
 gitignored `*-prd/` folders; when one is present locally, its Decisions and Contracts are binding (as its Amendments
 change them) and its Requirements are the definition of done.
 
@@ -193,16 +193,27 @@ change them) and its Requirements are the definition of done.
   release binary, online, on one home `tmp/e2e/finetune/home` that keeps the training environment from row to row and
   is removed when the suite ends, also on failure; the suite writes the first 1,000 lines of decider@23579f7's
   `teacher_data/commands.jsonl` as `commands.jsonl` and their two shared questions, `risk` (safe, caution,
-  destructive) and the noul `outside`, as `commands.questions.json` in `tmp/e2e/finetune/`. Row `qwen3:0.6b`
-  fine-tunes `cmd-risk` three times: stopped by SIGINT past the trainer's first step (the run that installs uv
-  0.13.1, CPython 3.12, the Q29 pins and the converter, which the row then checks), then with
-  `trl/scripts/sft.py` moved out of the venv so the trainer exits 1, neither leaving an entry, `models/cmd-risk/` or
-  a working directory, then to the end (81 to 90 minutes on 8 CPU cores): `ardana list` lists it, its directory holds
-  `cmd-risk-Q8_0.gguf` (file type Q8_0), the base's tokenizer and chat template files, `decider_config.json` (layout
-  `chat`) and `finetune.json` (800/100/100 lines), `ardana run cmd-risk --request -` answers both questions, and
-  `ardana rm cmd-risk` removes the entry and the directory; row `thx-01` (`hf.co/doofz/THX-01`) exits 1 named a
-  decision model, no weight file reaching `tmp/hf`. Each row removes its entry, its model directory and every path
-  it added under `tmp/hf/hub` when its checks end, also when one failed; a failed row does not stop the others).
+  destructive) and the noul `outside`, as `commands.questions.json`, and the first 200 lines of its
+  `teacher_data/custom_questions.jsonl`, each with its own noul, choice and score questions, as `custom.jsonl` in
+  `tmp/e2e/finetune/`, then starts one `ardana serve` on the home that runs until the suite ends. A row that answers
+  fine-tunes its model three times: stopped by SIGINT past the trainer's first step (row `qwen3:0.6b`'s is the run
+  that installs uv 0.13.1, CPython 3.12, the Q29 pins and the converter, which the row then checks), then with
+  `trl/scripts/sft.py` moved out of the venv so the trainer exits 1, neither leaving an entry, `models/<name>/` or a
+  working directory, then to the end: `ardana list` lists it, its directory holds `<name>-<QUANT>.gguf` (that file
+  type), the base's tokenizer and chat template files, `decider_config.json` (the base's layout, the temperatures the
+  run says it fitted, by Q30, which `ardana show --json` prints) and `finetune.json` (the split's lines, the report
+  its stdout prints: the base, pulled from its default quant, and the model per answer type and overall), the
+  model's overall test accuracy is as the row's `Gain` says against the base's, `ardana run <name> --request -`
+  answers the first data line's questions, the running server lists the model in `/v1/models` and answers the same
+  request at `/v1/systemone` with the answers `ardana run --json` gave, and `ardana rm` removes the entry and the
+  directory; every row after the first that answers finds the environment's files unchanged and downloads none of
+  it. Rows: `qwen3:0.6b` (`cmd-risk` on the commands data, chat, Q8_0, above the base; 81 to 90 minutes of training
+  on 8 CPU cores), `thx-01` (`hf.co/doofz/THX-01` exits 1 named a decision model, no weight file reaching `tmp/hf`),
+  `decider:0.8b` (`custom-decider` on the custom data, plain with isolated score levels, Q8_0, `--epochs 1`, at least
+  the base's accuracy minus 0.05) and `qwen3.5:0.8b` (`cmd-risk-qwen3.5` on the commands data, the multimodal
+  `Qwen3_5ForConditionalGeneration` trained as its text tower, chat, Q4_0, above the base). Each row removes every
+  entry it added (its model, the base it pulled), its model directory and every path it added under `tmp/hf/hub` when
+  its checks end, also when one failed; a failed row does not stop the others).
 - `ardana pull <name|ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model
   in `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo), printing download progress on
   stderr. The library is a list of families with their sizes inside (`decider`: `0.8b`, `2b`, `4b`), each size one
@@ -316,12 +327,20 @@ change them) and its Requirements are the definition of done.
   downloads to the HF cache; TRL's `sft` script trains on the very rows `Decider::plan` builds (LoRA r16, alpha 32,
   all linear layers, lr 1e-4, the epochs, seed 0, the epoch with the lowest calibration loss kept, float32 on the
   CPU, offline); `merge.py` merges (`merge_and_unload`); the converter writes an f32 GGUF and the linked
-  `llama_model_quantize` the `--quant`, default the base's own GGUF quant. `$ARDANA_HOME/models/<name>/` then holds
-  `<name>-<QUANT>.gguf`, the base's tokenizer and chat template files, `decider_config.json` (the base's layout and
-  score-level mode, temperature 1.0) and `finetune.json` (`{base, checkpoint, format, quant, device, dtype, qlora,
-  epochs, rows, license, report}`, `report` null), and it is registered as `<name>`, which `ardana run` answers. The
-  model is built in `$ARDANA_HOME/finetune/work/<name>/`, removed whatever the end; SIGINT (listened for, children
-  killed) and a failing step leave no entry and no `models/<name>/`.
+  `llama_model_quantize` the `--quant`, default the base's own GGUF quant. A multimodal checkpoint
+  (`*ForConditionalGeneration` with a `text_config`, Qwen3.5's) trains, merges and converts as its text tower alone.
+  The base is pulled after the checkpoint as `ardana run <base>` pulls it (its default quant and profile). The GGUF's
+  temperatures are then fitted on the calibration split through the GGUF itself (Q30, decider's `fit_by_type`:
+  `temperature` over every answer, a `temperature_by_type` entry for a type with 50 answers or more, by NLL over a
+  log grid of 0.05 to 20 refined by golden section), and the base and the model answer the test split: stdout prints
+  accuracy (noul: P(yes) ≥ 0.5), NLL, Brier and 15-bin ECE per answer type and overall for both. `$ARDANA_HOME/models/
+  <name>/` then holds `<name>-<QUANT>.gguf`, the base's tokenizer and chat template files, `decider_config.json` (the
+  base's layout and score-level mode, the fitted temperatures, which `ardana show` prints) and `finetune.json`
+  (`{base, checkpoint, format, quant, device, dtype, qlora, epochs, rows, license, report}`, `report` the same
+  numbers), and it is registered as `<name>`, which `ardana run` and a running `ardana serve` answer. The model is
+  built in `$ARDANA_HOME/finetune/work/<name>/`, removed whatever the end; SIGINT (listened for, children killed) and
+  a failing step leave no entry and no `models/<name>/`. The venv compiles its bytecode at install and Python runs
+  with `-B`, so later runs change none of the environment's files.
 - `ardana update` installs the latest GitHub Release over an ardana the installers placed, through axoupdater: it
   reads dist's install receipt (`ardana-receipt.json` in `$XDG_CONFIG_HOME/ardana`, then `~/.config/ardana`;
   `%LOCALAPPDATA%\ardana` on Windows), looks ardana-ai/ardana's `releases/latest` up once and prints `ardana is up to
