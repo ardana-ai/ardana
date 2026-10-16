@@ -111,20 +111,32 @@ pub fn finetune() -> String {
         "Examples:
   ardana finetune <family>:<size> data.jsonl --questions questions.json --name my-model
   ardana finetune <family>:<size> data.jsonl --name my-model --epochs 1 --quant q4_k_m
+  ardana finetune hf.co/<org>/<repo>-GGUF:Q8_0 data.csv --questions questions.json --name my-model
+  ardana finetune model.gguf data.jsonl --checkpoint hf.co/<org>/<repo> --name my-model
   ardana run my-model --request request.json
+
+Base: any model ardana runs: a library size, a pulled model's name, an hf.co/ reference (a safetensors checkpoint
+or a GGUF), an ollama: reference or a local GGUF file. Training reads the base's transformers checkpoint: the one
+the library pins for a size, an hf.co/ checkpoint itself, and for an hf.co/ GGUF (or a model pulled from one) the
+base_model its repository's card names when it names exactly one. --checkpoint hf.co/<org>/<repo> or --checkpoint
+<dir> names it for any base, and a base whose checkpoint is unknown is refused naming it. A checkpoint whose
+config.json has auto_map loads by running the Python code it ships; it is refused unless --trust-remote-code.
 
 Data: one JSON object a line,
   {{\"state\": <text or JSON>, \"questions\": {{<id>: <question spec>}}, \"answers\": {{<id>: <label>}}}}
 the specs as a /v1/systemone request writes them, and a label the option's name (choice), true or false (noul),
 the level's index or its key in a legend (score), or null where the line does not answer. A line without
-\"questions\" asks those of --questions (a map of id to spec, or a /v1/systemone request). The lines are split by
-line, seeded: 80% to train on, 10% to calibrate on, 10% to test on. At least {MIN_LINES} labelled lines are needed;
-an option with fewer than {MIN_OPTION_EXAMPLES} training examples is warned about.
+\"questions\" asks those of --questions (a map of id to spec, or a /v1/systemone request). A CSV file (.csv) holds
+the same lines: a header naming a state column and a column per question id of --questions, which a CSV always
+takes, each cell written as a line's label, an empty cell unlabelled. The lines are split by line, seeded: 80% to
+train on, 10% to calibrate on, 10% to test on. At least {MIN_LINES} labelled lines are needed; an option with fewer
+than {MIN_OPTION_EXAMPLES} training examples is warned about.
 
 Training: a LoRA of rank {LORA_RANK} and alpha {LORA_ALPHA} on every linear layer, trained with TRL's sft on the rows
 ardana reads at run time, the loss on the answer token alone: learning rate {LEARNING_RATE}, {DEFAULT_EPOCHS} epochs
 (--epochs), seed {SEED}, the epoch with the lowest calibration loss kept, float32 on the CPU. The merged model is
-converted to GGUF and quantized to --quant, by default the quant of the base's own GGUF.
+converted to GGUF and quantized to --quant, by default the quant of the base's own GGUF (the library's, the one
+an hf.co/ reference or the file name names), else q4_k_m.
 
 Calibration and report: the GGUF's temperatures are fitted on the calibration lines (one over every answer, and one
 per answer type with at least {MIN_ANSWERS} answers), and `ardana show <name>` prints them. Then the base, pulled as

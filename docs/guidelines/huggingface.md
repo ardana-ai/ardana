@@ -34,7 +34,7 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   weights (`.gguf`, `.onnx`, `.onnx.data`, `.safetensors`), which needs no token; `cargo xtask fetch --tests`
   installs those files without the tools, so CI runs it, and `fetch --check` verifies the same files. Plain tests
   use only them: the tokenizers, configs and chat templates of decider, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8,
-  Qwen3-1.7B and Llama 3.2.
+  Qwen3-1.7B and Llama 3.2, and the card (`README.md`) of `Qwen/Qwen3-1.7B-GGUF`, which `ardana finetune` reads.
 - The weights of an `[[hf]]` entry are in `tmp/hf` only while an end-to-end suite that names its repository runs
   (`RUST_FIXTURES` and the weight lists in `xtask/src/e2e.rs`). `hub::with_weights` (`xtask/src/hub.rs`) lists the
   cache, downloads the entries whole with the downloader below, runs the suite and deletes every path the cache
@@ -58,6 +58,10 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 - Match on `HFError::LocalEntryNotFound` (cache miss with `local_files_only(true)`) separately from
   `HFError::EntryNotFound` (the file is not in the repo) and transport errors, and word each error differently.
 - Use the async API from the existing tokio runtime; do not enable the `blocking` feature or build a second runtime.
+- A model card is the repository's `README.md`, fetched like any file; its YAML front matter (between the leading
+  `---` lines) carries `base_model` (one repository, or a list) and `license`. `ardana_registry::base` reads those
+  two keys itself (a scalar, a flow list or a block list) rather than parse YAML; offline the card comes from the
+  cache like every file, so a test that reads one lists it in its `[[hf]]` entry.
 - Never pass or log a token. `hf-hub` picks up `HF_TOKEN`, `HF_TOKEN_PATH` or `$HF_HOME/token` on its own; with
   `HF_HOME=tmp/hf` no token file exists, and every Step 1 repo is ungated.
 
@@ -323,6 +327,7 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   characters, unlike transformers' `json.dumps(ensure_ascii=False)`.
 
 ## Sources
+- https://huggingface.co/docs/hub/model-cards — the card's metadata: `base_model`, `license`
 - https://docs.rs/tokenizers/0.23.2/tokenizers/index.html — crate overview, `http`/`onig`/`fancy-regex` features
 - https://docs.rs/tokenizers/0.23.2/tokenizers/tokenizer/struct.TokenizerImpl.html#method.encode_fast — `encode_fast`
 - https://huggingface.co/docs/hub/api — `/api/models/{repo}/revision/{revision}`, sibling `blobId`, `lfs.sha256`, `size`

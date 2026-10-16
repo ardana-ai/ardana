@@ -1,14 +1,16 @@
 //! `cargo xtask e2e finetune`: each row of [`crate::e2e::FINETUNE_FIXTURES`] in turn, with the release `ardana`, online,
 //! on one suite home, `tmp/e2e/finetune/home`, over the sandbox's hub cache. The suite first writes the data the rows
 //! name into its directory: the first 1,000 lines of decider@23579f7's `teacher_data/commands.jsonl` (Q22) as lines of
-//! `ardana finetune`'s format, their two shared questions in a questions file, and the first 200 lines of its
-//! `teacher_data/custom_questions.jsonl`, each with its own questions; then it starts one `ardana serve` on the home,
-//! which runs until the suite ends. A row that answers fine-tunes its base three times: stopped by SIGINT
+//! `ardana finetune`'s format and as CSV, their two shared questions in a questions file, and the first 200 lines of
+//! its `teacher_data/custom_questions.jsonl`, each with its own questions; then it starts one `ardana serve` on the
+//! home, which runs until the suite ends. A row that answers fine-tunes its base three times: stopped by SIGINT
 //! mid-training, then with a trainer that exits non-zero (its script moved out of the venv and back), neither leaving
 //! an entry or a model directory, then to the end; its report of base against tuned on the test split is checked, its
-//! model answers through `ardana run` and through the running server alike, and `ardana rm` removes it. The rows
-//! after the first that answers find the training environment as that row left it. A refused row's run exits 1
-//! naming why, before any weight downloads. Whatever a row's checks found, the entries, model directories and hub
+//! model answers through `ardana run` and through the running server alike, and `ardana rm` removes it. A row passing
+//! `--trust-remote-code` is first refused without it, before any weight downloads; a row whose base is an `hf.co/` GGUF
+//! reference then fine-tunes again from that GGUF's file in the hub cache with `--checkpoint <the checkpoint's
+//! snapshot directory>` and `--epochs 1`. The rows after the first that answers find the training environment as that
+//! row left it. A refused row's run exits 1 naming why, before any weight downloads. Whatever a row's checks found, the entries, model directories and hub
 //! paths it added are removed when they end; the training environment in the home stays for the next row, and the
 //! suite removes the home when it ends, also when a row failed.
 
@@ -21,13 +23,17 @@ use std::time::{Duration, Instant, SystemTime};
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
+use ardana_registry::library::{Library, LibraryPick};
+use ardana_registry::refs::{HfFile, Ref, matches_quant};
+
 use crate::e2e::{Expect, FinetuneFixture, Gain, read_json};
 use crate::hub;
 use crate::sandbox::{Sandbox, run_stdout};
 use crate::serve::{Server, build_ardana};
 
-/// The commands data, in the suite's directory: its lines, and their shared questions.
+/// The commands data, in the suite's directory: its lines, the same lines as CSV, and their shared questions.
 pub const COMMANDS: &str = "commands.jsonl";
+pub const COMMANDS_CSV: &str = "commands.csv";
 pub const COMMANDS_QUESTIONS: &str = "commands.questions.json";
 /// The custom questions data, in the suite's directory: lines that carry their own questions.
 pub const CUSTOM: &str = "custom.jsonl";
@@ -141,13 +147,15 @@ pub fn finetune(sandbox: &Sandbox, fixtures: &[FinetuneFixture]) -> Result<()> {
 }
 
 /// Q22's commands data in `dir`: each of the first [`COMMANDS_LINES`] lines of the teacher data as `{"state",
-/// "answers"}`, its two questions, which every line shares, in [`COMMANDS_QUESTIONS`] under [`QUESTION_IDS`].
+/// "answers"}`, and as a record of [`COMMANDS_CSV`] (a `state` column and one per question id, a noul written `true`
+/// or `false`); its two questions, which every line shares, in [`COMMANDS_QUESTIONS`] under [`QUESTION_IDS`].
 fn commands_data(sandbox: &Sandbox, dir: &Path) -> Result<()> {
     let source = sandbox.tmp().join(TEACHER_COMMANDS);
     let text = std::fs::read_to_string(&source)
         .with_context(|| format!("reading {}; run `cargo xtask fetch`", source.display()))?;
     let mut shared: Option<Value> = None;
     let mut lines = String::new();
+    let mut csv = format!("state,{}\n", QUESTION_IDS.join(","));
     for (i, line) in text.lines().take(COMMANDS_LINES).enumerate() {
         let teacher: Value = serde_json::from_str(line)
             .with_context(|| format!("{}:{}", source.display(), i + 1))?;
@@ -175,20 +183,43 @@ fn commands_data(sandbox: &Sandbox, dir: &Path) -> Result<()> {
             source.display(),
             i + 1
         );
+        let state = teacher["state"]
+            .as_str()
+            .with_context(|| format!("{}:{}'s state is no text", source.display(), i + 1))?;
+        let mut cells = vec![csv_cell(state)];
+        for id in QUESTION_IDS {
+            cells.push(match &answers[id] {
+                Value::String(label) => csv_cell(label),
+                Value::Bool(yes) => yes.to_string(),
+                other => bail!("{}:{} answers {id} with {other}", source.display(), i + 1),
+            });
+        }
+        csv.push_str(&cells.join(","));
+        csv.push('\n');
         lines.push_str(&json!({"state": teacher["state"], "answers": answers}).to_string());
         lines.push('\n');
     }
     std::fs::write(dir.join(COMMANDS), lines)?;
+    std::fs::write(dir.join(COMMANDS_CSV), csv)?;
     let shared = shared.context("the teacher data is empty")?;
     std::fs::write(
         dir.join(COMMANDS_QUESTIONS),
         serde_json::to_string_pretty(&shared)?,
     )?;
     println!(
-        "e2e finetune: wrote {COMMANDS} ({COMMANDS_LINES} lines of {}) and {COMMANDS_QUESTIONS}",
+        "e2e finetune: wrote {COMMANDS} and {COMMANDS_CSV} ({COMMANDS_LINES} lines of {}) and {COMMANDS_QUESTIONS}",
         source.display()
     );
     Ok(())
+}
+
+/// A CSV cell: quoted when it holds a comma, a quote or a line break, its quotes doubled.
+fn csv_cell(text: &str) -> String {
+    if text.contains([',', '"', '\r', '\n']) {
+        format!("\"{}\"", text.replace('"', "\"\""))
+    } else {
+        text.to_string()
+    }
 }
 
 /// Q22's custom questions data in `dir`: each of the first [`CUSTOM_LINES`] lines of the teacher data as `{"state",
@@ -231,8 +262,8 @@ fn custom_data(sandbox: &Sandbox, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// One row: its checks, then, whatever they found, every entry it added (the model it fine-tunes, the base it pulled),
-/// the model's directory and every path it added to the hub cache removed. A row that answers after the first finds
+/// One row: its checks, then, whatever they found, every entry it added (the models it fine-tunes, the base it pulled),
+/// the models' directories and every path it added to the hub cache removed. A row that answers after the first finds
 /// the training environment as it was (R2.5); the first records it in `environment`.
 fn row(
     cli: &Cli,
@@ -243,52 +274,73 @@ fn row(
     let hub = hub::dir(cli.sandbox);
     let before = hub::paths(&hub)?;
     let entries = cli.entries()?;
-    let name = flag(fixture, "--name").context("the row names no --name")?;
+    let run = Run::of(fixture)?;
+    let local = format!("{}-local", run.name);
     let checked = match fixture.expect {
-        Expect::Answers => answers(cli, server, fixture, name).and_then(|()| {
-            let files = cli.environment_files()?;
-            match environment {
-                Some(first) => cli.reused(fixture, name, first, &files),
-                None => {
-                    println!(
-                        "e2e finetune {}: the training environment holds {} files",
-                        fixture.name,
-                        files.len()
-                    );
-                    *environment = Some(files);
-                    Ok(())
+        Expect::Answers => untrusted(cli, &run, &before)
+            .and_then(|()| answers(cli, server, &run))
+            .and_then(|record| from_local_gguf(cli, server, &run, &local, &record))
+            .and_then(|()| {
+                let files = cli.environment_files()?;
+                match environment {
+                    Some(first) => cli.reused(&run, first, &files),
+                    None => {
+                        println!(
+                            "e2e finetune {}: the training environment holds {} files",
+                            run.row,
+                            files.len()
+                        );
+                        *environment = Some(files);
+                        Ok(())
+                    }
                 }
-            }
-        }),
-        Expect::Refused(why) => refused(cli, fixture, name, why, &before),
+            }),
+        Expect::Refused(why) => refused(cli, &run, why, &before, ""),
     };
     let removed = cli
-        .remove(name, &entries)
+        .remove(&[run.name.as_str(), local.as_str()], &entries)
         .and(hub::remove_added(&hub, &before))
         .context("removing what the row added");
     match &removed {
         Ok(bytes) => println!(
-            "e2e finetune {}: removed {name} and {:.2} GB from {}",
-            fixture.name,
+            "e2e finetune {}: removed {} and {:.2} GB from {}",
+            run.row,
+            run.name,
             *bytes as f64 / 1e9,
             hub.display()
         ),
-        Err(err) => println!("e2e finetune {}: {err:#}", fixture.name),
+        Err(err) => println!("e2e finetune {}: {err:#}", run.row),
     }
     checked.and(removed.map(drop))
 }
 
+/// R3.5 for a row that passes `--trust-remote-code`: the same run without it exits 1 naming the flag, before any
+/// weight downloads (its checkpoint's `config.json` has `auto_map`). Nothing for any other row.
+fn untrusted(cli: &Cli, run: &Run, before: &BTreeSet<PathBuf>) -> Result<()> {
+    const FLAG: &str = "--trust-remote-code";
+    if !run.args.iter().any(|arg| arg == FLAG) {
+        return Ok(());
+    }
+    let without = Run {
+        args: run
+            .args
+            .iter()
+            .filter(|arg| *arg != FLAG)
+            .cloned()
+            .collect(),
+        ..run.clone()
+    };
+    refused(cli, &without, FLAG, before, "-untrusted")
+}
+
 /// R1.1, R1.2, R1.7 and R2.2 to R2.4 for a row that answers: a run stopped by SIGINT mid-training and a run whose
 /// trainer exits non-zero leave no entry and no model directory, the first having installed the environment; then
-/// the fine-tune runs to the end, its directory holds the GGUF in the expected quant, the tokenizer and chat template
-/// files of the base, `decider_config.json` in the base's layout with the fitted temperatures and `finetune.json`
-/// with the report its stdout prints, `ardana run` answers every question with it and the running server answers
-/// alike, and `ardana rm` removes the entry and the directory.
-fn answers(cli: &Cli, server: &Server, fixture: &FinetuneFixture, name: &str) -> Result<()> {
-    let row = fixture.name;
+/// the fine-tune runs to the end and is checked ([`finished`]). Returns the model's `finetune.json`.
+fn answers(cli: &Cli, server: &Server, run: &Run) -> Result<Value> {
+    let (row, name) = (run.row, run.name.as_str());
     let log = cli.dir.join(format!("{name}-interrupted.log"));
     let started = Instant::now();
-    let mut child = cli.spawn(fixture, &log, None)?;
+    let mut child = cli.spawn(run, &log, None)?;
     let stopped = interrupt_mid_training(cli, &mut child, &log);
     let status = match stopped {
         Ok(status) => status,
@@ -322,7 +374,7 @@ fn answers(cli: &Cli, server: &Server, fixture: &FinetuneFixture, name: &str) ->
         .with_context(|| format!("moving {} aside", trainer.display()))?;
     let log = cli.dir.join(format!("{name}-failing.log"));
     let failing = cli
-        .spawn(fixture, &log, None)
+        .spawn(run, &log, None)
         .and_then(|mut child| Ok(child.wait()?));
     std::fs::rename(&aside, &trainer)
         .with_context(|| format!("putting {} back", trainer.display()))?;
@@ -337,11 +389,19 @@ fn answers(cli: &Cli, server: &Server, fixture: &FinetuneFixture, name: &str) ->
     println!(
         "e2e finetune {row}: a trainer exiting 1 ended the run, leaving no entry and no model directory"
     );
+    finished(cli, server, run)
+}
 
+/// A fine-tune run to the end: its directory holds the GGUF in the expected quant, the tokenizer and chat template
+/// files of the base, `decider_config.json` in the base's layout with the fitted temperatures and `finetune.json` with
+/// the report its stdout prints, `ardana run` answers every question with it and the running server answers alike,
+/// and `ardana rm` removes the entry and the directory. Returns the model's `finetune.json`.
+fn finished(cli: &Cli, server: &Server, run: &Run) -> Result<Value> {
+    let (row, name) = (run.row, run.name.as_str());
     let log = cli.dir.join(format!("{name}.log"));
     let out = cli.dir.join(format!("{name}.out"));
     let started = Instant::now();
-    let status = cli.spawn(fixture, &log, Some(&out))?.wait()?;
+    let status = cli.spawn(run, &log, Some(&out))?.wait()?;
     let text = std::fs::read_to_string(&log)?;
     let printed = std::fs::read_to_string(&out)?;
     ensure!(
@@ -358,7 +418,7 @@ fn answers(cli: &Cli, server: &Server, fixture: &FinetuneFixture, name: &str) ->
         .split(['\r', '\n'])
         .filter_map(|line| line.find("{'eval_loss'").map(|at| &line[at..]))
         .collect();
-    let epochs = epochs(fixture)?;
+    let epochs = run.epochs()?;
     ensure!(
         evaluated.len() as u64 == epochs,
         "the trainer evaluated the calibration split {} times in {epochs} epochs",
@@ -367,10 +427,11 @@ fn answers(cli: &Cli, server: &Server, fixture: &FinetuneFixture, name: &str) ->
     for metrics in evaluated {
         println!("e2e finetune {row}: {metrics}");
     }
-    cli.model(fixture, name)?;
-    cli.calibrated(fixture, name, &text)?;
-    cli.reported(fixture, name, &printed)?;
-    let request = cli.request(fixture)?;
+    let expected = cli.expected(run)?;
+    let record = cli.model(run, &expected)?;
+    cli.calibrated(run, &text)?;
+    cli.reported(run, &expected, &printed)?;
+    let request = cli.request(run)?;
     let response = cli.answered(name, &request)?;
     cli.served(server, name, &request, &response)?;
     let removed = run_stdout(cli.command().args(["rm", name]))?;
@@ -379,21 +440,160 @@ fn answers(cli: &Cli, server: &Server, fixture: &FinetuneFixture, name: &str) ->
         "ardana rm {name} left its entry or its directory: {removed}"
     );
     println!("e2e finetune {row}: {}", removed.trim());
-    Ok(())
+    Ok(record)
 }
 
-/// The value a row's args give `flag`.
-fn flag(fixture: &FinetuneFixture, flag: &str) -> Option<&'static str> {
-    fixture
-        .args
-        .windows(2)
+/// R3.2 for a row whose base is an `hf.co/` GGUF reference: the same data fine-tuned again, as `local`, from that GGUF's
+/// file in the hub cache, with `--checkpoint <the snapshot directory of the checkpoint the first run recorded>` and
+/// `--epochs 1`, run to the end ([`finished`]), its `finetune.json` recording the directory as `{"path"}`. Nothing for
+/// any other row.
+fn from_local_gguf(
+    cli: &Cli,
+    server: &Server,
+    run: &Run,
+    local: &str,
+    record: &Value,
+) -> Result<()> {
+    let Ok(Ref::Hf {
+        org,
+        repo,
+        file: Some(file),
+    }) = Ref::parse(&run.base)
+    else {
+        return Ok(());
+    };
+    let hub = hub::dir(cli.sandbox);
+    let gguf = cached_gguf(&hub, &org, &repo, &file)?;
+    let (checkpoint, commit) = (
+        record["checkpoint"]["repo"].as_str(),
+        record["checkpoint"]["commit"].as_str(),
+    );
+    let (Some(checkpoint), Some(commit)) = (checkpoint, commit) else {
+        bail!(
+            "{}'s finetune.json records the checkpoint {}, no repository at a commit",
+            run.name,
+            record["checkpoint"]
+        );
+    };
+    let dir = hub
+        .join(repo_dir(checkpoint.trim_start_matches("hf.co/")))
+        .join("snapshots")
+        .join(commit);
+    let mut args: Vec<String> = Vec::new();
+    let mut given = run.args.iter();
+    while let Some(arg) = given.next() {
+        match arg.as_str() {
+            "--name" | "--epochs" | "--checkpoint" => {
+                given.next();
+            }
+            _ => args.push(arg.clone()),
+        }
+    }
+    args.extend(["--name".into(), local.into(), "--epochs".into(), "1".into()]);
+    args.extend(["--checkpoint".into(), dir.display().to_string()]);
+    println!(
+        "e2e finetune {}: fine-tuning {local} from the GGUF {} with --checkpoint {}",
+        run.row,
+        gguf.display(),
+        dir.display()
+    );
+    let again = Run {
+        row: run.row,
+        base: gguf.display().to_string(),
+        args,
+        name: local.to_string(),
+        gain: run.gain,
+    };
+    finished(cli, server, &again).map(drop)
+}
+
+/// The one GGUF of `org/repo` the reference's `file` names (its quant, or its path), in a snapshot of the hub cache.
+fn cached_gguf(hub: &Path, org: &str, repo: &str, file: &HfFile) -> Result<PathBuf> {
+    let snapshots = hub
+        .join(repo_dir(&format!("{org}/{repo}")))
+        .join("snapshots");
+    let mut found = Vec::new();
+    for snapshot in
+        std::fs::read_dir(&snapshots).with_context(|| format!("reading {}", snapshots.display()))?
+    {
+        let snapshot = snapshot?.path();
+        for entry in std::fs::read_dir(&snapshot)? {
+            let path = entry?.path();
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            let picked = match file {
+                HfFile::Quant(quant) => matches_quant(&name, quant),
+                HfFile::Name(wanted) => snapshot.join(wanted) == path,
+            };
+            if picked {
+                found.push(path);
+            }
+        }
+    }
+    match &found[..] {
+        [one] => Ok(one.clone()),
+        _ => bail!(
+            "{} holds {} GGUFs the reference names, not one: {found:?}",
+            snapshots.display(),
+            found.len()
+        ),
+    }
+}
+
+/// `models--<org>--<repo>`, the hub cache's directory of `org/repo`.
+fn repo_dir(repo: &str) -> String {
+    format!("models--{}", repo.replace('/', "--"))
+}
+
+/// One fine-tune of a row: its base, its arguments (the data first) and the model's name.
+#[derive(Debug, Clone)]
+struct Run {
+    row: &'static str,
+    base: String,
+    args: Vec<String>,
+    name: String,
+    gain: Gain,
+}
+
+impl Run {
+    /// The fine-tune a row names.
+    fn of(fixture: &FinetuneFixture) -> Result<Run> {
+        let args: Vec<String> = fixture.args.iter().map(|arg| arg.to_string()).collect();
+        let name = flag(&args, "--name")
+            .context("the row names no --name")?
+            .to_string();
+        Ok(Run {
+            row: fixture.name,
+            base: fixture.base.to_string(),
+            args,
+            name,
+            gain: fixture.gain,
+        })
+    }
+
+    /// The value the run's args give `flag`.
+    fn flag(&self, name: &str) -> Option<&str> {
+        flag(&self.args, name)
+    }
+
+    /// The epochs the run trains: its `--epochs`, else `ardana finetune`'s default (Q23).
+    fn epochs(&self) -> Result<u64> {
+        Ok(self.flag("--epochs").map_or(Ok(2), str::parse)?)
+    }
+
+    /// The data file the run names, relative to the suite's directory.
+    fn data(&self) -> Result<&str> {
+        self.args
+            .first()
+            .map(String::as_str)
+            .context("the row names no data")
+    }
+}
+
+/// The value `args` give `flag`.
+fn flag<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+    args.windows(2)
         .find(|pair| pair[0] == flag)
-        .map(|pair| pair[1])
-}
-
-/// The epochs a row trains: its `--epochs`, else `ardana finetune`'s default (Q23).
-fn epochs(fixture: &FinetuneFixture) -> Result<u64> {
-    Ok(flag(fixture, "--epochs").map_or(Ok(2), str::parse)?)
+        .map(|pair| pair[1].as_str())
 }
 
 /// Waits for the run's first training step in its log, sends the process SIGINT, and waits for it to exit.
@@ -405,7 +605,12 @@ fn interrupt_mid_training(
     let waiting = Instant::now();
     loop {
         if let Some(status) = child.try_wait()? {
-            bail!("the run exited ({status}) before its first training step");
+            // The suite's directory, the log with it, goes when the suite ends: the failure carries its end.
+            let text = std::fs::read_to_string(log).unwrap_or_default();
+            bail!(
+                "the run exited ({status}) before its first training step:\n{}",
+                tail(&text)
+            );
         }
         if std::fs::read_to_string(log).is_ok_and(|text| training(&text)) {
             break;
@@ -454,22 +659,24 @@ fn training(log: &str) -> bool {
     })
 }
 
-/// A refused row: `ardana finetune` exits 1 with `why` in its message, before any weight download (no file the hub
-/// cache gained since `before` is a weight file), and leaves no entry and no model directory.
+/// A refused run: `ardana finetune` exits 1 with `why` in its message, before any weight download (no file the hub
+/// cache gained since `before` is a weight file), and leaves no entry and no model directory; its log is
+/// `<name><suffix>.log`.
 fn refused(
     cli: &Cli,
-    fixture: &FinetuneFixture,
-    name: &str,
+    run: &Run,
     why: &str,
     before: &BTreeSet<PathBuf>,
+    suffix: &str,
 ) -> Result<()> {
-    let log = cli.dir.join(format!("{name}.log"));
-    let status = cli.spawn(fixture, &log, None)?.wait()?;
+    let name = run.name.as_str();
+    let log = cli.dir.join(format!("{name}{suffix}.log"));
+    let status = cli.spawn(run, &log, None)?.wait()?;
     let text = std::fs::read_to_string(&log)?;
     ensure!(
         status.code() == Some(1) && text.contains(why),
         "ardana finetune {} exited {status}, not refusing it as `{why}`:\n{}",
-        fixture.base,
+        run.base,
         tail(&text)
     );
     let added: Vec<PathBuf> = hub::paths(&hub::dir(cli.sandbox))?
@@ -482,7 +689,7 @@ fn refused(
         .lines()
         .find(|line| line.contains(why))
         .unwrap_or_default();
-    println!("e2e finetune {}: refused, {message}", fixture.name);
+    println!("e2e finetune {}: refused, {message}", run.row);
     Ok(())
 }
 
@@ -523,7 +730,7 @@ impl Cli<'_> {
     }
 
     /// `ardana finetune <base> <args>`, its stderr going to `log` and its stdout to `out`, else to `log` too.
-    fn spawn(&self, fixture: &FinetuneFixture, log: &Path, out: Option<&Path>) -> Result<Child> {
+    fn spawn(&self, run: &Run, log: &Path, out: Option<&Path>) -> Result<Child> {
         let create = |path: &Path| {
             std::fs::File::create(path).with_context(|| format!("creating {}", path.display()))
         };
@@ -534,8 +741,8 @@ impl Cli<'_> {
         };
         let mut cmd = self.command();
         cmd.arg("finetune")
-            .arg(fixture.base)
-            .args(fixture.args)
+            .arg(&run.base)
+            .args(&run.args)
             .stdin(Stdio::null())
             .stdout(stdout)
             .stderr(file);
@@ -620,19 +827,142 @@ impl Cli<'_> {
         Ok(())
     }
 
-    /// R1.1: the model's entry and its directory: the GGUF in the quant the run names (else the base's own), the
-    /// base's tokenizer and chat template files as they are, `decider_config.json` in the base's layout and
-    /// `finetune.json` as the Contract has it.
-    fn model(&self, fixture: &FinetuneFixture, name: &str) -> Result<()> {
+    /// What `run`'s model is checked against, as the base names it: a library size by its library entry; an `hf.co/` GGUF
+    /// reference by its card (`README.md` in the hub cache), whose one `base_model` is the checkpoint, its snapshot the
+    /// one in the cache holding `config.json`; a local GGUF file by `--checkpoint <dir>`.
+    fn expected(&self, run: &Run) -> Result<Expected> {
+        let library = Library::from_file(&self.sandbox.snapshot())?;
+        let quant = run.flag("--quant").map(str::to_string);
+        if let Some(pick) = library.find(&run.base)? {
+            // The tokenizer the size pins, else its GGUF repository's, as `ardana pull` reads it.
+            let (repo, commit) = match &pick.size.tokenizer {
+                Some(pin) => (&pin.repo, &pin.commit),
+                None => (&pick.size.gguf.repo, &pick.size.gguf.commit),
+            };
+            let tokenizer = hub::dir(self.sandbox)
+                .join(repo_dir(repo.trim_start_matches("hf.co/")))
+                .join("snapshots")
+                .join(commit);
+            let layout = pick.size.layout.map_or("plain", |layout| match layout {
+                ardana_registry::LayoutKind::Plain => "plain",
+                ardana_registry::LayoutKind::Chat => "chat",
+            });
+            let checkpoint = pick.size.source.as_ref().or(pick.size.tokenizer.as_ref());
+            return Ok(Expected {
+                checkpoint: json!(checkpoint),
+                quant: quant.unwrap_or_else(|| pick.quant.quant.clone()),
+                tokenizer,
+                layout,
+                license: json!(pick.size.license),
+                pick: Some(pick),
+            });
+        }
+        let hub = hub::dir(self.sandbox);
+        let of_file = |file: &str| {
+            FILE_TYPES
+                .iter()
+                .find(|(quant, _)| matches_quant(file, quant))
+                .map(|(quant, _)| quant.to_string())
+                .with_context(|| format!("{file} is in no quant the suite checks"))
+        };
+        let (gguf, checkpoint, quant, license) = match Ref::parse(&run.base)? {
+            Ref::Hf {
+                org,
+                repo,
+                file: Some(file),
+            } => {
+                let gguf = cached_gguf(&hub, &org, &repo, &file)?;
+                let card = gguf.with_file_name("README.md");
+                let base_models = card_values(&card, "base_model")?;
+                let [checkpoint] = &base_models[..] else {
+                    bail!("{} names the base models {base_models:?}", card.display());
+                };
+                let snapshots = hub.join(repo_dir(checkpoint)).join("snapshots");
+                let held: Vec<PathBuf> = std::fs::read_dir(&snapshots)
+                    .with_context(|| format!("reading {}", snapshots.display()))?
+                    .map(|entry| entry.map(|e| e.path()))
+                    .collect::<std::io::Result<Vec<_>>>()?
+                    .into_iter()
+                    .filter(|dir| dir.join("config.json").is_file())
+                    .collect();
+                let [dir] = &held[..] else {
+                    bail!(
+                        "{} holds {} checkpoints, not one",
+                        snapshots.display(),
+                        held.len()
+                    );
+                };
+                let commit = dir.file_name().unwrap_or_default().to_string_lossy();
+                let quant = match (&quant, &file) {
+                    (Some(quant), _) => quant.clone(),
+                    (None, HfFile::Quant(named)) => named.to_ascii_lowercase(),
+                    (None, HfFile::Name(name)) => of_file(name)?,
+                };
+                let license = card_values(&card, "license")?.into_iter().next();
+                (
+                    gguf,
+                    (
+                        json!({"repo": format!("hf.co/{checkpoint}"), "commit": commit}),
+                        dir.clone(),
+                    ),
+                    quant,
+                    license,
+                )
+            }
+            Ref::Local(gguf) => {
+                let dir = PathBuf::from(
+                    run.flag("--checkpoint")
+                        .context("a local GGUF needs --checkpoint")?,
+                );
+                let name = gguf
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
+                let quant = match quant {
+                    Some(quant) => quant,
+                    None => of_file(&name)?,
+                };
+                let license = card_values(&dir.join("README.md"), "license")?
+                    .into_iter()
+                    .next();
+                (gguf, (json!({"path": dir}), dir), quant, license)
+            }
+            _ => {
+                bail!("the suite checks library sizes, hf.co/ GGUF references and local GGUF files")
+            }
+        };
+        let ((checkpoint, dir), beside) =
+            (checkpoint, |file: &str| gguf.with_file_name(file).is_file());
+        Ok(Expected {
+            checkpoint,
+            quant,
+            // The weights' own tokenizer, else the checkpoint's.
+            tokenizer: if beside("tokenizer.json") {
+                gguf.parent().context("the GGUF's directory")?.to_path_buf()
+            } else {
+                dir
+            },
+            layout: if beside("decider_config.json") {
+                "plain"
+            } else {
+                "chat"
+            },
+            license: json!(license),
+            pick: None,
+        })
+    }
+
+    /// R1.1, R3.2: the model's entry and its directory: the GGUF in the expected quant, the base's tokenizer and chat
+    /// template files as they are, `decider_config.json` in the base's layout and `finetune.json` as the Contract has
+    /// it, its checkpoint the one `expected` names. Returns that `finetune.json`.
+    fn model(&self, run: &Run, expected: &Expected) -> Result<Value> {
+        let name = run.name.as_str();
         ensure!(self.listed(name)?, "ardana list does not list {name}");
         let entry: Value =
             serde_json::from_str(&run_stdout(self.command().args(["show", name, "--json"]))?)?;
         let dir = self.home.join("models").join(name);
-        let library = ardana_registry::library::Library::from_file(&self.sandbox.snapshot())?;
-        let pick = library
-            .find(fixture.base)?
-            .with_context(|| format!("{} is no library size", fixture.base))?;
-        let quant = flag(fixture, "--quant").unwrap_or(pick.quant.quant.as_str());
+        let quant = expected.quant.as_str();
         let gguf = dir.join(format!("{name}-{}.gguf", quant.to_ascii_uppercase()));
         ensure!(
             entry["runtime"] == "llama.cpp"
@@ -651,71 +981,54 @@ impl Cli<'_> {
             gguf.display()
         );
 
-        // The tokenizer the size pins, else its GGUF repository's, as `ardana pull` reads it.
-        let (repo, commit) = match &pick.size.tokenizer {
-            Some(pin) => (&pin.repo, &pin.commit),
-            None => (&pick.size.gguf.repo, &pick.size.gguf.commit),
-        };
-        let repo = repo.trim_start_matches("hf.co/").replace('/', "--");
-        let snapshot = hub::dir(self.sandbox)
-            .join(format!("models--{repo}/snapshots"))
-            .join(commit);
         let mut files = vec![gguf.file_name().unwrap().to_string_lossy().into_owned()];
         for file in [
             "tokenizer.json",
             "tokenizer_config.json",
             "chat_template.jinja",
         ] {
-            if snapshot.join(file).is_file() {
+            let base = expected.tokenizer.join(file);
+            if base.is_file() {
                 ensure!(
-                    std::fs::read(dir.join(file)).ok() == std::fs::read(snapshot.join(file)).ok(),
+                    std::fs::read(dir.join(file)).ok() == std::fs::read(&base).ok(),
                     "{name}'s {file} is not the base's"
                 );
                 files.push(file.to_string());
             }
         }
         let config = read_json(&dir.join("decider_config.json"))?;
-        let layout = pick.size.layout.map_or("plain", |layout| match layout {
-            ardana_registry::LayoutKind::Plain => "plain",
-            ardana_registry::LayoutKind::Chat => "chat",
-        });
+        let layout = expected.layout;
         ensure!(
             config["layout"] == layout && entry["profile"]["layout"]["kind"] == layout,
             "{name}'s decider_config.json is {config}, its profile {}, not in the {layout} layout",
             entry["profile"]
         );
         let record = read_json(&dir.join("finetune.json"))?;
-        let checkpoint = pick.size.source.as_ref().or(pick.size.tokenizer.as_ref());
-        let epochs = epochs(fixture)?;
         // Every line of the row's data is labelled: a tenth to calibrate on, a tenth to test on, the rest to train on.
-        let data = fixture.args.first().context("the row names no data")?;
-        let lines = std::fs::read_to_string(self.dir.join(data))?
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .count();
+        let lines = self.lines(run)?.len();
         let tenth = lines / 10;
-        let mut record = record;
-        let report = record["report"].take();
+        let mut written = record.clone();
+        let report = written["report"].take();
         ensure!(
             report["lines"] == tenth,
             "{name}'s finetune.json reports {report}, not the {tenth} test lines"
         );
         let wanted = json!({
-            "base": fixture.base,
-            "checkpoint": checkpoint,
+            "base": run.base,
+            "checkpoint": expected.checkpoint,
             "format": "gguf",
             "quant": quant,
             "device": "cpu",
             "dtype": "float32",
             "qlora": false,
-            "epochs": epochs,
+            "epochs": run.epochs()?,
             "rows": {"train": lines - 2 * tenth, "calibration": tenth, "test": tenth},
-            "license": pick.size.license,
+            "license": expected.license,
             "report": null,
         });
         ensure!(
-            record == wanted,
-            "{name}'s finetune.json is {record}, not {wanted}"
+            written == wanted,
+            "{name}'s finetune.json is {written}, not {wanted}"
         );
         files.extend(["decider_config.json".into(), "finetune.json".into()]);
         let mut held: Vec<String> = std::fs::read_dir(&dir)?
@@ -729,24 +1042,36 @@ impl Cli<'_> {
             dir.display()
         );
         println!(
-            "e2e finetune {}: {} holds {}; finetune.json {record}",
-            fixture.name,
+            "e2e finetune {}: {} holds {}; finetune.json {written}",
+            run.row,
             dir.display(),
             held.join(", ")
         );
-        Ok(())
+        Ok(record)
+    }
+
+    /// The lines of a run's data as JSONL lines: the CSV of the commands data holds the commands data's lines.
+    fn lines(&self, run: &Run) -> Result<Vec<Value>> {
+        let data = match run.data()? {
+            COMMANDS_CSV => COMMANDS,
+            data => data,
+        };
+        std::fs::read_to_string(self.dir.join(data))?
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| Ok(serde_json::from_str(line)?))
+            .collect()
     }
 
     /// The request a row's model answers: the first line of the row's data, its state with its own questions, else
     /// those of the row's `--questions` file.
-    fn request(&self, fixture: &FinetuneFixture) -> Result<Value> {
-        let data = fixture.args.first().context("the row names no data")?;
-        let text = std::fs::read_to_string(self.dir.join(data))?;
-        let line: Value = serde_json::from_str(text.lines().next().context("the data is empty")?)?;
-        let questions = match (line.get("questions"), flag(fixture, "--questions")) {
+    fn request(&self, run: &Run) -> Result<Value> {
+        let lines = self.lines(run)?;
+        let line = lines.first().context("the data is empty")?;
+        let questions = match (line.get("questions"), run.flag("--questions")) {
             (Some(own), _) => own.clone(),
             (None, Some(file)) => read_json(&self.dir.join(file))?,
-            (None, None) => bail!("{data}'s first line asks no questions"),
+            (None, None) => bail!("{}'s first line asks no questions", run.data()?),
         };
         Ok(json!({"state": line["state"], "questions": questions}))
     }
@@ -844,7 +1169,8 @@ impl Cli<'_> {
     /// R2.1: the temperatures the run fitted, as its stderr says them (`temperature T over N calibration answers`, then
     /// `; <type> T over n` or `; <type> takes it (n, fewer than 50)` per type), follow Q30, are those of the model's
     /// `decider_config.json`, and `ardana show <name> --json` prints them in its profile.
-    fn calibrated(&self, fixture: &FinetuneFixture, name: &str, log: &str) -> Result<()> {
+    fn calibrated(&self, run: &Run, log: &str) -> Result<()> {
+        let name = run.name.as_str();
         let said = log
             .lines()
             .find_map(|line| line.strip_prefix(&format!("{name} answers at temperature ")))
@@ -899,40 +1225,54 @@ impl Cli<'_> {
         );
         println!(
             "e2e finetune {}: {name} answers at temperature {said}",
-            fixture.name
+            run.row
         );
         Ok(())
     }
 
-    /// R2.2 and R2.3: `finetune.json#report` holds, for the base (pulled under its canonical name from its default
-    /// quant, as `ardana run <base>` pulls it) and for the model, the answers, accuracy, NLL, Brier score and ECE of
-    /// each answer type and overall on the test split, the table the run printed on stdout gives the same numbers,
-    /// and the model's overall accuracy is as the row's [`Gain`] expects against the base's.
-    fn reported(&self, fixture: &FinetuneFixture, name: &str, printed: &str) -> Result<()> {
-        let library = ardana_registry::library::Library::from_file(&self.sandbox.snapshot())?;
-        let pick = library
-            .find(fixture.base)?
-            .with_context(|| format!("{} is no library size", fixture.base))?;
-        let base = pick.name();
-        let entry: Value =
-            serde_json::from_str(&run_stdout(self.command().args(["show", &base, "--json"]))?)?;
-        ensure!(
-            entry["source"] == pick.reference(),
-            "the base {base} is pulled from {}, not from its default quant {}",
-            entry["source"],
-            pick.reference()
-        );
-        // Q7: the model reads its rows as the base does, in its layout and score-level mode.
+    /// R2.2 and R2.3: `finetune.json#report` holds, for the base (a library size pulled under its canonical name from
+    /// its default quant, as `ardana run <base>` pulls it; any other base under the name the run gives it) and for the
+    /// model, the answers, accuracy, NLL, Brier score and ECE of each answer type and overall on the test split, the
+    /// table the run printed on stdout gives the same numbers, and the model's overall accuracy is as the row's
+    /// [`Gain`] expects against the base's.
+    fn reported(&self, run: &Run, expected: &Expected, printed: &str) -> Result<()> {
+        let name = run.name.as_str();
         let tuned: Value =
             serde_json::from_str(&run_stdout(self.command().args(["show", name, "--json"]))?)?;
-        for key in ["layout", "isolated_levels"] {
-            let (base_mode, tuned_mode) = (&entry["profile"][key], &tuned["profile"][key]);
-            ensure!(
-                base_mode == tuned_mode
-                    || (key == "layout" && base_mode["kind"] == tuned_mode["kind"]),
-                "{name} reads {key} {tuned_mode}, the base {base_mode}"
-            );
-        }
+        let base = match &expected.pick {
+            Some(pick) => {
+                let base = pick.name();
+                let entry: Value = serde_json::from_str(&run_stdout(
+                    self.command().args(["show", &base, "--json"]),
+                )?)?;
+                ensure!(
+                    entry["source"] == pick.reference(),
+                    "the base {base} is pulled from {}, not from its default quant {}",
+                    entry["source"],
+                    pick.reference()
+                );
+                // Q7: the model reads its rows as the base does, in its layout and score-level mode.
+                for key in ["layout", "isolated_levels"] {
+                    let (base_mode, tuned_mode) = (&entry["profile"][key], &tuned["profile"][key]);
+                    ensure!(
+                        base_mode == tuned_mode
+                            || (key == "layout" && base_mode["kind"] == tuned_mode["kind"]),
+                        "{name} reads {key} {tuned_mode}, the base {base_mode}"
+                    );
+                }
+                base
+            }
+            None => {
+                // Q7: a base pulled as a reference is recorded nowhere; the model keeps the layout it is read in.
+                ensure!(
+                    tuned["profile"]["layout"]["kind"] == expected.layout,
+                    "{name} reads the layout {}, the base {}",
+                    tuned["profile"]["layout"],
+                    expected.layout
+                );
+                run.base.clone()
+            }
+        };
         let record = read_json(&self.home.join("models").join(name).join("finetune.json"))?;
         let report = &record["report"];
         ensure!(
@@ -1011,7 +1351,7 @@ impl Cli<'_> {
             }
         }
         let (before, after) = (accuracy["base"], accuracy["tuned"]);
-        match fixture.gain {
+        match run.gain {
             Gain::Above => ensure!(
                 after > before,
                 "{name}'s test accuracy {after} is not above the base's {before}"
@@ -1024,7 +1364,7 @@ impl Cli<'_> {
         }
         println!(
             "e2e finetune {}: test accuracy {before} for {base}, {after} for {name}; the run printed\n{}",
-            fixture.name,
+            run.row,
             printed.trim_end()
         );
         Ok(())
@@ -1058,15 +1398,20 @@ impl Cli<'_> {
 
     /// R2.5: a row after the first that answers reused the training environment: no run of the row downloaded or
     /// built a part of it, and every file of it is as the first row left it.
-    fn reused(
-        &self,
-        fixture: &FinetuneFixture,
-        name: &str,
-        first: &Files,
-        files: &Files,
-    ) -> Result<()> {
-        for run in ["-interrupted", "-failing", ""] {
-            let log = self.dir.join(format!("{name}{run}.log"));
+    fn reused(&self, run: &Run, first: &Files, files: &Files) -> Result<()> {
+        let name = &run.name;
+        // The row's runs: the three it always makes, then the untrusted and the local one when it makes them.
+        for (log, always) in [
+            ("-interrupted", true),
+            ("-failing", true),
+            ("", true),
+            ("-untrusted", false),
+            ("-local", false),
+        ] {
+            let log = self.dir.join(format!("{name}{log}.log"));
+            if !always && !log.exists() {
+                continue;
+            }
             let text = std::fs::read_to_string(&log)?;
             if let Some(line) = text.lines().find(|line| {
                 ENVIRONMENT_BUILT
@@ -1090,15 +1435,15 @@ impl Cli<'_> {
         );
         println!(
             "e2e finetune {}: reused uv, Python, the venv and the converter: nothing downloaded, the {} files unchanged",
-            fixture.name,
+            run.row,
             files.len()
         );
         Ok(())
     }
 
-    /// `ardana rm` of every entry listed now but not in `before` (the model `name`, a base the row pulled), and the
-    /// model directory of `name` when one is left.
-    fn remove(&self, name: &str, before: &[String]) -> Result<()> {
+    /// `ardana rm` of every entry listed now but not in `before` (the models `names`, a base the row pulled), and the
+    /// model directory of each of `names` that is left.
+    fn remove(&self, names: &[&str], before: &[String]) -> Result<()> {
         let added: Vec<String> = self
             .entries()?
             .into_iter()
@@ -1107,12 +1452,59 @@ impl Cli<'_> {
         if !added.is_empty() {
             run_stdout(self.command().arg("rm").args(&added))?;
         }
-        let dir = self.home.join("models").join(name);
-        if dir.exists() {
-            std::fs::remove_dir_all(&dir).with_context(|| format!("removing {}", dir.display()))?;
+        for name in names {
+            let dir = self.home.join("models").join(name);
+            if dir.exists() {
+                std::fs::remove_dir_all(&dir)
+                    .with_context(|| format!("removing {}", dir.display()))?;
+            }
         }
         Ok(())
     }
+}
+
+/// What a run's model is checked against ([`Cli::expected`]).
+struct Expected {
+    /// `finetune.json#checkpoint`.
+    checkpoint: Value,
+    quant: String,
+    /// The directory of the tokenizer files the model copies.
+    tokenizer: PathBuf,
+    layout: &'static str,
+    /// `finetune.json#license`.
+    license: Value,
+    /// The library size the base is, whose entry the report reads.
+    pick: Option<LibraryPick>,
+}
+
+/// The values the front matter of the card at `path` gives the top-level `key`: a scalar, or the `- ` items under it.
+fn card_values(path: &Path, key: &str) -> Result<Vec<String>> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let front: Vec<&str> = text
+        .lines()
+        .skip(1)
+        .take_while(|line| line.trim_end() != "---")
+        .collect();
+    let Some(at) = front
+        .iter()
+        .position(|line| line.starts_with(&format!("{key}:")))
+    else {
+        return Ok(Vec::new());
+    };
+    let inline = front[at][key.len() + 1..].trim();
+    let values: Vec<&str> = if inline.is_empty() {
+        front[at + 1..]
+            .iter()
+            .map_while(|line| line.trim_start().strip_prefix("- "))
+            .collect()
+    } else {
+        vec![inline]
+    };
+    Ok(values
+        .iter()
+        .map(|value| value.trim().trim_matches(['"', '\'']).to_string())
+        .collect())
 }
 
 /// The `general.file_type` of the GGUF at `path`, read from its key-value header (GGUF v3).

@@ -6,7 +6,8 @@
 //! A line is `{"state": <string | JSON>, "questions"?: {<id>: <question spec>}, "answers": {<id>: <label>}}`: its own
 //! questions, else the ones of the `--questions` file; a label is the option's name (choice), `true` or `false`
 //! (noul), the level's index for list criteria and its key for a legend (score), and `null` leaves the question
-//! unlabelled.
+//! unlabelled. A CSV file ([`read_csv`]) holds the same lines as a `state` column and a column per question id of the
+//! `--questions` file, each cell written as the line's label, an empty cell unlabelled.
 
 use ardana_api::SystemOneRequest;
 use indexmap::IndexMap;
@@ -235,6 +236,11 @@ pub fn read_jsonl(
             None => data.unlabelled += 1,
         }
     }
+    enough(data, file)
+}
+
+/// `data`, unless it has fewer than [`MIN_LINES`] labelled lines.
+fn enough(data: Data, file: &str) -> Result<Data, DataError> {
     if data.examples.len() < MIN_LINES {
         return Err(DataError::File {
             file: file.to_string(),
@@ -260,19 +266,36 @@ fn read_line(
         line,
         msg,
     };
+    let value: Value =
+        serde_json::from_str(text).map_err(|err| at_line(format!("invalid JSON: {err}")))?;
+    let Value::Object(fields) = value else {
+        return Err(at_line(format!(
+            "a line is an object with a state and answers, got {}",
+            py::repr(&value)
+        )));
+    };
+    read_fields(fields, line, file, shared, decider)
+}
+
+/// The example of one line's fields, `state`, `questions` and `answers` (a JSONL line's, or those a CSV record
+/// stands for), or `None` when it labels nothing.
+fn read_fields(
+    mut fields: serde_json::Map<String, Value>,
+    line: usize,
+    file: &str,
+    shared: Option<&IndexMap<String, Value>>,
+    decider: &Decider,
+) -> Result<Option<Example>, DataError> {
+    let at_line = |msg: String| DataError::Line {
+        file: file.to_string(),
+        line,
+        msg,
+    };
     let at_question = |question: &str, msg: String| DataError::Question {
         file: file.to_string(),
         line,
         question: question.to_string(),
         msg,
-    };
-    let value: Value =
-        serde_json::from_str(text).map_err(|err| at_line(format!("invalid JSON: {err}")))?;
-    let Value::Object(mut fields) = value else {
-        return Err(at_line(format!(
-            "a line is an object with a state and answers, got {}",
-            py::repr(&value)
-        )));
     };
     let state = fields
         .remove("state")
@@ -335,6 +358,159 @@ fn read_line(
         request,
         labels,
     }))
+}
+
+/// Reads the CSV `text` of the file `file`: a header naming the `state` column and a column per question id of
+/// `questions`, the `--questions` file's, which a CSV file always takes; then one record per line (a quoted cell may
+/// hold commas, doubled quotes and line breaks). Each record stands for the JSONL line `{"state": <its state cell>,
+/// "answers": {<column>: <its cell>}}` and is read as [`read_jsonl`] reads that line, so it gives the same
+/// [`Example`], numbered by the file line its record starts on: a cell is written as the line's label (a noul's
+/// `true` or `false`, a score level's index or key, a choice option's name), and an empty cell leaves its question
+/// unlabelled. A CSV without `questions`, a missing `state` column, a column no question has and a column named
+/// twice are refused, naming them; so is a record whose cells are not the header's, naming its line.
+pub fn read_csv(
+    text: &str,
+    file: &str,
+    questions: Option<&IndexMap<String, Value>>,
+    decider: &Decider,
+) -> Result<Data, DataError> {
+    let invalid = |msg: String| DataError::File {
+        file: file.to_string(),
+        msg,
+    };
+    let Some(questions) = questions else {
+        return Err(invalid(
+            "a CSV file's columns are the question ids of --questions, and no --questions file is given".into(),
+        ));
+    };
+    let mut records = csv_records(text, file)?.into_iter();
+    let (_, header) = records
+        .next()
+        .ok_or_else(|| invalid("it is empty; a CSV file starts with its header".into()))?;
+    let ids = || {
+        questions
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    if !header.iter().any(|column| column == STATE) {
+        return Err(invalid(format!(
+            "it has no {STATE} column; its header is {}",
+            header.join(",")
+        )));
+    }
+    for (i, column) in header.iter().enumerate() {
+        if header[..i].contains(column) {
+            return Err(invalid(format!("the column {column:?} appears twice")));
+        }
+        if column != STATE && !questions.contains_key(column) {
+            return Err(invalid(format!(
+                "the column {column:?} is neither {STATE} nor a question id of --questions ({})",
+                ids()
+            )));
+        }
+    }
+    let mut data = Data {
+        examples: Vec::new(),
+        unlabelled: 0,
+    };
+    for (line, cells) in records {
+        if cells.len() != header.len() {
+            return Err(DataError::Line {
+                file: file.to_string(),
+                line,
+                msg: format!("{} cells, and the header has {}", cells.len(), header.len()),
+            });
+        }
+        let mut fields = serde_json::Map::new();
+        let mut answers = serde_json::Map::new();
+        for (column, cell) in header.iter().zip(cells) {
+            if column == STATE {
+                fields.insert(STATE.into(), Value::String(cell));
+                continue;
+            }
+            let noul = questions[column]["type"] == "noul";
+            let label = match cell.as_str() {
+                "" => Value::Null,
+                "true" | "false" if noul => Value::Bool(cell == "true"),
+                _ => Value::String(cell),
+            };
+            answers.insert(column.clone(), label);
+        }
+        fields.insert("answers".into(), Value::Object(answers));
+        match read_fields(fields, line, file, Some(questions), decider)? {
+            Some(example) => data.examples.push(example),
+            None => data.unlabelled += 1,
+        }
+    }
+    enough(data, file)
+}
+
+/// The column of a CSV file that holds each record's state.
+const STATE: &str = "state";
+
+/// The records of the CSV `text` (RFC 4180, a leading byte order mark skipped), each with the file line it starts on
+/// and its cells; a blank line is no record.
+fn csv_records(text: &str, file: &str) -> Result<Vec<(usize, Vec<String>)>, DataError> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let at_line = |line: usize, msg: &str| DataError::Line {
+        file: file.to_string(),
+        line,
+        msg: msg.to_string(),
+    };
+    let mut records = Vec::new();
+    let mut chars = text.chars().peekable();
+    let mut line = 1;
+    while chars.peek().is_some() {
+        let start = line;
+        let mut cells = Vec::new();
+        loop {
+            let mut cell = String::new();
+            if chars.peek() == Some(&'"') {
+                chars.next();
+                loop {
+                    match chars.next() {
+                        Some('"') if chars.peek() == Some(&'"') => {
+                            chars.next();
+                            cell.push('"');
+                        }
+                        Some('"') => break,
+                        Some(c) => {
+                            line += usize::from(c == '\n');
+                            cell.push(c);
+                        }
+                        None => return Err(at_line(start, "a quoted cell is never closed")),
+                    }
+                }
+                if !matches!(chars.peek(), None | Some(',' | '\r' | '\n')) {
+                    return Err(at_line(line, "text after a quoted cell's closing quote"));
+                }
+            } else {
+                while let Some(&c) = chars.peek() {
+                    if matches!(c, ',' | '\r' | '\n') {
+                        break;
+                    }
+                    cell.push(c);
+                    chars.next();
+                }
+            }
+            cells.push(cell);
+            match chars.next() {
+                Some(',') => continue,
+                Some('\r') if chars.peek() == Some(&'\n') => {
+                    chars.next();
+                }
+                _ => {}
+            }
+            line += 1;
+            break;
+        }
+        if cells != [""] {
+            records.push((start, cells));
+        }
+    }
+    Ok(records)
 }
 
 /// The examples of each split, in line order.
@@ -694,6 +870,185 @@ mod tests {
         assert_eq!(
             read_questions("[]", "q.json").unwrap_err().to_string(),
             "q.json: a questions file is a map of question id to question spec, or a /v1/systemone body"
+        );
+    }
+
+    /// One CSV cell: quoted when it holds a comma, a quote or a line break, its quotes doubled.
+    fn cell(text: &str) -> String {
+        if text.contains([',', '"', '\r', '\n']) {
+            format!("\"{}\"", text.replace('"', "\"\""))
+        } else {
+            text.to_string()
+        }
+    }
+
+    /// 121 lines of the shared questions as JSONL and as CSV records ending in `eol`, with the file line each record
+    /// starts on: states with commas, quotes and line breaks; each question labelled on some lines and left out (null,
+    /// an empty cell) on others, `order` never (no column); a list level by its index (a JSON integer, a cell `2`), a
+    /// legend's by its key; the last line labelling nothing.
+    fn twins(eol: &str) -> (String, String, Vec<usize>) {
+        let mut jsonl = Vec::new();
+        let mut csv = format!("state,team,refund,mood,urgency{eol}");
+        let mut starts = Vec::new();
+        let mut line = 2;
+        for i in 0..121 {
+            let state = match i % 4 {
+                0 => format!("ticket {i}, \"urgent\""),
+                1 => format!("ticket {i}\nsecond line"),
+                _ => format!("ticket {i}"),
+            };
+            let labelled = i < 120;
+            let team = labelled.then(|| ["billing", "sales", "tech"][i % 3]);
+            let refund = (labelled && i % 2 == 0).then_some(i % 4 == 0);
+            let mood = (labelled && i % 3 != 1).then_some(i % 3);
+            let urgency = (labelled && i % 5 == 0).then(|| ["1", "3", "5"][i % 3]);
+            jsonl.push(json!({
+                "state": state,
+                "answers": {"team": team, "refund": refund, "mood": mood, "urgency": urgency},
+            }));
+            let cells = [
+                cell(&state),
+                team.unwrap_or_default().to_string(),
+                refund.map_or_else(String::new, |yes| yes.to_string()),
+                mood.map_or_else(String::new, |level| level.to_string()),
+                urgency.unwrap_or_default().to_string(),
+            ];
+            starts.push(line);
+            line += 1 + state.matches('\n').count();
+            csv.push_str(&cells.join(","));
+            csv.push_str(eol);
+        }
+        (lines(&jsonl), csv, starts)
+    }
+
+    /// R3.1: a CSV of a `state` column and a column per question id of `--questions`, its cells written as the JSONL
+    /// line's labels and an empty cell unlabelled, gives the same examples as the matching JSONL (each numbered by the
+    /// file line its record starts on, the header being line 1), so the same split and the same training rows; with
+    /// `\r\n` record ends too.
+    #[test]
+    fn csv_matches_jsonl() {
+        let decider = decider_2b();
+        let shared = questions();
+        for eol in ["\n", "\r\n"] {
+            let (jsonl, csv, starts) = twins(eol);
+            let from_jsonl = read_jsonl(&jsonl, "data.jsonl", Some(&shared), &decider).unwrap();
+            let from_csv = read_csv(&csv, "data.csv", Some(&shared), &decider).unwrap();
+            assert_eq!((from_csv.examples.len(), from_csv.unlabelled), (120, 1));
+            assert_eq!(from_jsonl.unlabelled, 1);
+            assert_eq!(from_jsonl.examples.len(), from_csv.examples.len());
+            for ((csv, jsonl), start) in from_csv
+                .examples
+                .iter()
+                .zip(&from_jsonl.examples)
+                .zip(&starts)
+            {
+                assert_eq!(csv.line, *start);
+                assert_eq!(csv.request, jsonl.request, "line {start}");
+                assert_eq!(csv.labels, jsonl.labels, "line {start}");
+                assert_eq!(
+                    training_rows(&decider, csv).unwrap(),
+                    training_rows(&decider, jsonl).unwrap(),
+                    "line {start}"
+                );
+            }
+            let states = |examples: &[&Example]| -> Vec<Value> {
+                examples.iter().map(|e| e.request.state.clone()).collect()
+            };
+            let (a, b) = (split(&from_csv.examples), split(&from_jsonl.examples));
+            for (a, b) in [
+                (&a.train, &b.train),
+                (&a.calibration, &b.calibration),
+                (&a.test, &b.test),
+            ] {
+                assert_eq!(states(a), states(b));
+            }
+        }
+        // A byte order mark, as spreadsheets write it, is no part of the header.
+        let (_, csv, _) = twins("\n");
+        let marked = read_csv(
+            &format!("\u{feff}{csv}"),
+            "data.csv",
+            Some(&shared),
+            &decider,
+        )
+        .unwrap();
+        assert_eq!(marked.examples.len(), 120);
+    }
+
+    /// R3.1: a CSV without `--questions`, without a `state` column, with a column that is no question id (or one named
+    /// twice) is refused naming it; a record whose cells are not the header's, a label its question does not take
+    /// and a quoted cell never closed are named by their line (and question).
+    #[test]
+    fn csv_errors_name_the_column() {
+        let decider = decider_2b();
+        let shared = questions();
+        let records: String = (0..120)
+            .map(|i| {
+                format!(
+                    "ticket {i},{},{}\n",
+                    ["billing", "sales"][i % 2],
+                    i % 2 == 0
+                )
+            })
+            .collect();
+        let err = |text: &str, questions: Option<&IndexMap<String, Value>>| {
+            read_csv(text, "data.csv", questions, &decider)
+                .unwrap_err()
+                .to_string()
+        };
+        let good = format!("state,team,refund\n{records}");
+        assert_eq!(
+            read_csv(&good, "data.csv", Some(&shared), &decider)
+                .unwrap()
+                .examples
+                .len(),
+            120
+        );
+        assert_eq!(
+            err(&good, None),
+            "data.csv: a CSV file's columns are the question ids of --questions, and no --questions file is given"
+        );
+        assert_eq!(
+            err(&format!("ticket,team,refund\n{records}"), Some(&shared)),
+            "data.csv: it has no state column; its header is ticket,team,refund"
+        );
+        assert_eq!(
+            err(&format!("state,team,refnd\n{records}"), Some(&shared)),
+            "data.csv: the column \"refnd\" is neither state nor a question id of --questions (team, refund, mood, \
+             urgency, order)"
+        );
+        assert_eq!(
+            err(&format!("state,team,team\n{records}"), Some(&shared)),
+            "data.csv: the column \"team\" appears twice"
+        );
+        assert_eq!(
+            err("", Some(&shared)),
+            "data.csv: it is empty; a CSV file starts with its header"
+        );
+        let with = |at: usize, record: &str| {
+            let mut lines: Vec<&str> = good.lines().collect();
+            lines.insert(at, record);
+            lines.join("\n")
+        };
+        assert_eq!(
+            err(&with(2, "ticket,billing"), Some(&shared)),
+            "data.csv:3: 2 cells, and the header has 3"
+        );
+        assert_eq!(
+            err(&with(3, "ticket,billing,yes"), Some(&shared)),
+            "data.csv:4: question refund: a noul label is true or false, got 'yes'"
+        );
+        assert_eq!(
+            err(&with(4, "ticket,legal,true"), Some(&shared)),
+            "data.csv:5: question team: 'legal' is not one of its options (billing, sales, tech)"
+        );
+        assert_eq!(
+            err(&with(5, "\"ticket, unclosed,billing,true"), Some(&shared)),
+            "data.csv:6: a quoted cell is never closed"
+        );
+        assert_eq!(
+            err(&with(5, "\"ticket\" 7,billing,true"), Some(&shared)),
+            "data.csv:6: text after a quoted cell's closing quote"
         );
     }
 

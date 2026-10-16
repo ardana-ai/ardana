@@ -55,6 +55,16 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   it gives). A label is the option's name (choice), `true`/`false` (noul), the level's name for a score, its index for
   list criteria (a JSON integer or string) and its key for a legend, or `null`. `Names::Score` carries those level
   names in level order.
+- A `.csv` data file (`read_csv`, by the extension) holds the same lines: a header naming `state` and a column per
+  question id of `--questions`, which a CSV always takes (refused without it, naming the flag), one record a line
+  (RFC 4180: a quoted cell may hold commas, doubled quotes and line breaks; `\r\n` ends and a leading byte order mark
+  read too). A record stands for `{"state": <its state cell>, "answers": {<column>: <cell>}}` and goes through the
+  JSONL line's own reader (`read_fields`): a noul's `true`/`false` cell is the JSON boolean, any other cell a string
+  (a list level's index reads as its name), an empty cell `null`; a question without a column is never labelled. A
+  missing `state` column, a column no question has and a column named twice are refused naming it, a record whose
+  cells are not the header's naming its line. The example's `line` is the file line its record starts on (the header
+  is line 1), so the split and the rows are those of the JSONL lines. No CSV crate: the reader is the few lines the
+  format needs.
 - `read_jsonl` checks each labelled line with `Decider::plan` on the base's own tokenizer and profile and each label
   against its rendered question; an error is `<file>:<line>: question <id>: <msg>` (`DataError`). A line whose
   answers are all `null` is counted and skipped; fewer than 100 labelled lines are refused; an option with fewer
@@ -65,19 +75,43 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   that token alone; an isolated level's row takes `yes` (label `B`) for the gold level and `no` (`A`) for the others.
   `Plan::row_questions` names each row's question and level; a decision model's plan has no rows.
 - Everything about the data happens before the environment and the checkpoint's weights (R1.4): the order of a run is
-  the name (Q27), the base's listing, tokenizer and profile, the data, the environment, the checkpoint, training.
+  the name (Q27), the base's checkpoint (listing and `config.json`), tokenizer and profile, the data, the environment, the checkpoint, training.
 
 ### Base
-- `ardana_registry::base::base` takes a library size: its checkpoint is the size's `source` (decider), else its
-  `tokenizer` (instruct sizes: the whole repository at a commit); a size with neither is refused (decider:4b). The
-  checkpoint is listed at its pinned commit and refused as a decision model when the listing holds
-  `rl_agent_config.json` (Q17); an `hf.co/<org>/<repo>` reference is listed first for the same refusal.
-- The base's profile is the one `ardana pull` derives: the size's tokenizer at its pin, else the GGUF repository's;
-  `decider_config.json` from the GGUF repository when the size names no layout. The quant is the size's default.
+- `ardana_registry::base::base` takes every model `ardana` runs (Q6), looked up as a library size, then a registry
+  entry (exactly its name), then a reference (`refs.rs`), and finds its transformers checkpoint (Q15):
+  - a library size: the size's `source` (decider), else its `tokenizer` (instruct sizes: the whole repository at a
+    commit); a size with neither (decider:4b) is refused naming `--checkpoint` (Q18);
+  - `hf.co/<org>/<repo>` of a safetensors checkpoint (`config.json`, no GGUF): itself, at `main`;
+  - an `hf.co/` GGUF reference, and an entry whose `source` is one: the `base_model` of the repository's card
+    (`README.md` front matter, read at `main`, `Card::parse`: a scalar, a flow list or a block list) when it names
+    exactly one repository, listed at `main`; a card naming none or several, or no card, is refused naming
+    `--checkpoint`;
+  - an `ollama:` reference, a local GGUF file, an entry pulled from either: none, refused naming `--checkpoint`.
+  `--checkpoint hf.co/<org>/<repo>` (at `main`) or `--checkpoint <dir>` (a directory holding `config.json` and the
+  safetensors `snapshot::weight_files` names, made absolute) wins over any of them. Every refusal names both forms.
+- The checkpoint is opened before any weight: refused as a decision model when its listing (or directory) holds
+  `rl_agent_config.json` (Q17), refused when it has no `config.json`, whose bytes are fetched (no weight) and read
+  for `auto_map`: a checkpoint that has it loads by running the Python files it ships, so without
+  `--trust-remote-code` it is refused naming the flag and those files (Q14), the hub cache holding no weight file.
+- `finetune.json#checkpoint` is `{"repo", "commit"}` for a Hub checkpoint (the commit its listing read) and
+  `{"path"}` for a directory; the run prints `fine-tuning <base> from the checkpoint <it>` once the base is read.
+- The base's profile is the one `ardana pull` derives: a library size's from its tokenizer at its pin, else the GGUF
+  repository's, `decider_config.json` from the GGUF repository when the size names no layout; an entry's as recorded
+  (its files checked in place); a reference's from the `tokenizer.json` and `decider_config.json` its repository (or
+  directory) holds, else the checkpoint's tokenizer, in the plain layout with a `decider_config.json`, else chat.
+- The quant (Q24) is a library size's default, else the quant an `hf.co/` reference (or an entry's source) names,
+  else the `QUANTS` entry the base GGUF's file name ends in (`-Q8_0.gguf`), else `q4_k_m`; a quant ardana does not
+  write is refused naming `--quant`. The license is a size's own (else its family's), else the `license` of the base
+  repository's card, else of the checkpoint's.
 - `Base::download` fetches `config.json`, the safetensors its index names (else `model.safetensors`) and every other
-  root file but weights of other formats, at the pinned commit, into the hub cache.
-- The base the report reads is pulled right after the checkpoint, as `ardana run <base>` pulls it (`pull_first`): the
-  size's default quant, its profile, recorded under its canonical name; an entry already pulled is used as it is.
+  root file but weights of other formats (the card, the license, a remote-code checkpoint's `*.py`), at the listed
+  commit, into the hub cache; a directory is read in place.
+- The base the report reads comes right after the checkpoint (`BaseModel`): a library size as `ardana run <base>`
+  pulls it (`pull_first`: the default quant, its profile, recorded under its canonical name; an entry already pulled
+  used as it is); an entry as recorded; a reference resolved as `ardana pull <reference> [--tokenizer <checkpoint>]
+  --layout <its layout>` resolves it (`ardana_registry::pull`, downloading the GGUF), not recorded: a reference has no
+  canonical name to record it under, and `ardana run` takes names.
 - A multimodal checkpoint (`config.json` names a `*ForConditionalGeneration` and holds a `text_config`, Qwen3.5's
   `Qwen3_5ForConditionalGeneration`) trains its text tower alone, the model Ardana runs: `work/<name>/text/` holds the
   `text_config` as `config.json` (its `architectures` the `*ForCausalLM` of the same prefix) and links to the
@@ -99,16 +133,20 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   True --metric_for_best_model eval_loss --greater_is_better False` (the epoch with the lowest calibration loss is the
   adapter saved), `--dtype float32 --bf16 False --use_cpu True` (TRL turns bf16 on by default), `--max_length` the
   longest row (TRL's default of 1,024 would cut a long state's answer token off), `--report_to none`.
+- `--trust_remote_code True` only under `--trust-remote-code` (TRL's `SFTConfig` field, forwarded to
+  `from_pretrained` and `AutoProcessor`): transformers then imports the checkpoint's own modules from its snapshot
+  directory into `HF_HOME/modules`, the run's working directory, never the venv.
 - `--gradient_checkpointing False` on the CPU: TRL turns it on by default, which on Qwen3-0.6B costs 22 s a step of 8
   rows instead of 16 s, and the CPU's memory is the system's.
 
 ### Merge, GGUF and quantization
-- `merge.py <checkpoint> <adapter> <out> <dtype>` loads the base with TRL's `create_model_from_path` (the class and
-  dtype the trainer used), the adapter with `PeftModel.from_pretrained`, and saves `merge_and_unload()` with
+- `merge.py <checkpoint> <adapter> <out> <dtype> [--trust-remote-code]` loads the base with TRL's
+  `create_model_from_path` (the class and dtype the trainer used, `trust_remote_code` only under the flag), the adapter with `PeftModel.from_pretrained`, and saves `merge_and_unload()` with
   `save_pretrained`: neither TRL nor PEFT has a merge command. The checkpoint's other root files (the tokenizer's) are
   copied beside it for the converter.
 - `convert_hf_to_gguf.py <merged> --outtype f32 --model-name <name> --outfile <name>-float32.gguf`, at the training
-  dtype; `--no-nextn` only when `config.json` (or its `text_config`) declares `mtp_num_hidden_layers` or
+  dtype (it has no remote-code flag: it reads `config.json` itself when `AutoConfig` will not, and its own
+  architecture classes, `conversion/spark2_5.py` among them, convert the merged weights); `--no-nextn` only when `config.json` (or its `text_config`) declares `mtp_num_hidden_layers` or
   `num_nextn_predict_layers` above 0: the converter refuses the flag for an architecture without an MTP head.
 - `ardana_llama::quantize` calls `llama_model_quantize` from `llama-cpp-sys-2` (llama-cpp-2 wraps no quantization)
   with llama.cpp's default parameters and the file type `--quant` names, by default the base's own GGUF quant (Q24).
@@ -164,20 +202,40 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   its `calibrate::tests` (`fitted_temperatures_minimize_nll`: on records of every kind, each fitted value's NLL at most
   that at ±0.05 and at 1.0, the type under 50 records left out; `records_read_what_the_response_reports`: a record at
   a temperature gives the probabilities `Decider::run` reports at it, and `Metrics` follows `metrics.py`) and
-  `crates/ardana/tests/finetune.rs` (`refuses_bad_data_before_downloading`, `refuses_taken_names`), offline on the
-  tokenizers `cargo xtask fetch` installs.
+  `finetune::tests::csv_matches_jsonl` (the CSV twin of 121 JSONL lines, `\n` and `\r\n`, gives the same requests,
+  labels, split and rows, its lines one on), `csv_errors_name_the_column`, `ardana-registry`'s
+  `base::tests::cards_name_their_base_models`, and `crates/ardana/tests/finetune.rs`
+  (`refuses_bad_data_before_downloading`, `refuses_taken_names`, `unknown_checkpoint_names_the_flag`: an `ollama:`
+  reference in a store of the test's own, a stand-in GGUF and decider:4b refused naming `--checkpoint` with the hub
+  cache unchanged, then the first two read on to their data with `--checkpoint`; `entry_resolves_checkpoint_from_card`:
+  an entry recorded from `hf.co/Qwen/Qwen3-1.7B-GGUF:Q8_0`, its GGUF a stand-in, resolves to `hf.co/Qwen/Qwen3-1.7B`
+  at the cached commit through the cached card), offline on the files `cargo xtask fetch` installs, the
+  `Qwen/Qwen3-1.7B-GGUF` card among them.
 - `cargo xtask e2e finetune` runs `xtask/src/e2e.rs#FINETUNE_FIXTURES` in order with the release `ardana`, online, on
   one home `tmp/e2e/finetune/home` (removed when the suite ends, also on failure) over `tmp/hf`, under the home guard.
   It writes the first 1,000 lines of decider@23579f7's `teacher_data/commands.jsonl` (`tmp/src/decider`) as
   `commands.jsonl` and their two shared questions (`risk`, a safe/caution/destructive choice, and `outside`, a noul) as
-  `commands.questions.json`, and the first 200 lines of its `teacher_data/custom_questions.jsonl` as `custom.jsonl`,
+  `commands.questions.json`, the same lines as `commands.csv` (`state,risk,outside`, cells quoted as RFC 4180 has
+  them), and the first 200 lines of its `teacher_data/custom_questions.jsonl` as `custom.jsonl`,
   each line with its own noul, choice and score questions (ids `q1`, `q2`, ... in its order), in `tmp/e2e/finetune/`,
   which a row's `args` name relative to it. Then it starts one `ardana serve` on the home (`Server::start_on`,
   offline), which runs until the suite ends.
 - The rows, in order: `qwen3:0.6b` (commands data, `cmd-risk`, `Gain::Above`), `thx-01` (refused,
   `Gain::Unchecked`), `decider:0.8b` (the custom data, plain layout with isolated levels, `--epochs 1`,
   `Gain::Within(0.05)`: its training mixture holds the custom component, so the row checks for no loss) and
-  `qwen3.5:0.8b` (commands data, the multimodal checkpoint, chat layout, `Gain::Above`).
+  `qwen3.5:0.8b` (commands data, the multimodal checkpoint, chat layout, `Gain::Above`), `hf.co-gguf`
+  (`hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, `cmd-risk-gguf`, `Gain::Unchecked`: R3.2 asks that it answers)
+  and `spark-x2.5:1.7b` (`Spark2_5ForCausalLM`, whose `config.json` has `auto_map`, `--trust-remote-code --epochs 1`,
+  `Gain::Unchecked`). A row whose args hold `--trust-remote-code` first runs without it, which must exit 1 naming the
+  flag with no weight file reaching the hub cache. A row whose base is an `hf.co/` GGUF reference, once its runs are
+  checked, fine-tunes `<name>-local` from that GGUF's file in the hub cache with `--checkpoint <the snapshot
+  directory of the checkpoint its finetune.json recorded>` and `--epochs 1`, run to the end and checked the same way.
+- What a model is checked against (`Cli::expected`): a library size's entry; for an `hf.co/` GGUF reference the card
+  in the hub cache (its one `base_model` the checkpoint, `{"repo", "commit"}` with the commit of the one cached
+  snapshot holding `config.json`, its `license`), the quant the reference names, the checkpoint's tokenizer files
+  unless the GGUF repository has its own, chat unless it has `decider_config.json`; for a local GGUF `{"path"}` of
+  `--checkpoint`, the quant its file name ends in and the checkpoint card's `license`. The report's base is the
+  reference as given (a reference is resolved, not recorded), the model's layout the expected one.
 - An `Expect::Answers` row runs three fine-tunes: one interrupted with SIGINT once the trainer's progress bar is past
   its first step (it also installs the environment, which the row then checks: uv 0.13.1, CPython 3.12 from
   `python/`, the Q29 pins by `importlib.metadata`, the converter's three parts), one whose trainer exits 1 because

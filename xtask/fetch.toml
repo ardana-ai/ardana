@@ -175,7 +175,8 @@ repo = "Qwen/Qwen3.8-27B"
 revision = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
 files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
 
-# The Candle runtime's acceptance checkpoint (safetensors) and the GGUF it is compared with, qwen3:1.7b's.
+# The Candle runtime's acceptance checkpoint (safetensors) and the GGUF it is compared with, qwen3:1.7b's; the GGUF
+# repository's card (README.md), whose base_model `ardana finetune` reads as the checkpoint of an entry pulled from it.
 [[hf]]
 repo = "Qwen/Qwen3-1.7B"
 revision = "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
@@ -191,7 +192,7 @@ files = [
 [[hf]]
 repo = "Qwen/Qwen3-1.7B-GGUF"
 revision = "90862c4b9d2787eaed51d12237eafdfe7c5f6077"
-files = ["Qwen3-1.7B-Q8_0.gguf"]
+files = ["Qwen3-1.7B-Q8_0.gguf", "README.md"]
 
 [[hf]]
 repo = "ardana-ai/decider-0.8b-ONNX"

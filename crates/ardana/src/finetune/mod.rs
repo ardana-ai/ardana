@@ -1,6 +1,7 @@
-//! `ardana finetune`: a LoRA fine-tune of a library size into a System One model (Q1, Q7). The data is read and
-//! checked against the base's own tokenizer and profile before anything heavy happens, every labelled question
-//! becoming the rows `Decider::plan` builds ([`ardana_core::finetune`]); then the environment in
+//! `ardana finetune`: a LoRA fine-tune of any model `ardana` runs into a System One model (Q1, Q6, Q7), from the
+//! transformers checkpoint the base names or `--checkpoint` does ([`ardana_registry::base`]). The data, JSONL or CSV,
+//! is read and checked against the base's own tokenizer and profile before anything heavy happens, every labelled
+//! question becoming the rows `Decider::plan` builds ([`ardana_core::finetune`]); then the environment in
 //! `$ARDANA_HOME/finetune/` is built or reused ([`env`]), the base's checkpoint downloads to the Hugging Face cache,
 //! TRL's `sft` script trains the adapter on those rows, `merge.py` merges it, llama.cpp's converter writes the GGUF and
 //! the linked llama.cpp quantizes it. Its temperatures are then fitted on the calibration split through that GGUF,
@@ -21,8 +22,9 @@ use anyhow::{Context, Result, bail, ensure};
 use ardana_core::calibrate::Fitted;
 use ardana_core::finetune::{self, Example, TrainingRow};
 use ardana_core::{Decider, Layout};
-use ardana_registry::base::Base;
-use ardana_registry::library::{LibraryClient, library_name};
+use ardana_registry::base::{Base, BaseModel, BaseOptions, Checkpoint};
+use ardana_registry::library::{Library, LibraryClient, library_name};
+use ardana_registry::refs::{DEFAULT_QUANT, matches_quant};
 use ardana_registry::{LayoutKind, Named, PullOptions, Registry, ResolvedModel, TOKENIZER_EXTRAS};
 use clap::Args;
 use serde_json::{Value, json};
@@ -49,10 +51,12 @@ const DTYPE: &str = "float32";
 
 #[derive(Debug, Args)]
 pub struct FinetuneArgs {
-    /// The library size to fine-tune, <family>:<size>
+    /// The model to fine-tune: a library size <family>:<size>, a pulled model's name, hf.co/<org>/<repo>[:<quant>],
+    /// hf.co/<org>/<repo>:<file>.gguf, ollama:[<namespace>/]<name>[:<tag>] or a local GGUF file
     #[arg(value_name = "BASE")]
     pub base: String,
-    /// The labelled data: a JSONL file, one state with its answers a line
+    /// The labelled data: a JSONL file, one state with its answers a line, or a CSV file (.csv) with a state column
+    /// and a column per question id of --questions
     #[arg(value_name = "DATA")]
     pub data: PathBuf,
     /// The name to register the model under, which no pulled model or library model may hold
@@ -67,6 +71,13 @@ pub struct FinetuneArgs {
     /// The GGUF's quant, a llama.cpp file type (q8_0, q4_k_m, ...); default the base's own GGUF quant
     #[arg(long)]
     pub quant: Option<String>,
+    /// The transformers checkpoint to train from, hf.co/<org>/<repo> or a directory; default the one the base names
+    #[arg(long, value_name = "CHECKPOINT")]
+    pub checkpoint: Option<String>,
+    /// Let a checkpoint whose config.json has auto_map run the Python code it ships, as transformers' option of the
+    /// same name does
+    #[arg(long)]
+    pub trust_remote_code: bool,
 }
 
 /// `ardana finetune`, on Linux and macOS (Q21).
@@ -92,18 +103,34 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     let client = LibraryClient::from_env()?;
     let name = args.name.as_str();
     let models = home.join(MODELS_DIR).join(name);
-    free_name(name, &Registry::open(&home)?, &client, &models).await?;
+    let registry = Registry::open(&home)?;
+    free_name(name, &registry, &client, &models).await?;
     if let Some(quant) = &args.quant {
-        quant_is_written(quant)?;
+        quant_is_written(quant, &format!("--quant {quant}"))?;
     }
 
-    // The base's tokenizer and profile, then the data, before anything heavy (R1.4).
+    // The base's checkpoint, tokenizer and profile, then the data, before anything heavy (R1.4).
     let library = client.lookup(&args.base).await?;
+    let opts = BaseOptions {
+        checkpoint: args.checkpoint.as_deref(),
+        trust_remote_code: args.trust_remote_code,
+        progress: true,
+    };
     let base = interrupt
-        .or(async { Ok(ardana_registry::base::base(&args.base, &library, true).await?) })
+        .or(async { Ok(ardana_registry::base::base(&args.base, &library, &registry, opts).await?) })
         .await?;
-    let quant = args.quant.clone().unwrap_or_else(|| base.quant.clone());
-    quant_is_written(&quant)?;
+    eprintln!(
+        "fine-tuning {} from the checkpoint {}",
+        base.name, base.checkpoint
+    );
+    let quant = match &args.quant {
+        Some(quant) => quant.clone(),
+        None => {
+            let quant = base_quant(&base);
+            quant_is_written(&quant, &format!("the base's own quant {quant}"))?;
+            quant
+        }
+    };
     let decider = Decider::new(
         ardana_registry::load_tokenizer(&base.tokenizer)?,
         base.profile.clone(),
@@ -135,17 +162,33 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     );
 
     let env = env::prepare(&home, &mut interrupt).await?;
-    eprintln!(
-        "downloading the checkpoint {} at {}",
-        base.checkpoint.repo, base.checkpoint.commit
-    );
+    match &base.checkpoint {
+        Checkpoint::Hub(_) => eprintln!("downloading the checkpoint {}", base.checkpoint),
+        Checkpoint::Dir { .. } => eprintln!("reading the checkpoint {}", base.checkpoint),
+    }
     let checkpoint = interrupt
         .or(async { Ok(base.download(true).await?) })
         .await?;
-    // The base the report reads, as `ardana run <base>` reads it: its default quant and profile, pulled when missing.
-    let pulled = match Registry::open(&home)?.named(&base.name, &library)? {
-        Named::Pulled(model) => model.clone(),
-        Named::Library(pick) => interrupt.or(crate::pull_first(&pick)).await?,
+    // The base the report reads, as `ardana run` reads it: a library size in its default quant and profile, pulled when
+    // missing; an entry as recorded; a reference as `ardana pull` resolves it (downloaded, not recorded).
+    let pulled = match &base.model {
+        BaseModel::Library(_) => match Registry::open(&home)?.named(&base.name, &library)? {
+            Named::Pulled(model) => model.clone(),
+            Named::Library(pick) => interrupt.or(crate::pull_first(&pick)).await?,
+        },
+        BaseModel::Pulled(model) => (**model).clone(),
+        BaseModel::Reference { reference, opts } => {
+            eprintln!("reading the base {reference} as `ardana pull` reads it");
+            let runtimes = crate::runtimes();
+            interrupt
+                .or(async {
+                    Ok(
+                        ardana_registry::pull(reference, opts, &runtimes, &Library::empty())
+                            .await?,
+                    )
+                })
+                .await?
+        }
     };
 
     let work = Work::create(env.work(name))?;
@@ -201,6 +244,9 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         // On the CPU, memory is the system's; recomputing activations would cost a quarter of the time.
         .args(["--gradient_checkpointing", "False"])
         .args(["--report_to", "none"]);
+    if args.trust_remote_code {
+        trainer.args(["--trust_remote_code", "True"]);
+    }
     env::run(&mut trainer, &mut interrupt, "the trainer (TRL sft)").await?;
 
     let merged = work.dir.join("merged");
@@ -214,6 +260,9 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         .arg(&adapter)
         .arg(&merged)
         .arg(DTYPE);
+    if args.trust_remote_code {
+        merge.arg("--trust-remote-code");
+    }
     env::run(&mut merge, &mut interrupt, "merging the adapter (merge.py)").await?;
     copy_tokenizer_files(&trained, &merged)?;
 
@@ -405,11 +454,26 @@ async fn free_name(
     Ok(())
 }
 
-/// Refuses a quant the linked llama.cpp does not write.
-fn quant_is_written(quant: &str) -> Result<()> {
+/// The quant a run writes without `--quant` (Q24): the quant of the base's own GGUF, which the library or the
+/// reference names or the GGUF's file name ends in (`-Q8_0.gguf`), else q4_k_m.
+fn base_quant(base: &Base) -> String {
+    base.quant
+        .clone()
+        .or_else(|| {
+            let file = base.gguf.as_deref()?;
+            ardana_llama::QUANTS
+                .iter()
+                .find(|(quant, _)| matches_quant(file, quant))
+                .map(|(quant, _)| quant.to_string())
+        })
+        .unwrap_or_else(|| DEFAULT_QUANT.to_ascii_lowercase())
+}
+
+/// Refuses a quant, `what` naming where it comes from, that the linked llama.cpp does not write.
+fn quant_is_written(quant: &str, what: &str) -> Result<()> {
     ensure!(
         ardana_llama::is_quant(quant),
-        "--quant {quant} is no llama.cpp file type ardana writes; the quants are {}",
+        "{what} is no llama.cpp file type ardana writes; --quant takes {}",
         ardana_llama::QUANTS
             .iter()
             .map(|(name, _)| *name)
@@ -419,7 +483,7 @@ fn quant_is_written(quant: &str) -> Result<()> {
     Ok(())
 }
 
-/// The data file and the `--questions` file, read and checked.
+/// The data file (CSV by its `.csv` extension, else JSONL) and the `--questions` file, read and checked.
 fn read_data(args: &FinetuneArgs, decider: &Decider) -> Result<finetune::Data> {
     let questions = match &args.questions {
         Some(path) => {
@@ -434,12 +498,16 @@ fn read_data(args: &FinetuneArgs, decider: &Decider) -> Result<finetune::Data> {
     };
     let text = std::fs::read_to_string(&args.data)
         .with_context(|| format!("reading {}", args.data.display()))?;
-    Ok(finetune::read_jsonl(
-        &text,
-        &args.data.display().to_string(),
-        questions.as_ref(),
-        decider,
-    )?)
+    let file = args.data.display().to_string();
+    let csv = args
+        .data
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("csv"));
+    Ok(if csv {
+        finetune::read_csv(&text, &file, questions.as_ref(), decider)?
+    } else {
+        finetune::read_jsonl(&text, &file, questions.as_ref(), decider)?
+    })
 }
 
 /// The training rows of `examples`, in line order.

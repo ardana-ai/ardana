@@ -4,7 +4,7 @@ Ardana is a local-first tool that pulls and runs open System 1 decision models (
 way Ollama does, from one `ardana` Rust binary that serves them over an HTTP API (compatible with Jev and TypeSafe
 clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime` abstraction (GGUF
 files) and Candle the second (safetensors causal LMs, and the THX-01 decision model); Qwen3.5 is the first model family.
-`ardana finetune` turns a library size into a calibrated model of the user's own (TRL in a venv it builds, llama.cpp's
+`ardana finetune` turns any model it runs into a calibrated model of the user's own (TRL in a venv it builds, llama.cpp's
 converter, the linked quantizer, temperatures fitted and a test report against the base). Planning documents live in
 gitignored `*-prd/` folders; when one is present locally, its Decisions and Contracts are binding (as its Amendments
 change them) and its Requirements are the definition of done.
@@ -36,7 +36,8 @@ change them) and its Requirements are the definition of done.
   `cargo xtask fetch --check` verifies them. It also runs `npm ci` in `e2e/playground` (`@playwright/test`,
   `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it
   before `cargo test`: plain tests read the library models' (decider:2b, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8,
-  Llama 3.2) tokenizers, configs and chat templates, and Qwen3-1.7B's, from `tmp/hf`. `cargo xtask fetch --tests`
+  Llama 3.2) tokenizers, configs and chat templates, and Qwen3-1.7B's (with its GGUF repository's card, `README.md`,
+  whose `base_model` `ardana finetune` reads), from `tmp/hf`. `cargo xtask fetch --tests`
   installs only those files (every `[[hf]]` file but the GGUF, ONNX and safetensors weights, no token), which is what
   CI runs. No fetch installs weights: `[[hf]]` pins them, and the `cargo xtask e2e` suite that reads them downloads
   them into `tmp/hf` and removes them when it ends (`xtask/src/hub.rs`).
@@ -211,7 +212,15 @@ change them) and its Requirements are the definition of done.
   on 8 CPU cores), `thx-01` (`hf.co/doofz/THX-01` exits 1 named a decision model, no weight file reaching `tmp/hf`),
   `decider:0.8b` (`custom-decider` on the custom data, plain with isolated score levels, Q8_0, `--epochs 1`, at least
   the base's accuracy minus 0.05) and `qwen3.5:0.8b` (`cmd-risk-qwen3.5` on the commands data, the multimodal
-  `Qwen3_5ForConditionalGeneration` trained as its text tower, chat, Q4_0, above the base). Each row removes every
+  `Qwen3_5ForConditionalGeneration` trained as its text tower, chat, Q4_0, above the base), `hf.co-gguf`
+  (`cmd-risk-gguf` from `hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, the same lines as CSV: trained from
+  `Qwen/Qwen3-0.6B`, the `base_model` of the repository's card, recorded with its commit, the base answering as
+  `ardana pull` resolves the reference, not recorded; then `cmd-risk-gguf-local` from that GGUF's file in `tmp/hf`
+  with `--checkpoint <the checkpoint's snapshot directory>` and `--epochs 1`, recorded as `{"path"}`) and
+  `spark-x2.5:1.7b` (`cmd-risk-spark`, `--trust-remote-code --epochs 1`: first run without the flag, which exits 1
+  naming it with no weight file reaching `tmp/hf`, as `XHToken/Spark-X2.5-1.7B`'s `config.json` has `auto_map`; then
+  trained, converted and answering, Q8_0); both rows check that the model answers, not its accuracy. Each row removes
+  every
   entry it added (its model, the base it pulled), its model directory and every path it added under `tmp/hf/hub` when
   its checks end, also when one failed; a failed row does not stop the others).
 - `ardana pull <name|ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model
@@ -312,15 +321,29 @@ change them) and its Requirements are the definition of done.
   server.
   `models.toml` is reread when it changes, so a model `ardana pull` adds while `serve` runs is servable at once;
   models load on their first request and unload after `--keep-alive` idle.
-- `ardana finetune <library size> <data.jsonl> --name N [--questions F] [--epochs 2] [--quant Q]` (Linux and macOS;
-  elsewhere exit 1) trains a LoRA of the size's pinned transformers checkpoint (a decider size's `source`, an instruct
-  size's `tokenizer` repository) into a System One model (Q7): a data line is `{"state", "questions"?, "answers":
-  {<id>: <label>}}`, a line without questions asking `--questions` (a map, or a `/v1/systemone` body), a label the
-  option's name, `true`/`false`, a level's index or legend key, or `null`; the lines are split by line, seeded, 80/10/10
-  into train, calibration and test, under 100 labelled lines refused and an option under 50 training examples warned.
-  The name (an entry's, a library family's or a library name's is refused, Q27), the base's listing (a checkpoint
-  with `rl_agent_config.json` refused as a decision model), its tokenizer and profile and every line (errors name
-  `<file>:<line>` and the question) are checked before anything heavy. Then the first run builds
+- `ardana finetune <base> <data.jsonl|data.csv> --name N [--questions F] [--epochs 2] [--quant Q] [--checkpoint
+  hf.co/<org>/<repo>|<dir>] [--trust-remote-code]` (Linux and macOS; elsewhere exit 1) trains a LoRA of the base's
+  transformers checkpoint into a System One model (Q7). The base is any model `ardana` runs, looked up as a library
+  size, then a registry entry, then a reference: a library size trains from its pinned checkpoint (a decider size's
+  `source`, an instruct size's `tokenizer` repository), an `hf.co/<org>/<repo>` safetensors checkpoint from itself
+  (at `main`), an `hf.co/` GGUF reference and an entry pulled from one from the `base_model` its repository's card
+  (`README.md` front matter: a scalar, a flow or a block list) names when it names exactly one repository;
+  `--checkpoint` names it for any base (a Hub repository at `main`, or a directory with `config.json` and its
+  safetensors, recorded `{"path"}`), and an `ollama:` reference, a local GGUF file, decider:4b or a card naming none or
+  several are refused naming `--checkpoint`. A checkpoint whose `config.json` has `auto_map` is refused naming
+  `--trust-remote-code` before any weight downloads; with the flag the trainer and `merge.py` get
+  `trust_remote_code`. A base other than a library size reads its tokenizer and profile as `ardana pull` derives them
+  (an entry's as recorded; a GGUF without a `tokenizer.json` beside it the checkpoint's), its license from its card,
+  else the checkpoint's, and its quant from the reference or the GGUF's file name, else `q4_k_m`. A data line is
+  `{"state", "questions"?, "answers": {<id>: <label>}}`, a line without questions asking `--questions` (a map, or a
+  `/v1/systemone` body), a label the option's name, `true`/`false`, a level's index or legend key, or `null`; a
+  `.csv` file holds the same lines as a `state` column and a column per question id of `--questions` (required), each
+  cell a label, an empty cell unlabelled, a missing `state`, an unknown or repeated column refused; the lines are
+  split by line, seeded, 80/10/10 into train, calibration and test, under 100 labelled lines refused and an option
+  under 50 training examples warned. The name (an entry's, a library family's or a library name's is refused, Q27),
+  the base's checkpoint (its listing and `config.json`; a checkpoint with `rl_agent_config.json` refused as a decision
+  model), its tokenizer and profile and every line (errors name `<file>:<line>` and the question) are checked before
+  anything heavy. Then the first run builds
   `$ARDANA_HOME/finetune/` (uv 0.13.1 from its GitHub release and llama.cpp 26394b4's source archive for
   `convert_hf_to_gguf.py`, `conversion/` and `gguf-py/`, both sha256-checked against digests compiled in; uv's
   CPython 3.12 and a venv with the Q29 pins, torch from PyTorch's CPU wheels), which later runs reuse; the checkpoint
@@ -329,7 +352,8 @@ change them) and its Requirements are the definition of done.
   CPU, offline); `merge.py` merges (`merge_and_unload`); the converter writes an f32 GGUF and the linked
   `llama_model_quantize` the `--quant`, default the base's own GGUF quant. A multimodal checkpoint
   (`*ForConditionalGeneration` with a `text_config`, Qwen3.5's) trains, merges and converts as its text tower alone.
-  The base is pulled after the checkpoint as `ardana run <base>` pulls it (its default quant and profile). The GGUF's
+  The base the report reads comes after the checkpoint: a library size pulled as `ardana run <base>` pulls it (its
+  default quant and profile), an entry as recorded, a reference resolved as `ardana pull` resolves it, not recorded. The GGUF's
   temperatures are then fitted on the calibration split through the GGUF itself (Q30, decider's `fit_by_type`:
   `temperature` over every answer, a `temperature_by_type` entry for a type with 50 answers or more, by NLL over a
   log grid of 0.05 to 20 refined by golden section), and the base and the model answer the test split: stdout prints

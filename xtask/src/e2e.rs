@@ -247,7 +247,7 @@ pub enum Gain {
     Above,
     /// At least the base's minus this.
     Within(f64),
-    /// Not compared: the row makes no model.
+    /// Not compared: the row makes no model, or what it checks of its model is that it answers.
     Unchecked,
 }
 
@@ -306,6 +306,39 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
         ],
         expect: Expect::Answers,
         gain: Gain::Above,
+    },
+    // An `hf.co/` GGUF reference on the CSV data: its checkpoint the base_model its card names (Qwen/Qwen3-0.6B), then
+    // the same GGUF as a local file with `--checkpoint <that snapshot directory>` and `--epochs 1`.
+    FinetuneFixture {
+        name: "hf.co-gguf",
+        base: "hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0",
+        args: &[
+            finetune::COMMANDS_CSV,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-gguf",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Unchecked,
+    },
+    // A checkpoint whose `config.json` has `auto_map` (`Spark2_5ForCausalLM`): refused without `--trust-remote-code`,
+    // then trained with it, one epoch.
+    FinetuneFixture {
+        name: "spark-x2.5:1.7b",
+        base: "spark-x2.5:1.7b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-spark",
+            "--trust-remote-code",
+            "--epochs",
+            "1",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Unchecked,
     },
 ];
 
