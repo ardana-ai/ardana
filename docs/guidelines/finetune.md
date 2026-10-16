@@ -6,8 +6,9 @@ the training environment it builds under `$ARDANA_HOME/finetune/` (uv, uv's CPyt
 the TRL, PEFT and PyTorch run in it, the merge, the GGUF conversion and the quantization by the linked llama.cpp
 (`ardana-llama`'s `quantize`) or the safetensors checkpoint Candle runs (`--format safetensors`), the calibration
 and the test report (`crates/ardana-core/src/calibrate.rs`,
-`crates/ardana/src/finetune/evaluate.rs`), and the `cargo xtask e2e finetune` suite (`xtask/src/finetune.rs`). This is
-the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only harnesses.
+`crates/ardana/src/finetune/evaluate.rs`), `ardana push`, which publishes such a model to Hugging Face
+(`crates/ardana/src/push.rs`, `huggingface.md`), and the `cargo xtask e2e finetune` suite (`xtask/src/finetune.rs`).
+This is the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only harnesses.
 
 ## Versions
 - `uv` 0.13.1 (Q3) — downloaded by `ardana` from `https://github.com/astral-sh/uv/releases/download/0.13.1/`, the
@@ -279,6 +280,24 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   that directory with the entry (Q20).
 - Linux and macOS only (Q21): elsewhere the command exits 1 saying so.
 
+### Push
+- `ardana push <name> hf.co/<org>/<repo> [--public] [--dry-run]` takes only an entry `finetune::made` says `ardana
+  finetune` made (its weights in `$ARDANA_HOME/models/<name>/` beside a `finetune.json`, the test `ardana rm` uses),
+  GGUF and safetensors alike (Q28), and a target `Ref::parse` reads as a whole `hf.co/<org>/<repo>`; then, without
+  `--dry-run`, a token (`HF_TOKEN`, else `$HF_HOME/token`). Each refusal exits 1 before anything is printed or sent.
+- It uploads every file of the directory but `finetune.json`, by name at the repository's root, and `README.md`, the
+  card `push::card` writes from `finetune.json`: front matter `license` (the base's, lowercased as the Hub writes its identifiers; left out when null), `base_model`
+  (the checkpoint's `repo` without `hf.co/`; a `{"path"}` only when it is a hub cache snapshot,
+  `models--<org>--<repo>/snapshots/<commit>`, else left out with `base_model_relation`), `base_model_relation:
+  finetune`, `tags` `ardana`, `system-one` and the format; a body naming the base (a local file by its name alone, no
+  path of the trainer's machine) and the checkpoint at its commit, `ardana pull hf.co/<org>/<repo>:<QUANT>` (a
+  checkpoint without the quant) and `ardana run <the name pull gives> --request request.json`, the Q23 settings with
+  `epochs`, `device`, `dtype` and QLoRA, the split's lines, and the report as a Markdown table in `report`'s order,
+  four places as stdout prints them. A `finetune.json` without a report is refused.
+- stdout: `<name> to hf.co/<org>/<repo> (private|public)`, a `FILE BYTES` table (the card last), the count and total,
+  then `README.md:` and the card; `--dry-run` adds `; a dry run, nothing is sent` and stops there. The upload is
+  `ardana_registry::hub::push` (private unless `--public`, Q19; an existing repository only at that visibility).
+
 ### Testing
 - Plain tests: `ardana-core`'s `finetune::tests` (`training_rows_are_inference_rows` on decider:2b's plain profile
   with isolated levels and Qwen3's chat template, `data_errors_name_line_and_question`, `split_is_stable_and_disjoint`),
@@ -294,7 +313,14 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   an entry recorded from `hf.co/Qwen/Qwen3-1.7B-GGUF:Q8_0`, its GGUF a stand-in, resolves to `hf.co/Qwen/Qwen3-1.7B`
   at the cached commit through the cached card; `safetensors_refuses_other_architectures`: qwen3.5:0.8b with `--format
   safetensors` refused naming `Qwen3_5ForConditionalGeneration` and `--format gguf` before its data, then with
-  `--quant` before its base, the hub cache unchanged), offline on the files `cargo xtask fetch` installs, the
+  `--quant` before its base, the hub cache unchanged; `push_dry_run`: a GGUF model and a safetensors one written as
+  `ardana finetune` writes them, stand-in weights beside Qwen3-1.7B's tokenizer files, registered as it registers
+  them, the first by `ardana pull <its GGUF>` without `--layout`, which reads chat from its `decider_config.json`;
+  `--dry-run` lists every file but `finetune.json` with its bytes on disk and the card's, `private` (`public` with
+  `--public`), and the card's front matter, pull and run commands, settings and report table, with `HF_TOKEN` set and
+  nothing reaching a loopback stand-in of the Hub at `HF_ENDPOINT`; `push_refusals`: a pulled entry, four targets
+  that are no repository and three missing tokens (unset, blank, a blank `$HF_HOME/token`), each exit 1, its last
+  line the reason, nothing printed and nothing reaching the stand-in), offline on the files `cargo xtask fetch` installs, the
   `Qwen/Qwen3-1.7B-GGUF` card and `Qwen/Qwen3.5-0.8B`'s `config.json` among them; `crates/ardana`'s
   `finetune::tests::safetensors_follows_candle_architectures` (every name of `ARCHITECTURES` but THX-01's taken, alone
   and after another name; THX-01, `Qwen3_5ForConditionalGeneration` and no name refused) and
@@ -347,7 +373,9 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   report (the base's and the model's names, every type's metrics in range, the same answers for both, the stdout table
   giving the same numbers) and the row's `Gain` on the overall accuracy; `ardana run` answering the first data line's
   request; the server listing the model in `/v1/models` and answering that request at `/v1/systemone` with the very
-  answers `ardana run --json` gave, without a restart; then `ardana rm`. The first row that answers records every file
+  answers `ardana run --json` gave, without a restart; `ardana push <name> hf.co/ardana-e2e/<name> --dry-run`
+  (`Cli::pushed`, R6.4) listing every file of the model's directory but `finetune.json` with its bytes on disk and
+  `README.md` with the bytes of the card it prints, the repository private; then `ardana rm`. The first row that answers records every file
   of `finetune/` but `work/` (size and modification time); each later one finds them unchanged and no line of its
   three runs saying a download or an install (`downloading uv`, `downloading llama.cpp`, `creating the training
   environment`, uv's `Downloading` and `Installed`). An `Expect::Refused` row checks the exit code, the message and

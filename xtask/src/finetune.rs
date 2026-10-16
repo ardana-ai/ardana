@@ -7,7 +7,8 @@
 //! mid-training, then with a trainer that exits non-zero (its script moved out of the venv and back), neither leaving
 //! an entry or a model directory, then to the end; its model (a GGUF, or under `--format safetensors` a checkpoint
 //! Candle runs and was calibrated through) and its report of base against tuned on the test split are checked, its
-//! model answers through `ardana run` and through the running server alike, and `ardana rm` removes it. A row passing
+//! model answers through `ardana run` and through the running server alike, `ardana push --dry-run` lists its files as
+//! they are on disk, and `ardana rm` removes it. A row passing
 //! `--trust-remote-code` is first refused without it, before any weight downloads; a row whose base is an `hf.co/` GGUF
 //! reference then fine-tunes again from that GGUF's file in the hub cache with `--checkpoint <the checkpoint's
 //! snapshot directory>` and `--epochs 1`. The rows after the first that answers find the training environment as that
@@ -455,7 +456,8 @@ fn answers(cli: &Cli, server: &Server, run: &Run) -> Result<Value> {
 /// A fine-tune run to the end: its directory holds the GGUF in the expected quant, the tokenizer and chat template
 /// files of the base, `decider_config.json` in the base's layout with the fitted temperatures and `finetune.json` with
 /// the report its stdout prints, `ardana run` answers every question with it and the running server answers alike,
-/// and `ardana rm` removes the entry and the directory. Returns the model's `finetune.json`.
+/// `ardana push --dry-run` lists its files as they are on disk, and `ardana rm` removes the entry and the directory.
+/// Returns the model's `finetune.json`.
 fn finished(cli: &Cli, server: &Server, run: &Run) -> Result<Value> {
     let (row, name) = (run.row, run.name.as_str());
     let log = cli.dir.join(format!("{name}.log"));
@@ -494,6 +496,7 @@ fn finished(cli: &Cli, server: &Server, run: &Run) -> Result<Value> {
     let request = cli.request(run)?;
     let response = cli.answered(name, &request)?;
     cli.served(server, name, &request, &response)?;
+    cli.pushed(run)?;
     let removed = run_stdout(cli.command().args(["rm", name]))?;
     ensure!(
         !cli.home.join("models").join(name).exists() && !cli.listed(name)?,
@@ -914,6 +917,58 @@ impl Cli<'_> {
                 converter.display()
             );
         }
+        Ok(())
+    }
+
+    /// R6.4: `ardana push <name> hf.co/ardana-e2e/<name> --dry-run` lists the model's real files: every file of its
+    /// directory but `finetune.json`, with its bytes on disk, and `README.md` with the bytes of the card it prints, the
+    /// repository private.
+    fn pushed(&self, run: &Run) -> Result<()> {
+        let name = run.name.as_str();
+        let target = format!("hf.co/ardana-e2e/{name}");
+        let printed =
+            run_stdout(
+                self.command()
+                    .args(["push", name, target.as_str(), "--dry-run"]),
+            )?;
+        let (listing, card) = printed
+            .split_once("\nREADME.md:\n")
+            .with_context(|| format!("ardana push --dry-run printed no card:\n{printed}"))?;
+        let card = card.strip_suffix('\n').unwrap_or(card);
+        let mut lines = listing.lines();
+        let first = lines.next().unwrap_or_default();
+        ensure!(
+            first == format!("{name} to {target} (private); a dry run, nothing is sent"),
+            "ardana push --dry-run began with {first:?}"
+        );
+        let listed: BTreeMap<String, u64> = lines
+            .skip(1)
+            .map_while(
+                |line| match line.split_whitespace().collect::<Vec<_>>()[..] {
+                    [file, bytes] => Some((file.to_string(), bytes.parse().ok()?)),
+                    _ => None,
+                },
+            )
+            .collect();
+        let mut on_disk = BTreeMap::new();
+        for entry in std::fs::read_dir(self.home.join("models").join(name))? {
+            let entry = entry?;
+            let file = entry.file_name().to_string_lossy().into_owned();
+            if file != "finetune.json" {
+                on_disk.insert(file, entry.metadata()?.len());
+            }
+        }
+        on_disk.insert("README.md".to_string(), card.len() as u64);
+        ensure!(
+            listed == on_disk,
+            "ardana push --dry-run listed {listed:?}, the directory holds {on_disk:?}"
+        );
+        println!(
+            "e2e finetune {}: ardana push --dry-run lists {} files of {} bytes as they are on disk, the card's included",
+            run.row,
+            listed.len(),
+            listed.values().sum::<u64>()
+        );
         Ok(())
     }
 

@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use ardana_api::LayoutKind;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -268,6 +269,20 @@ pub fn from_rl_agent_config(cfg: &Value) -> Result<ModelProfile, ProfileError> {
     })
 }
 
+/// The layout a `decider_config.json` names, which a model pulled without `--layout` is read in: plain unless its
+/// `"layout"` or `"chat_template": true` says chat ([`resolve_layout`]). A config that is no object names none.
+pub fn decider_layout(cfg: &Value) -> Result<LayoutKind, ProfileError> {
+    let named = match cfg {
+        Value::Object(map) => resolve_layout(map)?,
+        _ => "plain",
+    };
+    Ok(if named == "chat" {
+        LayoutKind::Chat
+    } else {
+        LayoutKind::Plain
+    })
+}
+
 /// `decider.prompt.resolve_layout`: `"plain"` unless `"layout"` or `"chat_template": true` says `"chat"`.
 fn resolve_layout(cfg: &serde_json::Map<String, Value>) -> Result<&'static str, ProfileError> {
     let chat_template = cfg.get("chat_template") == Some(&Value::Bool(true));
@@ -387,6 +402,16 @@ mod tests {
         );
         assert!(err(json!({"layout": "xml_v2"})).contains("'xml_v2'"));
         assert!(err(json!({"layout": "chat"})).contains("read in the plain layout"));
+        assert_eq!(
+            decider_layout(&json!({"layout": "chat"})).unwrap(),
+            LayoutKind::Chat
+        );
+        assert_eq!(
+            decider_layout(&json!({"chat_template": true})).unwrap(),
+            LayoutKind::Chat
+        );
+        assert_eq!(decider_layout(&json!({})).unwrap(), LayoutKind::Plain);
+        assert!(decider_layout(&json!({"layout": "xml_v2"})).is_err());
         assert_eq!(
             from_decider_config(&json!({"temperature": "1.5"}), Layout::Plain)
                 .unwrap()

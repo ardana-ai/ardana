@@ -3,12 +3,14 @@
 Covers the Hugging Face side of Ardana: the `tokenizers` crate (`tokenizer.json`) in `crates/ardana-core`, natively
 and in the wasm32 build of the playground's engine module (`crates/ardana-engine`), chat template rendering with
 `minijinja` and `minijinja-contrib` in `crates/ardana-core/src/chat.rs`, the `hf-hub` client and the Hub cache layout
-in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants `ardana serve` pulls), and the
+in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants `ardana serve` pulls, the uploads of
+`ardana push`), and the
 `tmp/hf` model store that `cargo xtask fetch` and the end-to-end suites fill from `xtask/fetch.toml`.
 
 ## Versions
 - `tokenizers` 0.23.2 — loads each model's HF `tokenizer.json`; the single source of prompt token ids (Q2).
-- `hf-hub` 1.0.0 — async Hub client used by `ardana pull` and registry resolution; reads the standard hub cache.
+- `hf-hub` 1.0.0 — async Hub client used by `ardana pull`, registry resolution and `ardana push`; reads the standard
+  hub cache.
 - `reqwest` 0.13.5 — the library document's GETs in `ardana-registry`, at the version hf-hub resolves with the
   features it enables (its defaults, rustls), so the lock gains no crate (Q22).
 - `minijinja` 3.0.0 — renders HF chat templates (Jinja2 syntax) to derive chat-layout head and tail ids (W3).
@@ -62,8 +64,12 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   `---` lines) carries `base_model` (one repository, or a list) and `license`. `ardana_registry::base` reads those
   two keys itself (a scalar, a flow list or a block list) rather than parse YAML; offline the card comes from the
   cache like every file, so a test that reads one lists it in its `[[hf]]` entry.
-- Never pass or log a token. `hf-hub` picks up `HF_TOKEN`, `HF_TOKEN_PATH` or `$HF_HOME/token` on its own; with
-  `HF_HOME=tmp/hf` no token file exists, and every Step 1 repo is ungated.
+- Never pass or log a token for a read. `hf-hub` picks up `HF_TOKEN`, `HF_TOKEN_PATH` or `$HF_HOME/token` on its
+  own; with `HF_HOME=tmp/hf` no token file exists, and every Step 1 repo is ungated. `ardana push` is the one write
+  and reads its token itself (`hub::token`: `HF_TOKEN`, else `hub::token_path`, `$HF_HOME/token` as `hf auth login`
+  writes it, the home `HF_HOME`, else `$XDG_CACHE_HOME/huggingface`, else `~/.cache/huggingface`), so a missing one
+  is refused before any request, naming `HF_TOKEN` and `hf auth login`; it goes to `HFClient::builder().token(..)`
+  and is never printed.
 
 ### Model library
 - The library is one published document, `https://ardana.ai/models.json` (`schema` 1, `{schema, default,
@@ -179,7 +185,8 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   ONNX repository's `model.onnx`, `model.onnx.data` and `tokenizer.json` (`BROWSER_FILES`), with the tokenizer's
   `tokenizer_config.json` and `chat_template.jinja` and the repository's `decider_config.json` when it has them, all at
   the entry's `browser.commit`, into the hub cache only; a browser variant is never a registry entry. The profile is the one `ardana
-  pull <name>` derives: `decider_config.json` (plain layout) or the stock profile named `name` in the library's layout,
+  pull <name>` derives: `decider_config.json` (in the layout it names) or the stock profile named `name` in the library's
+  layout,
   dated by the library's release date. `BrowserModel` holds the files, the commit and the profile.
 
 ### `ardana pull` (`ardana-registry`)
@@ -203,7 +210,9 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   both; a ref with a quant or file is a GGUF pull as before.
 - A tokenizer repository contributes `tokenizer.json` plus `tokenizer_config.json` and `chat_template.jinja` when it
   has them, all at one commit, so the chat template sits next to the tokenizer in `snapshots/<commit>/`.
-- `decider_config.json` in the weights repository gives the profile (plain layout); without it the model gets
+- `decider_config.json` in the weights repository gives the profile, in the layout it names
+  (`ardana_core::decider_layout`, decider's `resolve_layout`: plain unless `"layout": "chat"` or `"chat_template":
+  true`), so a chat-layout model `ardana push` published pulls without `--layout`; without it the model gets
   `ModelProfile::stock` named after the entry, in the chat layout. `--tokenizer`, `--name` and `--layout` override.
 - A checkpoint with an `rl_agent_config.json` is a THX-01 decision model (`ardana_core::thx01`, `candle.md`): the
   pull also takes `rl_agent_config.json`, `encoder/config.json`, `tokenizer/tokenizer.json` and
@@ -221,6 +230,22 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
 > `HF_TOKEN_PATH`, `HF_HOME`, `HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, `XDG_CACHE_HOME`,
 > `HF_HUB_DISABLE_IMPLICIT_TOKEN`, `HF_HUB_USER_AGENT_ORIGIN`); only `local_files_only` is built in, so Ardana
 > must map the variable itself (R4.1).
+
+### Pushing (`ardana push`, `ardana-registry`)
+- `hub::push` uploads with the async API on the command's own runtime (no `blocking` feature): `HFClient::builder()
+  .token(..)`, then `create_repository().repo_id("<org>/<repo>").repo_type(RepoTypeModel).private(!public)`, then one
+  `model(org, repo).create_commit()` whose operations are `CommitOperation::add_file` for each file of the model's
+  directory and `add_bytes` for the card; hf-hub sends large files through the preupload endpoint and Xet
+  (`repository/upload.rs`) and small ones inline. A `HFError::Conflict` from the create means the repository exists:
+  `info()` reads its `private`, and a visibility other than the one asked for is refused (Q19: a model is never put
+  in a public repository without `--public`), else the commit goes on top.
+- The upload's progress is `hub::FileReport` on `UploadEvent::Start`/`Progress`/`Complete`, as for downloads;
+  uploads of small files alone emit no `Progress`.
+- The repository's files sit at its root, as `ardana pull` reads them: `<name>-<QUANT>.gguf` (so
+  `hf.co/<org>/<repo>:<QUANT>` picks it) or `config.json` with the safetensors (a repository without a GGUF and with
+  a `config.json` is a checkpoint), `tokenizer.json` with `tokenizer_config.json` and `chat_template.jinja`, and
+  `decider_config.json`. The card's front matter follows the Hub's model-card metadata: `license`, `base_model`,
+  `base_model_relation: finetune`, `tags`, which `base::Card::parse` reads back.
 
 ### Hub cache layout
 - The layout under `tmp/hf/hub` is the official one: `models--<org>--<repo>/` holding `blobs/<hash>` (file bodies),
@@ -327,7 +352,10 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   characters, unlike transformers' `json.dumps(ensure_ascii=False)`.
 
 ## Sources
-- https://huggingface.co/docs/hub/model-cards — the card's metadata: `base_model`, `license`
+- https://huggingface.co/docs/hub/model-cards — the card's metadata: `base_model`, `base_model_relation`, `license`, `tags`
+- https://docs.rs/hf-hub/1.0.0/hf_hub/repository/struct.HFRepository.html#method.create_commit — `create_commit`, `CommitOperation::add_file`/`add_bytes`, progress
+- https://docs.rs/hf-hub/1.0.0/hf_hub/struct.HFClient.html#method.create_repository — `create_repository`, `private`, `exist_ok`, 409 as `HFError::Conflict`
+- https://huggingface.co/docs/huggingface_hub/quick-start#authentication — `hf auth login` and the token file in `HF_HOME`
 - https://docs.rs/tokenizers/0.23.2/tokenizers/index.html — crate overview, `http`/`onig`/`fancy-regex` features
 - https://docs.rs/tokenizers/0.23.2/tokenizers/tokenizer/struct.TokenizerImpl.html#method.encode_fast — `encode_fast`
 - https://huggingface.co/docs/hub/api — `/api/models/{repo}/revision/{revision}`, sibling `blobId`, `lfs.sha256`, `size`

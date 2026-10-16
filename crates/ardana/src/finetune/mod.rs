@@ -434,6 +434,13 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     Ok(())
 }
 
+/// The directory of `model` when `ardana finetune` made it: `$ARDANA_HOME/models/<name>/` (absolute) in `home`, holding
+/// its weights and a `finetune.json` (Q20, Q28); `None` for any other entry.
+pub fn made(home: &Path, model: &ResolvedModel) -> Result<Option<PathBuf>> {
+    let dir = std::path::absolute(home.join(MODELS_DIR).join(&model.name))?;
+    Ok((model.weights.starts_with(&dir) && dir.join(RECORD).is_file()).then_some(dir))
+}
+
 /// The examples of a split, owned, for a thread of their own.
 fn owned(examples: &[&Example]) -> Vec<Example> {
     examples.iter().map(|&example| example.clone()).collect()

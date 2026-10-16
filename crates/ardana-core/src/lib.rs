@@ -30,8 +30,8 @@ pub use ardana_api::{
 pub use chat::{ChatTemplateError, TemplateSpecials, chat_layout, read_template};
 pub use engine::{DecideError, Decider, DecisionSequence, Decode, Limits, Plan};
 pub use profile::{
-    AnswerType, DecisionFormat, Layout, ModelProfile, ProfileError, from_decider_config,
-    from_rl_agent_config,
+    AnswerType, DecisionFormat, Layout, ModelProfile, ProfileError, decider_layout,
+    from_decider_config, from_rl_agent_config,
 };
 pub use runtime::{DecisionModel, LoadOptions, Loaded, LoadedModel, Runtime, Runtimes};
 /// The tokenizer a [`Decider`] reads with, for the playground, which builds one from `tokenizer.json`'s bytes on its

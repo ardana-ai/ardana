@@ -6,15 +6,17 @@
 //! `main`, the commit `refs/main` names) and no metadata endpoint is called; [`Hub::cache_only`] reads a repository
 //! that way whatever the variable says (a browser variant is looked up in the cache first, and taken from there only
 //! when the cache holds all of it). A pull that asks for progress prints each download's bytes to stderr
-//! ([`FileReport`]).
+//! ([`FileReport`]). [`push`] uploads files to a repository in one commit, with the token [`token`] finds.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use hf_hub::progress::{DownloadEvent, FileStatus, Progress, ProgressEvent, ProgressHandler};
-use hf_hub::repository::RepoTreeEntry;
-use hf_hub::{HFClient, HFError};
+use hf_hub::progress::{
+    DownloadEvent, FileStatus, Progress, ProgressEvent, ProgressHandler, UploadEvent,
+};
+use hf_hub::repository::{CommitOperation, RepoTreeEntry};
+use hf_hub::{HFClient, HFError, RepoTypeModel};
 
 use crate::RegistryError;
 
@@ -48,6 +50,135 @@ fn home_cache_dir() -> Option<PathBuf> {
         return None;
     }
     std::env::home_dir().map(|home| home.join(".cache").join("huggingface").join("hub"))
+}
+
+/// The variable a Hugging Face token is read from first.
+pub const TOKEN_VAR: &str = "HF_TOKEN";
+/// The file `hf auth login` writes the token to, in the Hugging Face home.
+const TOKEN_FILE: &str = "token";
+
+/// Where [`token`] reads the token `hf auth login` wrote: `$HF_HOME/token`, the home being `HF_HOME`, else
+/// `$XDG_CACHE_HOME/huggingface`, else `~/.cache/huggingface`, as hf-hub and the Python client resolve it.
+pub fn token_path() -> PathBuf {
+    let home = match (
+        std::env::var_os("HF_HOME"),
+        std::env::var_os("XDG_CACHE_HOME"),
+    ) {
+        (Some(home), _) => PathBuf::from(home),
+        (None, Some(cache)) => PathBuf::from(cache).join("huggingface"),
+        (None, None) => std::env::home_dir()
+            .unwrap_or_default()
+            .join(".cache")
+            .join("huggingface"),
+    };
+    home.join(TOKEN_FILE)
+}
+
+/// The Hugging Face token a push writes with: `HF_TOKEN`, else the one in [`token_path`]; `None` when neither holds
+/// one. It is never printed.
+pub fn token() -> Option<String> {
+    let token = match std::env::var(TOKEN_VAR) {
+        Ok(token) if !token.trim().is_empty() => token,
+        _ => std::fs::read_to_string(token_path()).ok()?,
+    };
+    let token = token.trim();
+    (!token.is_empty()).then(|| token.to_string())
+}
+
+/// One file of a [`push`]: a file on disk, or bytes made in memory (a model card).
+#[derive(Debug, Clone)]
+pub enum Upload {
+    File(PathBuf),
+    Bytes(Vec<u8>),
+}
+
+/// What a [`push`] did.
+#[derive(Debug, Clone)]
+pub struct Pushed {
+    /// Whether the push created the repository; else it existed, with the visibility asked for.
+    pub created: bool,
+    /// The commit's URL on the Hub, when the Hub gives it.
+    pub commit_url: Option<String>,
+}
+
+/// Uploads `files`, each to its path in the repository, to `hf.co/<org>/<repo>` in one commit with `message`, written
+/// with `token` (large files through the Hub's preupload endpoint and Xet, as hf-hub sends them), printing the upload's
+/// bytes to stderr. The repository is created first, private unless `public`; one that exists is pushed into only when
+/// its visibility is the one asked for, so a private model never lands in a public repository unasked.
+pub async fn push(
+    org: &str,
+    repo: &str,
+    public: bool,
+    token: String,
+    files: Vec<(String, Upload)>,
+    message: &str,
+) -> Result<Pushed, RegistryError> {
+    let id = format!("{}{org}/{repo}", crate::refs::HF_PREFIX);
+    let hub_err = |err| RegistryError::Hub {
+        repo: id.clone(),
+        err,
+    };
+    let mut builder = HFClient::builder().token(token);
+    if let Some(dir) = home_cache_dir() {
+        builder = builder.cache_dir(dir);
+    }
+    let client = builder.build().map_err(hub_err)?;
+    let model = client.model(org, repo);
+    let created = match client
+        .create_repository()
+        .repo_id(&format!("{org}/{repo}"))
+        .repo_type(RepoTypeModel)
+        .private(!public)
+        .send()
+        .await
+    {
+        Ok(_) => true,
+        Err(HFError::Conflict { .. }) => {
+            let info = model.info().send().await.map_err(hub_err)?;
+            let refused = |msg: &str| RegistryError::Invalid {
+                what: id.clone(),
+                msg: msg.to_string(),
+            };
+            match info.private {
+                Some(private) if private != public => false,
+                Some(true) => {
+                    return Err(refused(
+                        "it exists and is private; push to it without --public, or make it public on the Hub first",
+                    ));
+                }
+                Some(false) => {
+                    return Err(refused(
+                        "it exists and is public; pass --public to push to it, or push to another repository",
+                    ));
+                }
+                None => {
+                    return Err(refused(
+                        "it exists, and the Hub does not say whether it is private",
+                    ));
+                }
+            }
+        }
+        Err(err) => return Err(hub_err(err)),
+    };
+    let operations = files
+        .into_iter()
+        .map(|(path, upload)| match upload {
+            Upload::File(file) => CommitOperation::add_file(path, file),
+            Upload::Bytes(bytes) => CommitOperation::add_bytes(path, bytes),
+        })
+        .collect();
+    let commit = model
+        .create_commit()
+        .operations(operations)
+        .commit_message(message)
+        .progress(Progress::new(FileReport::new(format!("uploading to {id}"))))
+        .send()
+        .await
+        .map_err(hub_err)?;
+    Ok(Pushed {
+        created,
+        commit_url: commit.commit_url,
+    })
 }
 
 /// One Hub client for a pull.
@@ -264,8 +395,9 @@ impl Hub {
 /// How often [`FileReport`] prints while bytes move.
 const REPORT_EVERY: Duration = Duration::from_secs(1);
 
-/// Prints one file's download to stderr, `<label>: <bytes so far> / <size>`, at most once a [`REPORT_EVERY`] when the
-/// count moved and once when it completes. A file already in the cache moves no bytes and prints nothing.
+/// Prints one file's download, or a push's upload, to stderr, `<label>: <bytes so far> / <size>`, at most once a
+/// [`REPORT_EVERY`] when the count moved and once when it completes. A file already in the cache moves no bytes and
+/// prints nothing, nor does an upload of small files alone, which go inline with the commit.
 struct FileReport {
     label: String,
     state: Mutex<ReportState>,
@@ -308,26 +440,33 @@ impl FileReport {
 
 impl ProgressHandler for FileReport {
     fn on_progress(&self, event: &ProgressEvent) {
-        let ProgressEvent::Download(event) = event else {
-            return;
-        };
         let mut state = self
             .state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         match event {
-            DownloadEvent::Start { total_bytes, .. } => state.total = *total_bytes,
-            DownloadEvent::Progress { files } => {
+            ProgressEvent::Download(DownloadEvent::Start { total_bytes, .. })
+            | ProgressEvent::Upload(UploadEvent::Start { total_bytes, .. }) => {
+                state.total = *total_bytes
+            }
+            ProgressEvent::Download(DownloadEvent::Progress { files }) => {
                 for file in files.iter().filter(|f| f.status == FileStatus::InProgress) {
                     self.moved(&mut state, file.bytes_completed, file.total_bytes);
                 }
             }
-            DownloadEvent::AggregateProgress {
+            ProgressEvent::Download(DownloadEvent::AggregateProgress {
                 bytes_completed,
                 total_bytes,
                 ..
-            } => self.moved(&mut state, *bytes_completed, *total_bytes),
-            DownloadEvent::Complete => {
+            })
+            | ProgressEvent::Upload(UploadEvent::Progress {
+                bytes_completed,
+                total_bytes,
+                ..
+            }) => self.moved(&mut state, *bytes_completed, *total_bytes),
+            ProgressEvent::Upload(UploadEvent::Committing) => {}
+            ProgressEvent::Download(DownloadEvent::Complete)
+            | ProgressEvent::Upload(UploadEvent::Complete) => {
                 if state.printed.is_some() {
                     eprintln!(
                         "{}: {} done",

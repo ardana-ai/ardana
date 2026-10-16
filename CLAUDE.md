@@ -6,7 +6,7 @@ clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behi
 files) and Candle the second (safetensors causal LMs, and the THX-01 decision model); Qwen3.5 is the first model family.
 `ardana finetune` turns any model it runs into a calibrated model of the user's own (TRL in a venv it builds, llama.cpp's
 converter and the linked quantizer, or a safetensors checkpoint Candle runs, temperatures fitted and a test report
-against the base). Planning documents live in
+against the base), and `ardana push` publishes one to Hugging Face. Planning documents live in
 gitignored `*-prd/` folders; when one is present locally, its Decisions and Contracts are binding (as its Amendments
 change them) and its Requirements are the definition of done.
 
@@ -208,8 +208,10 @@ change them) and its Requirements are the definition of done.
   its stdout prints: the base, pulled from its default quant, and the model per answer type and overall), the
   model's overall test accuracy is as the row's `Gain` says against the base's, `ardana run <name> --request -`
   answers the first data line's questions, the running server lists the model in `/v1/models` and answers the same
-  request at `/v1/systemone` with the answers `ardana run --json` gave, and `ardana rm` removes the entry and the
-  directory; every row after the first that answers finds the environment's files unchanged and downloads none of
+  request at `/v1/systemone` with the answers `ardana run --json` gave, `ardana push <name>
+  hf.co/ardana-e2e/<name> --dry-run` lists every file of its directory but `finetune.json` with its bytes on disk and
+  `README.md` with the card's, `private` (R6.4, rows `qwen3:0.6b` and `safetensors` among them), and `ardana rm`
+  removes the entry and the directory; every row after the first that answers finds the environment's files unchanged and downloads none of
   it. Rows: `qwen3:0.6b` (`cmd-risk` on the commands data, chat, Q8_0, above the base; 81 to 90 minutes of training
   on 8 CPU cores), `thx-01` (`hf.co/doofz/THX-01` exits 1 named a decision model, no weight file reaching `tmp/hf`),
   `decider:0.8b` (`custom-decider` on the custom data, plain with isolated score levels, Q8_0, `--epochs 1`, at least
@@ -256,7 +258,9 @@ change them) and its Requirements are the definition of done.
   family's. A size's browser variant is its `browser` table (decider:0.8b, decider:2b and qwen3.5:0.8b today,
   `browser_default` decider:0.8b); refs are
   `hf.co/<org>/<repo>[:<quant>]` (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]`
-  (read in place from `$OLLAMA_MODELS`) and local GGUF paths. `hf.co/<org>/<repo>` of a repository with no GGUF and a
+  (read in place from `$OLLAMA_MODELS`) and local GGUF paths. A model pulled without `--layout` is read in the layout
+  its `decider_config.json` names (plain unless it says chat, as a model `ardana push` published may), else in chat.
+  `hf.co/<org>/<repo>` of a repository with no GGUF and a
   `config.json` pulls that safetensors checkpoint at `main` (`config.json`, the shards its index names or its
   `model.safetensors`, the root tokenizer files), recorded with its snapshot directory as the weights and runtime
   `candle` when `config.json#architectures` names one Candle implements (`Qwen3ForCausalLM`, `Qwen2ForCausalLM`,
@@ -396,6 +400,23 @@ change them) and its Requirements are the definition of done.
   `ardana serve` answer. The model is built in `$ARDANA_HOME/finetune/work/<name>/`, removed whatever the end; SIGINT
   (listened for, children killed) and a failing step leave no entry and no `models/<name>/`. The venv compiles its
   bytecode at install and Python runs with `-B`, so later runs change none of the environment's files.
+- `ardana push <name> hf.co/<org>/<repo> [--public] [--dry-run]` uploads a model `ardana finetune` made (an entry
+  whose weights are in `$ARDANA_HOME/models/<name>/` beside a `finetune.json`; any other entry is refused) to that
+  repository through hf-hub 1.0.0 (`ardana_registry::hub::push`, async on a runtime of its own): every file of the
+  directory but `finetune.json` (`<name>-<QUANT>.gguf`, or `config.json` and the safetensors, the tokenizer and chat
+  template files, `decider_config.json`), at the root where `ardana pull hf.co/<org>/<repo>[:<QUANT>]` reads them,
+  and a model card, `README.md`, made from `finetune.json`: front matter `license` (the base's, lowercased as the Hub writes it, left out when it
+  names none), `base_model` (the checkpoint's repository; a `{"path"}` checkpoint only when it is a hub cache snapshot,
+  `models--<org>--<repo>/snapshots/<commit>`), `base_model_relation: finetune` and `tags` `ardana`, `system-one` and
+  the format; a body with `ardana pull hf.co/<org>/<repo>:<QUANT>` (the repository alone for a checkpoint) and `ardana
+  run <repo> --request request.json`, the Q23 settings, the device and dtype, the split's lines and the test report
+  as a table (a local base by its file name alone). It prints the repository and `private` (or `public`), every file
+  with its bytes, the total and the card; `--dry-run` stops there and sends nothing, needing no token. The
+  repository is created private unless `--public` (Q19); one that exists is pushed to (one commit) only when its
+  visibility is the one asked for. Refused with exit 1 before anything is sent: a target that is no
+  `hf.co/<org>/<repo>` (a quant, a URL), an entry without `finetune.json`, and, without `--dry-run`, no token
+  (`HF_TOKEN`, else `$HF_HOME/token`, which `hf auth login` writes), the message naming both. Never run without
+  `--dry-run` from an agent session; a real push is a by-hand step.
 - `ardana update` installs the latest GitHub Release over an ardana the installers placed, through axoupdater: it
   reads dist's install receipt (`ardana-receipt.json` in `$XDG_CONFIG_HOME/ardana`, then `~/.config/ardana`;
   `%LOCALAPPDATA%\ardana` on Windows), looks ardana-ai/ardana's `releases/latest` up once and prints `ardana is up to

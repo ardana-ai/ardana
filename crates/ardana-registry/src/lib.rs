@@ -412,7 +412,7 @@ pub struct PullOptions {
     /// Where the tokenizer comes from: `hf.co/<org>/<repo>` or a local `tokenizer.json` (or its directory); default
     /// the weights' own repository or directory.
     pub tokenizer: Option<String>,
-    /// The layout (default plain with `decider_config.json`, else chat).
+    /// The layout (default the one `decider_config.json` names, plain unless it says chat; else chat).
     pub layout: Option<LayoutKind>,
     /// Print each download's progress to stderr (bytes so far and the file's size).
     pub progress: bool,
@@ -573,7 +573,10 @@ async fn pull_ref(
                 Some(Config::Decider(path)) => Some(path.as_path()),
                 _ => None,
             };
-            let layout = opts.layout.unwrap_or_else(|| default_layout(config));
+            let layout = match opts.layout {
+                Some(layout) => layout,
+                None => default_layout(config)?,
+            };
             read_profile(&tokenizer_path, &tokenizer, config, layout, &name)?
         }
     };
@@ -643,12 +646,16 @@ fn decision_profile(path: &Path) -> Result<ModelProfile, RegistryError> {
     })
 }
 
-/// The layout of a model that names none: plain with a `decider_config.json`, else chat.
-fn default_layout(config: Option<&Path>) -> LayoutKind {
-    match config {
-        Some(_) => LayoutKind::Plain,
-        None => LayoutKind::Chat,
-    }
+/// The layout of a model that names none: the one its `decider_config.json` names (plain unless it says chat), else
+/// chat.
+fn default_layout(config: Option<&Path>) -> Result<LayoutKind, RegistryError> {
+    let Some(path) = config else {
+        return Ok(LayoutKind::Chat);
+    };
+    ardana_core::decider_layout(&read_json(path)?).map_err(|err| RegistryError::Profile {
+        path: path.to_path_buf(),
+        err,
+    })
 }
 
 /// A library size's browser variant in the hub cache: the files a tab downloads ([`BROWSER_FILES`]) and the profile it
@@ -721,10 +728,10 @@ async fn browser_files(
 ) -> Result<BrowserModel, RegistryError> {
     let located = browser_paths(hub, model, browser).await?;
     let tokenizer = load_tokenizer(&located.tokenizer)?;
-    let layout = model
-        .size
-        .layout
-        .unwrap_or_else(|| default_layout(located.config.as_deref()));
+    let layout = match model.size.layout {
+        Some(layout) => layout,
+        None => default_layout(located.config.as_deref())?,
+    };
     let name = model.name();
     let mut profile = read_profile(
         &located.tokenizer,

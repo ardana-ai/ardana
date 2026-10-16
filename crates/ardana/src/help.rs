@@ -157,6 +157,25 @@ removes both, and a run that stops leaves neither. Fine-tuning runs on Linux and
     )
 }
 
+pub fn push() -> String {
+    use ardana_registry::hub::TOKEN_VAR;
+    format!(
+        "Examples:
+  ardana push my-model hf.co/<org>/my-model --dry-run
+  ardana push my-model hf.co/<org>/my-model
+  ardana pull hf.co/<org>/my-model:Q8_0        Anywhere else, then `ardana run my-model`
+
+Pushes a model `ardana finetune` made, GGUF or safetensors, to a Hugging Face repository, which is created private
+unless --public; a repository that exists is pushed to only when it has the visibility asked for. The repository
+gets the files of $ARDANA_HOME/models/<name>/ but finetune.json (the GGUF, or config.json and the safetensors; the
+tokenizer and chat template; decider_config.json) and a model card, README.md, with the base's license and checkpoint,
+the commands that pull and run the model, its training settings and its test report. --dry-run prints all of it and
+sends nothing.
+
+Token: {TOKEN_VAR}, else the one `hf auth login` saved in $HF_HOME/token; it needs write access to the repository's owner."
+    )
+}
+
 pub fn update() -> String {
     format!(
         "Examples:

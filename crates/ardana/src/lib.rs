@@ -1,9 +1,10 @@
-//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`, plus `finetune`
-//! and `update`. `main.rs` only parses arguments and reports errors.
+//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`, plus `finetune`,
+//! `push` and `update`. `main.rs` only parses arguments and reports errors.
 
 mod ask;
 pub mod finetune;
 mod help;
+mod push;
 mod render;
 pub mod update;
 
@@ -70,6 +71,9 @@ pub enum Command {
     /// Fine-tune a library model on labelled data into a model of your own
     #[command(after_help = help::finetune())]
     Finetune(finetune::FinetuneArgs),
+    /// Upload a model ardana finetune made to Hugging Face
+    #[command(after_help = help::push())]
+    Push(push::PushArgs),
     /// Update ardana to the latest release
     #[command(after_help = help::update())]
     Update,
@@ -175,7 +179,8 @@ pub struct PullArgs {
     /// The name to pull it as; default the library model's canonical name or the repository name
     #[arg(long)]
     pub name: Option<String>,
-    /// plain for decider models, chat for instruct models; default plain when decider_config.json is present
+    /// plain for decider models, chat for instruct models; default the layout decider_config.json names (plain unless
+    /// it says chat), else chat
     #[arg(long, value_enum)]
     pub layout: Option<LayoutArg>,
 }
@@ -260,6 +265,7 @@ pub fn run(cli: Cli, matches: &ArgMatches) -> Result<()> {
         Command::Ps(args) => ps(&args),
         Command::Rm(args) => rm(&args),
         Command::Finetune(args) => finetune::finetune(&args),
+        Command::Push(args) => push::push(&args),
         Command::Update => update::update(),
     }
 }
@@ -588,8 +594,7 @@ fn rm(args: &RmArgs) -> Result<()> {
     }
     registry.save()?;
     for model in removed {
-        let dir = std::path::absolute(home.join(finetune::MODELS_DIR).join(&model.name))?;
-        if model.weights.starts_with(&dir) && dir.join(finetune::RECORD).is_file() {
+        if let Some(dir) = finetune::made(&home, &model)? {
             std::fs::remove_dir_all(&dir).with_context(|| format!("removing {}", dir.display()))?;
             println!("removed {} and its files in {}", model.name, dir.display());
             continue;

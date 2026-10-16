@@ -198,9 +198,10 @@ async fn library_base(
             hf_tokenizer(hub, gguf).await?
         }
     };
-    let layout = size
-        .layout
-        .unwrap_or_else(|| default_layout(config.as_deref()));
+    let layout = match size.layout {
+        Some(layout) => layout,
+        None => default_layout(config.as_deref())?,
+    };
     let mut profile = read_profile(
         &tokenizer,
         &load_tokenizer(&tokenizer)?,
@@ -375,7 +376,7 @@ async fn reference_base(
             ),
         },
     };
-    let layout = default_layout(config.as_deref());
+    let layout = default_layout(config.as_deref())?;
     let profile = read_profile(
         &tokenizer,
         &load_tokenizer(&tokenizer)?,
