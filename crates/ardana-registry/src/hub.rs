@@ -58,6 +58,7 @@ pub(crate) struct Hub {
 }
 
 /// The files of one repository commit.
+#[derive(Debug, Clone)]
 pub(crate) struct Snapshot {
     org: String,
     repo: String,

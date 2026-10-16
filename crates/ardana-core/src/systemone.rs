@@ -66,8 +66,9 @@ pub fn render_state(state: &Value) -> String {
 pub enum Names {
     /// Choice option names.
     Choice(Vec<String>),
-    /// Score levels `0..n`.
-    Score(usize),
+    /// Score levels, lowest first, each by the name a label gives it: its index (`"0"`, `"1"`, ...) for list
+    /// criteria, its key for a legend.
+    Score(Vec<String>),
     /// Noul: false, true.
     Noul,
 }
@@ -166,20 +167,24 @@ pub fn render_question(spec: &Value) -> Result<RenderedQuestion, String> {
             ))
         }
         Some("score") => {
-            let levels: Vec<&Value> = match crit {
+            let levels: Vec<(String, &Value)> = match crit {
                 Some(Value::Object(map)) => {
                     let mut keyed = Vec::with_capacity(map.len());
                     for (k, v) in map {
                         let key = py::float_from_str(k).ok_or_else(|| {
                             format!("could not convert string to float: {}", py::str_repr(k))
                         })?;
-                        keyed.push((key, v));
+                        keyed.push((key, k, v));
                     }
                     keyed
                         .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-                    keyed.into_iter().map(|(_, v)| v).collect()
+                    keyed.into_iter().map(|(_, k, v)| (k.clone(), v)).collect()
                 }
-                Some(Value::Array(items)) => items.iter().collect(),
+                Some(Value::Array(items)) => items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| (i.to_string(), v))
+                    .collect(),
                 _ => {
                     return Err(format!(
                         "score criteria: an ordered list of 2..{MAX_LEVELS} level descriptions"
@@ -191,17 +196,17 @@ pub fn render_question(spec: &Value) -> Result<RenderedQuestion, String> {
                     "score criteria: an ordered list of 2..{MAX_LEVELS} level descriptions"
                 ));
             }
-            let legend: Vec<String> = levels.iter().map(|c| txt(c)).collect();
+            let legend: Vec<String> = levels.iter().map(|(_, c)| txt(c)).collect();
             let options = legend
                 .iter()
                 .enumerate()
                 .map(|(i, c)| format!("{i}: {c}"))
                 .collect();
-            let n = legend.len();
+            let names = levels.into_iter().map(|(name, _)| name).collect();
             Ok(rendered(
                 options,
                 AnswerType::Score,
-                Names::Score(n),
+                Names::Score(names),
                 legend,
             ))
         }

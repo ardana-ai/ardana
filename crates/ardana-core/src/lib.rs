@@ -5,10 +5,12 @@
 //! [`runtime::LoadedModel`], and [`py`] holds the Python semantics (JSON text, rounding, summation) the output
 //! depends on. [`chat`] derives the chat layout of stock instruct models from their chat template, and [`snapshot`]
 //! names the files of a safetensors checkpoint. [`thx01`] builds the question sequences of a decision model
-//! ([`runtime::DecisionModel`], THX-01), which the same [`engine::Decider`] plans and answers.
+//! ([`runtime::DecisionModel`], THX-01), which the same [`engine::Decider`] plans and answers. [`finetune`] reads the
+//! labelled lines `ardana finetune` trains on into the rows the same planner builds.
 
 pub mod chat;
 pub mod engine;
+pub mod finetune;
 pub mod profile;
 pub mod prompt;
 pub mod py;

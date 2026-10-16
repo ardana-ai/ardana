@@ -9,6 +9,7 @@
 //! library model they pull first. [`pull_browser`] resolves a library model's browser variant (ONNX weights a
 //! visitor's tab runs) the same way, into the hub cache only: a browser variant is never a registry entry.
 
+pub mod base;
 pub mod hub;
 pub mod library;
 pub mod ollama;
@@ -40,7 +41,7 @@ pub const DECIDER_CONFIG: &str = "decider_config.json";
 pub const TOKENIZER_FILE: &str = "tokenizer.json";
 /// The tokenizer files `ardana pull` fetches with `tokenizer.json` when the repository has them: the special tokens
 /// and the chat template the chat layout reads.
-const TOKENIZER_EXTRAS: [&str; 2] = [
+pub const TOKENIZER_EXTRAS: [&str; 2] = [
     ardana_core::chat::CONFIG_FILE,
     ardana_core::chat::TEMPLATE_FILE,
 ];
@@ -860,7 +861,7 @@ async fn snapshot_weights(
     snapshot: &Snapshot,
     runtimes: &Runtimes,
 ) -> Result<PathBuf, RegistryError> {
-    use ardana_core::snapshot::{CONFIG, INDEX, SINGLE, architectures};
+    use ardana_core::snapshot::{CONFIG, architectures};
     let config = hub.file(snapshot, CONFIG).await?;
     let dir = config
         .parent()
@@ -875,26 +876,30 @@ async fn snapshot_weights(
             architectures: architectures(&read_json(&config)?),
         });
     }
-    let files = if snapshot.has(INDEX) {
-        let index = hub.file(snapshot, INDEX).await?;
-        ardana_core::snapshot::shards(&read_json(&index)?).map_err(|msg| {
-            RegistryError::Invalid {
-                what: format!("{} file {INDEX}", snapshot.id()),
-                msg,
-            }
-        })?
-    } else if snapshot.has(SINGLE) {
-        vec![SINGLE.to_string()]
-    } else {
-        return Err(RegistryError::Invalid {
-            what: snapshot.id(),
-            msg: format!("it has {CONFIG} but neither {INDEX} nor {SINGLE}"),
-        });
-    };
-    for file in files {
+    for file in safetensors(hub, snapshot).await? {
         hub.file(snapshot, &file).await?;
     }
     Ok(dir)
+}
+
+/// The safetensors files of the checkpoint `snapshot`: the shards its index names (downloading the index), else its
+/// one `model.safetensors`.
+async fn safetensors(hub: &Hub, snapshot: &Snapshot) -> Result<Vec<String>, RegistryError> {
+    use ardana_core::snapshot::{CONFIG, INDEX, SINGLE};
+    if snapshot.has(INDEX) {
+        let index = hub.file(snapshot, INDEX).await?;
+        ardana_core::snapshot::shards(&read_json(&index)?).map_err(|msg| RegistryError::Invalid {
+            what: format!("{} file {INDEX}", snapshot.id()),
+            msg,
+        })
+    } else if snapshot.has(SINGLE) {
+        Ok(vec![SINGLE.to_string()])
+    } else {
+        Err(RegistryError::Invalid {
+            what: snapshot.id(),
+            msg: format!("it has {CONFIG} but neither {INDEX} nor {SINGLE}"),
+        })
+    }
 }
 
 /// The JSON document at `path`.
@@ -1095,8 +1100,8 @@ pub fn weights_format(weights: &Path) -> Option<&'static str> {
         .and_then(|()| (&magic == b"GGUF").then_some("gguf"))
 }
 
-/// Today's UTC date, `YYYY-MM-DD`.
-fn today() -> String {
+/// Today's UTC date, `YYYY-MM-DD`: the `pulled_at` of every entry.
+pub fn today() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());

@@ -93,9 +93,44 @@ pub fn rm() -> String {
   ardana rm <name>
   ardana rm <name> my-model
 
-A name is an entry's as `ardana list` prints it. Only the entries are removed: the weights stay in the Hugging Face
-cache, the Ollama store or where they were."
+A name is an entry's as `ardana list` prints it. A model `ardana finetune` made is removed with its directory,
+$ARDANA_HOME/models/<name>/; of any other only the entry goes: the weights stay in the Hugging Face cache, the Ollama
+store or where they were."
         .to_string()
+}
+
+pub fn finetune() -> String {
+    use crate::finetune::{
+        DEFAULT_EPOCHS, LEARNING_RATE, LLAMA_CPP_COMMIT, LORA_ALPHA, LORA_RANK, PYTHON, SEED,
+        UV_VERSION,
+    };
+    use ardana_core::finetune::{MIN_LINES, MIN_OPTION_EXAMPLES};
+    let llama_cpp = &LLAMA_CPP_COMMIT[..7];
+    format!(
+        "Examples:
+  ardana finetune <family>:<size> data.jsonl --questions questions.json --name my-model
+  ardana finetune <family>:<size> data.jsonl --name my-model --epochs 1 --quant q4_k_m
+  ardana run my-model --request request.json
+
+Data: one JSON object a line,
+  {{\"state\": <text or JSON>, \"questions\": {{<id>: <question spec>}}, \"answers\": {{<id>: <label>}}}}
+the specs as a /v1/systemone request writes them, and a label the option's name (choice), true or false (noul),
+the level's index or its key in a legend (score), or null where the line does not answer. A line without
+\"questions\" asks those of --questions (a map of id to spec, or a /v1/systemone request). The lines are split by
+line, seeded: 80% to train on, 10% to calibrate on, 10% to test on. At least {MIN_LINES} labelled lines are needed;
+an option with fewer than {MIN_OPTION_EXAMPLES} training examples is warned about.
+
+Training: a LoRA of rank {LORA_RANK} and alpha {LORA_ALPHA} on every linear layer, trained with TRL's sft on the rows
+ardana reads at run time, the loss on the answer token alone: learning rate {LEARNING_RATE}, {DEFAULT_EPOCHS} epochs
+(--epochs), seed {SEED}, the epoch with the lowest calibration loss kept, float32 on the CPU. The merged model is
+converted to GGUF and quantized to --quant, by default the quant of the base's own GGUF.
+
+Files: the first run downloads uv {UV_VERSION}, CPython {PYTHON}, PyTorch, Transformers, PEFT and TRL, and llama.cpp's
+converter ({llama_cpp}) into $ARDANA_HOME/finetune/, which later runs reuse; the base's checkpoint goes to the
+Hugging Face cache. The model is written to $ARDANA_HOME/models/<name>/ (the GGUF, the tokenizer and chat template,
+decider_config.json and finetune.json) and registered as <name>; `ardana rm <name>` removes both, and a run that
+stops leaves neither. Fine-tuning runs on Linux and macOS."
+    )
 }
 
 pub fn update() -> String {

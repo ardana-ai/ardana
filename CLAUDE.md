@@ -3,7 +3,9 @@
 Ardana is a local-first tool that pulls and runs open System 1 decision models (decider-style one-pass readouts) the
 way Ollama does, from one `ardana` Rust binary that serves them over an HTTP API (compatible with Jev and TypeSafe
 clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime` abstraction (GGUF
-files) and Candle the second (safetensors causal LMs, and the THX-01 decision model); Qwen3.5 is the first model family. Planning documents live in
+files) and Candle the second (safetensors causal LMs, and the THX-01 decision model); Qwen3.5 is the first model family.
+`ardana finetune` turns a library size into a model of the user's own (TRL in a venv it builds, llama.cpp's converter,
+the linked quantizer). Planning documents live in
 gitignored `*-prd/` folders; when one is present locally, its Decisions and Contracts are binding (as its Amendments
 change them) and its Requirements are the definition of done.
 
@@ -13,10 +15,10 @@ change them) and its Requirements are the definition of done.
 |-------|------|----------------------------------|
 | `crates/ardana` | binary, wires runtimes into registry and server | any |
 | `crates/ardana-api` | Jev wire types and error bodies, compiles for `wasm32-unknown-unknown` | none |
-| `crates/ardana-core` | prompts, tokenizer, readout, runtime traits (causal and decision models), THX-01's sequences, safetensors snapshot files | `ardana-api` |
-| `crates/ardana-llama` | llama.cpp runtime | `ardana-core` |
+| `crates/ardana-core` | prompts, tokenizer, readout, runtime traits (causal and decision models), THX-01's sequences, safetensors snapshot files, fine-tuning data and rows | `ardana-api` |
+| `crates/ardana-llama` | llama.cpp runtime and GGUF quantization | `ardana-core` |
 | `crates/ardana-candle` | Candle runtime for safetensors causal LMs and THX-01, by `config.json#architectures` | `ardana-core` |
-| `crates/ardana-registry` | refs, the model library, `models.toml`, HF and Ollama resolution | `ardana-core` |
+| `crates/ardana-registry` | refs, the model library, `models.toml`, HF and Ollama resolution, a fine-tune's base | `ardana-core` |
 | `crates/ardana-server` | axum server, model lifecycle, embedded playground | anything but the runtimes (`ardana-llama`, `ardana-candle`) |
 | `crates/ardana-playground` | Leptos CSR playground built by trunk, running browser models in the tab (onnxruntime-web) | `ardana-api` |
 | `crates/ardana-engine` | the in-tab engine's tokenizer, planner and readout (ardana-core), a second wasm module | `ardana-api`, `ardana-core` |
@@ -186,7 +188,21 @@ change them) and its Requirements are the definition of done.
   also when a check failed,
   the row's registry entries and every file it added under `tmp/hf/hub` are removed, the files that were there
   before staying, and after the last row the suite runs `cargo clean`: no `target/` is left, and the next cargo
-  command builds from nothing. A failed row does not stop the others; the suite fails naming it).
+  command builds from nothing. A failed row does not stop the others; the suite fails naming it); and the fine-tune
+  suite `finetune` (`cargo xtask e2e finetune`: each `xtask/src/e2e.rs#FINETUNE_FIXTURES` row in turn with the
+  release binary, online, on one home `tmp/e2e/finetune/home` that keeps the training environment from row to row and
+  is removed when the suite ends, also on failure; the suite writes the first 1,000 lines of decider@23579f7's
+  `teacher_data/commands.jsonl` as `commands.jsonl` and their two shared questions, `risk` (safe, caution,
+  destructive) and the noul `outside`, as `commands.questions.json` in `tmp/e2e/finetune/`. Row `qwen3:0.6b`
+  fine-tunes `cmd-risk` three times: stopped by SIGINT past the trainer's first step (the run that installs uv
+  0.13.1, CPython 3.12, the Q29 pins and the converter, which the row then checks), then with
+  `trl/scripts/sft.py` moved out of the venv so the trainer exits 1, neither leaving an entry, `models/cmd-risk/` or
+  a working directory, then to the end (81 to 90 minutes on 8 CPU cores): `ardana list` lists it, its directory holds
+  `cmd-risk-Q8_0.gguf` (file type Q8_0), the base's tokenizer and chat template files, `decider_config.json` (layout
+  `chat`) and `finetune.json` (800/100/100 lines), `ardana run cmd-risk --request -` answers both questions, and
+  `ardana rm cmd-risk` removes the entry and the directory; row `thx-01` (`hf.co/doofz/THX-01`) exits 1 named a
+  decision model, no weight file reaching `tmp/hf`. Each row removes its entry, its model directory and every path
+  it added under `tmp/hf/hub` when its checks end, also when one failed; a failed row does not stop the others).
 - `ardana pull <name|ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model
   in `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo), printing download progress on
   stderr. The library is a list of families with their sizes inside (`decider`: `0.8b`, `2b`, `4b`), each size one
@@ -232,8 +248,9 @@ change them) and its Requirements are the definition of done.
   go to the
   standard HF cache (`$HF_HOME/hub`); `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list`
   (`ls`: name, size, pull date, source), `ardana show <name> [--json]` (Model, Calibration and Files sections; a
-  library model not pulled yet says how to get it) and `ardana rm <name>...` (the entries only, named as `list` prints
-  them, never model files; every name is checked first) manage
+  library model not pulled yet says how to get it) and `ardana rm <name>...` (the entries, named as `list` prints
+  them, every name checked first; a model `ardana finetune` made also loses its `$ARDANA_HOME/models/<name>/`, any
+  other's files stay) manage
   it; `ardana ps [--host] [--port]` lists the models a running `serve` has loaded (from `/health`).
 - `ardana run <name> [STATE] [--noul Q] [--choice Q OPTION...] [--score Q LEVEL...]` asks inline questions (`q1`,
   `q2`, ... in the order given; the state is read from stdin when left out), or `ardana run <name> --request
@@ -284,6 +301,27 @@ change them) and its Requirements are the definition of done.
   server.
   `models.toml` is reread when it changes, so a model `ardana pull` adds while `serve` runs is servable at once;
   models load on their first request and unload after `--keep-alive` idle.
+- `ardana finetune <library size> <data.jsonl> --name N [--questions F] [--epochs 2] [--quant Q]` (Linux and macOS;
+  elsewhere exit 1) trains a LoRA of the size's pinned transformers checkpoint (a decider size's `source`, an instruct
+  size's `tokenizer` repository) into a System One model (Q7): a data line is `{"state", "questions"?, "answers":
+  {<id>: <label>}}`, a line without questions asking `--questions` (a map, or a `/v1/systemone` body), a label the
+  option's name, `true`/`false`, a level's index or legend key, or `null`; the lines are split by line, seeded, 80/10/10
+  into train, calibration and test, under 100 labelled lines refused and an option under 50 training examples warned.
+  The name (an entry's, a library family's or a library name's is refused, Q27), the base's listing (a checkpoint
+  with `rl_agent_config.json` refused as a decision model), its tokenizer and profile and every line (errors name
+  `<file>:<line>` and the question) are checked before anything heavy. Then the first run builds
+  `$ARDANA_HOME/finetune/` (uv 0.13.1 from its GitHub release and llama.cpp 26394b4's source archive for
+  `convert_hf_to_gguf.py`, `conversion/` and `gguf-py/`, both sha256-checked against digests compiled in; uv's
+  CPython 3.12 and a venv with the Q29 pins, torch from PyTorch's CPU wheels), which later runs reuse; the checkpoint
+  downloads to the HF cache; TRL's `sft` script trains on the very rows `Decider::plan` builds (LoRA r16, alpha 32,
+  all linear layers, lr 1e-4, the epochs, seed 0, the epoch with the lowest calibration loss kept, float32 on the
+  CPU, offline); `merge.py` merges (`merge_and_unload`); the converter writes an f32 GGUF and the linked
+  `llama_model_quantize` the `--quant`, default the base's own GGUF quant. `$ARDANA_HOME/models/<name>/` then holds
+  `<name>-<QUANT>.gguf`, the base's tokenizer and chat template files, `decider_config.json` (the base's layout and
+  score-level mode, temperature 1.0) and `finetune.json` (`{base, checkpoint, format, quant, device, dtype, qlora,
+  epochs, rows, license, report}`, `report` null), and it is registered as `<name>`, which `ardana run` answers. The
+  model is built in `$ARDANA_HOME/finetune/work/<name>/`, removed whatever the end; SIGINT (listened for, children
+  killed) and a failing step leave no entry and no `models/<name>/`.
 - `ardana update` installs the latest GitHub Release over an ardana the installers placed, through axoupdater: it
   reads dist's install receipt (`ardana-receipt.json` in `$XDG_CONFIG_HOME/ardana`, then `~/.config/ardana`;
   `%LOCALAPPDATA%\ardana` on Windows), looks ardana-ai/ardana's `releases/latest` up once and prints `ardana is up to
@@ -372,3 +410,4 @@ pinned version, library, pattern or rule), update the matching guideline in the 
 - [Playwright end-to-end tests](docs/guidelines/playwright.md)
 - [Python tooling: uv venvs and tools](docs/guidelines/python-tooling.md)
 - [ONNX browser variants: the model builder, the ardana-ai repositories, onnxruntime-web](docs/guidelines/onnx.md)
+- [Fine-tuning: uv, the venv's pins, TRL and PEFT, the converter and the quantizer](docs/guidelines/finetune.md)

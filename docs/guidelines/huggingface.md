@@ -45,7 +45,8 @@ in `crates/ardana-registry` (`hf.co/` refs, `ardana pull`, the browser variants 
   `resolve/<rev>/<file>` with `curl` into `blobs/<LFS sha256 or git blob id>`, verifies that hash (`shasum -a 256`,
   `git hash-object`), links `snapshots/<rev>/<file>` relatively and writes `refs/main` with the pinned revision, so an
   offline `main` lookup resolves to the pinned snapshot. No `hf-hub` in xtask: it keeps xtask small.
-- `ardana rm` deletes only the registry entry; never delete, prune or rewrite files in the hub cache.
+- `ardana rm` deletes the registry entry, and of a model `ardana finetune` made its own `$ARDANA_HOME/models/<name>/`
+  (`finetune.md`); never delete, prune or rewrite files in the hub cache.
 
 ### Downloading with hf-hub
 - Download one file with

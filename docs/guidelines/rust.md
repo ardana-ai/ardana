@@ -43,8 +43,11 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - Current third-party pins: `anyhow` 1, `thiserror` 2 (library error enums), `indexmap` 2 with `serde` (ordered wire
   maps), `serde`/`serde_json` 1 with `preserve_order` (JSON objects keep insertion order, like Python dicts) and
   `float_roundtrip` (floats parse to the exact `f64` Python's `json.loads` gives, which prompts re-render), `clap` 4
-  with `derive` (the `ardana` CLI), `sha2` 0.11 (test digests only), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
-  `tokio` 1 (the `ardana` binary runs `pull` and `update` on a current-thread runtime and `serve` on a multi-thread one;
+  with `derive` (the `ardana` CLI), `sha2` 0.11 (test digests, and the digests `ardana finetune` checks its downloads
+  against), `tar` 0.4 without default features with `flate2` 1 (`ardana finetune` unpacks uv's and llama.cpp's
+  `.tar.gz` archives; flate2 was in the lock already), `toml` 1 (`models.toml`, `xtask/fetch.toml`),
+  `tokio` 1 (the `ardana` binary runs `pull`, `update` and `finetune` on a current-thread runtime, `finetune` with
+  `process`, `signal` and `macros` for its Python children and its SIGINT listener, and `serve` on a multi-thread one;
   `ardana-server` adds `sync`, `signal`, `macros`, `fs` and `io-util`; `ardana-registry` takes `rt` for its unit
   tests only, and xtask for `build-playground`: a current-thread runtime under its async Hub lookups), `reqwest`
   0.13.5 (the library document's GETs in `ardana-registry` and the update lookup's client in `ardana`, at the version
@@ -102,8 +105,9 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - Bad client input must never panic: validate and return an error (the server maps errors to 4xx, never 5xx).
 - Derive `Debug` on public types; derive `Clone`, `PartialEq`, `Eq`, `Default` where they make sense, because
   downstream crates cannot add them later.
-- Keep `unsafe` confined to `ardana-llama` FFI edges (if any) and `ardana-candle`'s memory map of the hub cache's
-  safetensors blobs (`candle.md`, "Loading"), with a `// SAFETY:` comment per block.
+- Keep `unsafe` confined to `ardana-llama` FFI edges (`quantize.rs`'s calls of `llama_model_quantize`, which
+  llama-cpp-2 does not wrap) and `ardana-candle`'s memory map of the hub cache's safetensors blobs (`candle.md`,
+  "Loading"), with a `// SAFETY:` comment per block.
 - `thiserror` treats a field named `source` as the error's source; name a field holding a model reference
   `reference` in error variants (`RegistryError`), even where the data type calls it `source` (`ResolvedModel`).
 
@@ -129,7 +133,7 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - Keep `main.rs` thin and logic in `lib.rs` so integration tests can call it; test the CLI through
   `env!("CARGO_BIN_EXE_ardana")`.
 - The `ardana` CLI follows Ollama's shape (`serve`/`start`, `run`, `pull`, `list`/`ls`, `show`, `ps`, `rm`, `-v`),
-  plus `update`:
+  plus `finetune` (`finetune.md`) and `update`:
   a one-line imperative description per command and flag, an `Examples:` block in every command's `after_help`
   (`crates/ardana/src/help.rs`, checked by a unit test), readable output by default with `--json` for the exact
   data, figures through `ardana_api::format`, and errors that end with the command to type next. Every `serve` flag
@@ -249,7 +253,7 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
 - `xtask` is a workspace member binary with subcommands `env [--claude]`, `fetch [--check|--tests]`, `build`,
   `build-playground --public-url <path> [--hub <url>] [--library <url>]`, `check-deps`, `check-docs`,
   `export-decider`, `export-thx01`, `onnx convert <name>`, `onnx publish <name> [--dry-run]` (`onnx.md`), `e2e <suite>` (`smoke`,
-  `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`, `standalone`, `design`, `candle`); keep its own dependency
+  `rust`, `jevcompat`, `sdk`, `jevbench`, `playground`, `standalone`, `design`, `candle`, `finetune`); keep its own dependency
   set small (the workspace crate below is the one exception): downloads and HTTP probes go through `curl` and `git`
   run by `Sandbox::command`, not HTTP crates. Its one codec is `lz-str` (the `design` suite's Jev share links).
 - The API suites (`jevcompat`, `sdk`, `jevbench`) build `ardana` with `--release --locked` (llama.cpp in a debug build
@@ -263,6 +267,11 @@ Library-specific rules (llama-cpp-2, Candle, tokenizers, hf-hub, axum, leptos) l
   runs `cargo clean` last. The `xtask` binary runs from `target/` while that happens; it is Unix only, where a running
   file can be removed. Add a row to `xtask/src/e2e.rs#CANDLE_FIXTURES`, never a model to `xtask/fetch.toml`, for a
   checkpoint the suite verifies.
+- The `finetune` suite (`xtask/src/finetune.rs`, `finetune.md`, "Testing") runs the release `ardana` online on one
+  home, `tmp/e2e/finetune/home`, which keeps the training environment from row to row and is removed when the suite
+  ends; each row of `xtask/src/e2e.rs#FINETUNE_FIXTURES` lists `tmp/hf/hub` before it and removes its entry, its model
+  directory and every path added since when it ends, checks passed or not. Add a row there for a base the suite
+  fine-tunes.
 - Run every external tool through `Sandbox::command` (sandbox env, `PATH` prefixed with `tmp/bin`), and wrap `fetch`,
   `build`, `export-decider`, `export-thx01`, `onnx` and every `e2e` suite in `Sandbox::guarded`. `sandbox::run` (output on the
   terminal) and `sandbox::run_stdout` (output captured) fail on a non-zero exit with the command's `Debug` form, which

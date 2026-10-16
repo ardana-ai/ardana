@@ -1,9 +1,10 @@
 //! `cargo xtask e2e <suite>`: end-to-end suites, each run under the home guard. `rust` runs the plain workspace tests,
 //! then the rows of [`RUST_FIXTURES`]: each downloads its weights, runs its `#[ignore]`d tests and removes the weights.
 //! The API suites (`jevcompat`, `sdk`, `jevbench`) run their harness from `tmp/` against a release `ardana serve` on
-//! decider:2b; the browser suites (`playground`, `standalone`, `design`) live in [`crate::browser`], and the `candle`
-//! suite, which checks the rows of [`CANDLE_FIXTURES`], in [`crate::candle`]. Every suite but `candle`, which pulls
-//! through `ardana`, gets the weights it reads from [`hub::with_weights`], and leaves `tmp/hf` as it found it.
+//! decider:2b; the browser suites (`playground`, `standalone`, `design`) live in [`crate::browser`], the `candle`
+//! suite, which checks the rows of [`CANDLE_FIXTURES`], in [`crate::candle`], and the `finetune` suite, which runs the
+//! rows of [`FINETUNE_FIXTURES`], in [`crate::finetune`]. Every suite but `candle` and `finetune`, which pull through
+//! `ardana`, gets the weights it reads from [`hub::with_weights`], and leaves `tmp/hf` as it found it.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -15,7 +16,7 @@ use serde_json::Value;
 
 use crate::sandbox::{Sandbox, cargo, run as run_command};
 use crate::serve::{Server, build_ardana};
-use crate::{browser, candle, hub};
+use crate::{browser, candle, finetune, hub};
 
 pub const SUITES: &[&str] = &[
     "smoke",
@@ -27,6 +28,7 @@ pub const SUITES: &[&str] = &[
     "standalone",
     "design",
     "candle",
+    "finetune",
 ];
 
 /// A Hub repository `<org>/<name>` at one commit.
@@ -214,6 +216,56 @@ pub const CANDLE_FIXTURES: &[CandleFixture] = &[
     },
 ];
 
+/// One fine-tune the `finetune` suite runs.
+#[derive(Debug)]
+pub struct FinetuneFixture {
+    /// The row's name in the suite's output.
+    pub name: &'static str,
+    /// The base `ardana finetune` is given.
+    pub base: &'static str,
+    /// The arguments after the base: the data and questions files, which the suite writes into its directory and
+    /// names relative to it, `--name` and any other flag.
+    pub args: &'static [&'static str],
+    pub expect: Expect,
+}
+
+/// What a fine-tune row expects of `ardana finetune`.
+#[derive(Debug)]
+pub enum Expect {
+    /// It exits 0, its model is registered and `ardana run` answers with it.
+    Answers,
+    /// It exits 1 before downloading any weight, its message holding this text.
+    Refused(&'static str),
+}
+
+/// The fine-tunes `cargo xtask e2e finetune` runs, in run order, on one suite home.
+pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
+    FinetuneFixture {
+        name: "qwen3:0.6b",
+        base: "qwen3:0.6b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk",
+        ],
+        expect: Expect::Answers,
+    },
+    FinetuneFixture {
+        name: "thx-01",
+        base: "hf.co/doofz/THX-01",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "thx-risk",
+        ],
+        expect: Expect::Refused("is a decision model"),
+    },
+];
+
 /// One row of the `rust` suite: the `#[ignore]`d workspace tests that need the same weights.
 #[derive(Debug)]
 pub struct RustFixture {
@@ -346,6 +398,7 @@ pub fn run(sandbox: &Sandbox, suite: &str) -> Result<()> {
         "standalone" => in_browser(browser::standalone),
         "design" => in_browser(browser::design),
         "candle" => candle::candle(sandbox, CANDLE_FIXTURES),
+        "finetune" => finetune::finetune(sandbox, FINETUNE_FIXTURES),
         other => bail!("unknown e2e suite `{other}`; suites: {}", SUITES.join(", ")),
     }
 }

@@ -1,7 +1,8 @@
-//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`, and `update`.
-//! `main.rs` only parses arguments and reports errors.
+//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`, plus `finetune`
+//! and `update`. `main.rs` only parses arguments and reports errors.
 
 mod ask;
+pub mod finetune;
 mod help;
 mod render;
 pub mod update;
@@ -66,6 +67,9 @@ pub enum Command {
     /// Remove models
     #[command(after_help = help::rm())]
     Rm(RmArgs),
+    /// Fine-tune a library model on labelled data into a model of your own
+    #[command(after_help = help::finetune())]
+    Finetune(finetune::FinetuneArgs),
     /// Update ardana to the latest release
     #[command(after_help = help::update())]
     Update,
@@ -255,6 +259,7 @@ pub fn run(cli: Cli, matches: &ArgMatches) -> Result<()> {
         Command::Show(args) => show(&args),
         Command::Ps(args) => ps(&args),
         Command::Rm(args) => rm(&args),
+        Command::Finetune(args) => finetune::finetune(&args),
         Command::Update => update::update(),
     }
 }
@@ -565,9 +570,11 @@ fn get_json(host: &str, port: u16, path: &str) -> Result<serde_json::Value> {
     serde_json::from_str(body).with_context(|| format!("{url}{path} did not answer JSON"))
 }
 
-/// `ardana rm`: the entries only, every name checked before any is removed.
+/// `ardana rm`: the entries, every name checked before any is removed. A model `ardana finetune` made also loses its
+/// directory, `$ARDANA_HOME/models/<name>/` (Q20); the files of every other stay where they are.
 fn rm(args: &RmArgs) -> Result<()> {
-    let mut registry = Registry::open_default()?;
+    let home = Registry::home()?;
+    let mut registry = Registry::open(&home)?;
     let mut names: Vec<&str> = Vec::new();
     for name in &args.names {
         registry.entry(name)?;
@@ -581,6 +588,12 @@ fn rm(args: &RmArgs) -> Result<()> {
     }
     registry.save()?;
     for model in removed {
+        let dir = std::path::absolute(home.join(finetune::MODELS_DIR).join(&model.name))?;
+        if model.weights.starts_with(&dir) && dir.join(finetune::RECORD).is_file() {
+            std::fs::remove_dir_all(&dir).with_context(|| format!("removing {}", dir.display()))?;
+            println!("removed {} and its files in {}", model.name, dir.display());
+            continue;
+        }
         let kept = if model.source.starts_with("hf.co/") {
             "its weights stay in the Hugging Face cache".to_string()
         } else if model.source.starts_with("ollama:") {

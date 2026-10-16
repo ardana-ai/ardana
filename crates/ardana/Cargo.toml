@@ -25,10 +25,13 @@ ardana-registry.workspace = true
 ardana-server.workspace = true
 axoupdater.workspace = true
 clap = { workspace = true, features = ["env"] }
+flate2.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
+tar.workspace = true
 tokenizers = { workspace = true, features = ["onig"] }
-tokio = { workspace = true, features = ["rt", "rt-multi-thread", "net", "time"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "net", "time", "macros", "process", "signal"] }
 
 [dev-dependencies]
 toml.workspace = true
