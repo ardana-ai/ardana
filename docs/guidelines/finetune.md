@@ -4,7 +4,8 @@ Covers `ardana finetune` (`crates/ardana/src/finetune/`): the training data and 
 (`crates/ardana-core/src/finetune.rs`), the base it reads through `ardana-registry` (`crates/ardana-registry/src/base.rs`),
 the training environment it builds under `$ARDANA_HOME/finetune/` (uv, uv's CPython, one venv, llama.cpp's converter),
 the TRL, PEFT and PyTorch run in it, the merge, the GGUF conversion and the quantization by the linked llama.cpp
-(`ardana-llama`'s `quantize`), the calibration and the test report (`crates/ardana-core/src/calibrate.rs`,
+(`ardana-llama`'s `quantize`) or the safetensors checkpoint Candle runs (`--format safetensors`), the calibration
+and the test report (`crates/ardana-core/src/calibrate.rs`,
 `crates/ardana/src/finetune/evaluate.rs`), and the `cargo xtask e2e finetune` suite (`xtask/src/finetune.rs`). This is
 the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only harnesses.
 
@@ -104,6 +105,8 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   else the `QUANTS` entry the base GGUF's file name ends in (`-Q8_0.gguf`), else `q4_k_m`; a quant ardana does not
   write is refused naming `--quant`. The license is a size's own (else its family's), else the `license` of the base
   repository's card, else of the checkpoint's.
+- `Base::architectures` is the checkpoint's `config.json#architectures`, read when it is opened (no weight), which
+  `--format safetensors` checks before the data.
 - `Base::download` fetches `config.json`, the safetensors its index names (else `model.safetensors`) and every other
   root file but weights of other formats (the card, the license, a remote-code checkpoint's `*.py`), at the listed
   commit, into the hub cache; a directory is read in place.
@@ -148,14 +151,30 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   dtype (it has no remote-code flag: it reads `config.json` itself when `AutoConfig` will not, and its own
   architecture classes, `conversion/spark2_5.py` among them, convert the merged weights); `--no-nextn` only when `config.json` (or its `text_config`) declares `mtp_num_hidden_layers` or
   `num_nextn_predict_layers` above 0: the converter refuses the flag for an architecture without an MTP head.
+- `--format safetensors` (Q9, Q10) skips the converter and the quantizer: the model is the merged checkpoint, the
+  safetensors `merge.py` saved (with `model.safetensors.index.json` when sharded) moved into `out/` beside the
+  `config.json` of the checkpoint as trained (the text tower's for a multimodal one), its `dtype` or `torch_dtype`
+  set to `float32`. `save_pretrained`'s own `config.json` is not kept: transformers 5 writes `rope_parameters`
+  (`{"rope_theta", "rope_type"}`) and no `rope_theta`, which candle-transformers 0.11.0's `qwen3::Config` requires
+  (`missing field rope_theta`), and merging changes no setting. Its `generation_config.json` is left out with it.
+  The format takes exactly the names of `ardana_candle::ARCHITECTURES` but `thx01::ARCHITECTURE`
+  (`safetensors_architectures`, computed from the list, so a name Candle adds is taken with no other change): one of
+  the checkpoint's `architectures` must be among them, as Candle picks the first it implements, else the run is
+  refused once the base is read (before the data, the environment and any weight), naming the architectures, the
+  accepted ones and `--format gguf`. `--quant` with it is refused before the base is read: there is no GGUF to
+  quantize, and the checkpoint keeps the training dtype. `finetune.json` records `"format": "safetensors"` and
+  `"quant": null`.
 - `ardana_llama::quantize` calls `llama_model_quantize` from `llama-cpp-sys-2` (llama-cpp-2 wraps no quantization)
   with llama.cpp's default parameters and the file type `--quant` names, by default the base's own GGUF quant (Q24).
   `QUANTS` lists, lowercase, every type `llama-quantize` writes without an importance matrix.
 
 ### Calibration and report
-- Q11: the temperatures are fitted through the quantized GGUF itself, before it moves: `work/<name>/out/` is resolved
-  as `ardana pull <that GGUF> --name <name> --layout <the base's>` would resolve it (not recorded) and loaded as
-  `ardana run` loads an entry (the default window and offload). Every calibration line is planned and answered by
+- Q11: the temperatures are fitted through the model itself, before it moves: the quantized GGUF in `work/<name>/out/`
+  is resolved as `ardana pull <that GGUF> --name <name> --layout <the base's>` would resolve it (not recorded); a
+  checkpoint is `out/` itself, its tokenizer and `decider_config.json` in it giving the profile (`read_profile`) and
+  `Runtimes::for_weights` its runtime, Candle. Either is loaded as `ardana run` loads an entry (the default window and
+  offload), and the run prints `calibrated <name> through <runtime>`, the id of the runtime that loaded it
+  (`evaluate::calibrate` returns it). Every calibration line is planned and answered by
   `Decider::run` at temperature 1 through a recording `LoadedModel`; each labelled question is one `calibrate::Record`,
   the label logits of its row or, for an isolated score question, of each level's `no`/`yes` row.
 - Q30 is decider's `calibrate.py#fit_by_type`: `temperature` fitted over every record, and per type a
@@ -179,13 +198,15 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   between two lines, and the run then ends as any stopped run does.
 
 ### Output, registry and stopping
-- The model is built in `work/<name>/out/` and holds `<name>-<QUANT>.gguf`, the base's `tokenizer.json` with its
+- The model is built in `work/<name>/out/` and holds `<name>-<QUANT>.gguf` (under `--format safetensors`, `config.json`
+  and the safetensors), the base's `tokenizer.json` with its
   `tokenizer_config.json` and `chat_template.jinja` as they are, `decider_config.json` (`version` the name, the base's
   `layout` and `isolated_levels`, the fitted `temperature` and `temperature_by_type`, `release_date`) and
   `finetune.json` (the Contract: `rows` counts the lines of each split, `report` the test report). Once calibrated and
   reported it is renamed to `$ARDANA_HOME/models/<name>/` and registered as `ardana pull <that GGUF> --name <name>
-  --layout <the base's>` would record it, so the profile is read from `decider_config.json` beside it; a registration
-  that fails removes the directory. `$ARDANA_HOME` is made absolute first: the Python steps run in the working
+  --layout <the base's>` would record it, so the profile is read from `decider_config.json` beside it; a checkpoint is
+  registered with the directory as its weights and its source, runtime `candle`. A registration that fails removes
+  the directory. `$ARDANA_HOME` is made absolute first: the Python steps run in the working
   directory.
 - A name is refused (Q27) when an entry, a library family or a library name (any spelling) holds it, when its model
   directory exists, and when it holds whitespace, `/` or `\` or starts with `.`.
@@ -209,8 +230,12 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   reference in a store of the test's own, a stand-in GGUF and decider:4b refused naming `--checkpoint` with the hub
   cache unchanged, then the first two read on to their data with `--checkpoint`; `entry_resolves_checkpoint_from_card`:
   an entry recorded from `hf.co/Qwen/Qwen3-1.7B-GGUF:Q8_0`, its GGUF a stand-in, resolves to `hf.co/Qwen/Qwen3-1.7B`
-  at the cached commit through the cached card), offline on the files `cargo xtask fetch` installs, the
-  `Qwen/Qwen3-1.7B-GGUF` card among them.
+  at the cached commit through the cached card; `safetensors_refuses_other_architectures`: qwen3.5:0.8b with `--format
+  safetensors` refused naming `Qwen3_5ForConditionalGeneration` and `--format gguf` before its data, then with
+  `--quant` before its base, the hub cache unchanged), offline on the files `cargo xtask fetch` installs, the
+  `Qwen/Qwen3-1.7B-GGUF` card and `Qwen/Qwen3.5-0.8B`'s `config.json` among them; `crates/ardana`'s
+  `finetune::tests::safetensors_follows_candle_architectures` (every name of `ARCHITECTURES` but THX-01's taken, alone
+  and after another name; THX-01, `Qwen3_5ForConditionalGeneration` and no name refused).
 - `cargo xtask e2e finetune` runs `xtask/src/e2e.rs#FINETUNE_FIXTURES` in order with the release `ardana`, online, on
   one home `tmp/e2e/finetune/home` (removed when the suite ends, also on failure) over `tmp/hf`, under the home guard.
   It writes the first 1,000 lines of decider@23579f7's `teacher_data/commands.jsonl` (`tmp/src/decider`) as
@@ -222,15 +247,19 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   offline), which runs until the suite ends.
 - The rows, in order: `qwen3:0.6b` (commands data, `cmd-risk`, `Gain::Above`), `thx-01` (refused,
   `Gain::Unchecked`), `decider:0.8b` (the custom data, plain layout with isolated levels, `--epochs 1`,
-  `Gain::Within(0.05)`: its training mixture holds the custom component, so the row checks for no loss) and
+  `Gain::Within(0.05)`: its training mixture holds the custom component, so the row checks for no loss),
   `qwen3.5:0.8b` (commands data, the multimodal checkpoint, chat layout, `Gain::Above`), `hf.co-gguf`
-  (`hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, `cmd-risk-gguf`, `Gain::Unchecked`: R3.2 asks that it answers)
-  and `spark-x2.5:1.7b` (`Spark2_5ForCausalLM`, whose `config.json` has `auto_map`, `--trust-remote-code --epochs 1`,
-  `Gain::Unchecked`). A row whose args hold `--trust-remote-code` first runs without it, which must exit 1 naming the
-  flag with no weight file reaching the hub cache. A row whose base is an `hf.co/` GGUF reference, once its runs are
+  (`hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, `cmd-risk-gguf`, `Gain::Unchecked`: R3.2 asks that it answers),
+  `spark-x2.5:1.7b` (`Spark2_5ForCausalLM`, whose `config.json` has `auto_map`, `--trust-remote-code --epochs 1`,
+  `Gain::Unchecked`) and `safetensors` (`hf.co/Qwen/Qwen3-0.6B` on the commands data, `--format safetensors`,
+  `cmd-risk-st`, `Gain::Above`: the base answers through Candle too). A row whose args hold `--trust-remote-code`
+  first runs without it, which must exit 1 naming the flag with no weight file reaching the hub cache. A row whose
+  base is an `hf.co/` GGUF reference, once its runs are
   checked, fine-tunes `<name>-local` from that GGUF's file in the hub cache with `--checkpoint <the snapshot
   directory of the checkpoint its finetune.json recorded>` and `--epochs 1`, run to the end and checked the same way.
-- What a model is checked against (`Cli::expected`): a library size's entry; for an `hf.co/` GGUF reference the card
+- What a model is checked against (`Cli::expected`): a library size's entry; for an `hf.co/` safetensors checkpoint
+  the one cached snapshot of it holding `config.json` (`{"repo", "commit"}`, its tokenizer, its card's `license`, chat
+  unless it has `decider_config.json`); for an `hf.co/` GGUF reference the card
   in the hub cache (its one `base_model` the checkpoint, `{"repo", "commit"}` with the commit of the one cached
   snapshot holding `config.json`, its `license`), the quant the reference names, the checkpoint's tokenizer files
   unless the GGUF repository has its own, chat unless it has `decider_config.json`; for a local GGUF `{"path"}` of
@@ -240,8 +269,11 @@ the one place Ardana runs Python itself; `python-tooling.md` covers the dev-only
   its first step (it also installs the environment, which the row then checks: uv 0.13.1, CPython 3.12 from
   `python/`, the Q29 pins by `importlib.metadata`, the converter's three parts), one whose trainer exits 1 because
   `trl/scripts/sft.py` is moved out of the venv for it (and back afterwards: uv's check reads metadata, not files),
-  and one to the end, whose stdout it keeps apart, then checks: the directory, the GGUF file type and
-  `finetune.json`; the temperatures the run's stderr says it fitted against Q30 (a type's own only over 50 answers or
+  and one to the end, whose stdout it keeps apart, then checks: the directory, the GGUF file type (or, for
+  `--format safetensors`, runtime `candle` in `ardana show` and `--json`, the directory as the weights, `config.json`
+  the checkpoint's with the dtype `float32`, every tensor of the safetensors `F32` by their headers) and
+  `finetune.json`; that the run says `calibrated <name> through <runtime>`, llama.cpp for a GGUF, candle for a
+  checkpoint; the temperatures the run's stderr says it fitted against Q30 (a type's own only over 50 answers or
   more), `decider_config.json` and `ardana show <name> --json`; the base's entry, pulled from its default quant; the
   report (the base's and the model's names, every type's metrics in range, the same answers for both, the stdout table
   giving the same numbers) and the row's `Gain` on the overall accuracy; `ardana run` answering the first data line's

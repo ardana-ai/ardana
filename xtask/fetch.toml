@@ -143,7 +143,7 @@ files = ["Qwen3.5-0.8B-Q4_0.gguf"]
 [[hf]]
 repo = "Qwen/Qwen3.5-0.8B"
 revision = "2fc06364715b967f1860aea9cf38778875588b17"
-files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja"]
+files = ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja", "config.json"]
 
 [[hf]]
 repo = "ggml-org/SmolLM3-3B-GGUF"

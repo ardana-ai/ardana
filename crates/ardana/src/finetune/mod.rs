@@ -3,11 +3,12 @@
 //! is read and checked against the base's own tokenizer and profile before anything heavy happens, every labelled
 //! question becoming the rows `Decider::plan` builds ([`ardana_core::finetune`]); then the environment in
 //! `$ARDANA_HOME/finetune/` is built or reused ([`env`]), the base's checkpoint downloads to the Hugging Face cache,
-//! TRL's `sft` script trains the adapter on those rows, `merge.py` merges it, llama.cpp's converter writes the GGUF and
-//! the linked llama.cpp quantizes it. Its temperatures are then fitted on the calibration split through that GGUF,
-//! and the base and the model answer the test split for the report ([`evaluate`]). The model is built in the run's
-//! working directory and only moved to `$ARDANA_HOME/models/<name>/` and registered once whole, so a run that stops
-//! (SIGINT, a failing trainer) leaves neither.
+//! TRL's `sft` script trains the adapter on those rows, `merge.py` merges it, and llama.cpp's converter writes the GGUF
+//! and the linked llama.cpp quantizes it, or, under `--format safetensors`, the merged checkpoint is the model, which
+//! Candle runs (Q9, Q10). Its temperatures are then fitted on the calibration split through that model as `ardana run`
+//! loads it, and the base and the model answer the test split for the report ([`evaluate`]). The model is built in
+//! the run's working directory and only moved to `$ARDANA_HOME/models/<name>/` and registered once whole, so a run
+//! that stops (SIGINT, a failing trainer) leaves neither.
 
 mod env;
 mod evaluate;
@@ -21,12 +22,12 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail, ensure};
 use ardana_core::calibrate::Fitted;
 use ardana_core::finetune::{self, Example, TrainingRow};
-use ardana_core::{Decider, Layout};
+use ardana_core::{Decider, Layout, snapshot};
 use ardana_registry::base::{Base, BaseModel, BaseOptions, Checkpoint};
 use ardana_registry::library::{Library, LibraryClient, library_name};
 use ardana_registry::refs::{DEFAULT_QUANT, matches_quant};
 use ardana_registry::{LayoutKind, Named, PullOptions, Registry, ResolvedModel, TOKENIZER_EXTRAS};
-use clap::Args;
+use clap::{Args, ValueEnum};
 use serde_json::{Value, json};
 use tokio::process::Command;
 
@@ -68,6 +69,10 @@ pub struct FinetuneArgs {
     /// Passes over the training lines; the one with the lowest calibration loss is kept
     #[arg(long, default_value_t = DEFAULT_EPOCHS, value_parser = clap::value_parser!(u32).range(1..))]
     pub epochs: u32,
+    /// What the model is written as: a GGUF llama.cpp runs, or a safetensors checkpoint Candle runs, for the causal
+    /// architectures Candle implements
+    #[arg(long, value_enum, default_value_t = Format::Gguf)]
+    pub format: Format,
     /// The GGUF's quant, a llama.cpp file type (q8_0, q4_k_m, ...); default the base's own GGUF quant
     #[arg(long)]
     pub quant: Option<String>,
@@ -78,6 +83,25 @@ pub struct FinetuneArgs {
     /// same name does
     #[arg(long)]
     pub trust_remote_code: bool,
+}
+
+/// What `--format` writes (Q9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Format {
+    /// `<name>-<QUANT>.gguf`, quantized by the linked llama.cpp.
+    Gguf,
+    /// The merged checkpoint at the training dtype: `config.json` and its safetensors.
+    Safetensors,
+}
+
+impl Format {
+    /// The name `--format` and `finetune.json#format` give it.
+    fn name(self) -> &'static str {
+        match self {
+            Format::Gguf => "gguf",
+            Format::Safetensors => "safetensors",
+        }
+    }
 }
 
 /// `ardana finetune`, on Linux and macOS (Q21).
@@ -105,8 +129,13 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     let models = home.join(MODELS_DIR).join(name);
     let registry = Registry::open(&home)?;
     free_name(name, &registry, &client, &models).await?;
-    if let Some(quant) = &args.quant {
-        quant_is_written(quant, &format!("--quant {quant}"))?;
+    match (&args.quant, args.format) {
+        (Some(_), Format::Safetensors) => bail!(
+            "--quant names a GGUF's quant, and --format safetensors writes no GGUF: the checkpoint keeps the \
+             training dtype, {DTYPE}; drop --quant, or pass --format gguf"
+        ),
+        (Some(quant), Format::Gguf) => quant_is_written(quant, &format!("--quant {quant}"))?,
+        (None, _) => {}
     }
 
     // The base's checkpoint, tokenizer and profile, then the data, before anything heavy (R1.4).
@@ -123,12 +152,16 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         "fine-tuning {} from the checkpoint {}",
         base.name, base.checkpoint
     );
-    let quant = match &args.quant {
-        Some(quant) => quant.clone(),
-        None => {
+    let quant = match (&args.quant, args.format) {
+        (_, Format::Safetensors) => {
+            candle_writes(&base.checkpoint.to_string(), &base.architectures)?;
+            None
+        }
+        (Some(quant), Format::Gguf) => Some(quant.clone()),
+        (None, Format::Gguf) => {
             let quant = base_quant(&base);
             quant_is_written(&quant, &format!("the base's own quant {quant}"))?;
-            quant
+            Some(quant)
         }
     };
     let decider = Decider::new(
@@ -264,46 +297,70 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         merge.arg("--trust-remote-code");
     }
     env::run(&mut merge, &mut interrupt, "merging the adapter (merge.py)").await?;
-    copy_tokenizer_files(&trained, &merged)?;
 
-    let converted = work.dir.join(format!("{name}-{DTYPE}.gguf"));
-    let mut convert = python(&env, &work);
-    // Not isolated: the converter imports its `conversion/` package from beside itself.
-    convert
-        .args(["-E", "-s"])
-        .arg(env.converter())
-        .arg(&merged)
-        .args(["--outtype", "f32", "--model-name", name, "--outfile"])
-        .arg(&converted);
-    if declares_mtp(&checkpoint)? {
-        // A multi-token-prediction head the checkpoint declares without weights; Ardana never drafts (onnx.md).
-        convert.arg("--no-nextn");
-    }
-    env::run(&mut convert, &mut interrupt, "llama.cpp's converter").await?;
+    // The GGUF's file in the model's directory; a checkpoint is the directory itself.
+    let file = match &quant {
+        Some(quant) => {
+            copy_tokenizer_files(&trained, &merged)?;
+            let converted = work.dir.join(format!("{name}-{DTYPE}.gguf"));
+            let mut convert = python(&env, &work);
+            // Not isolated: the converter imports its `conversion/` package from beside itself.
+            convert
+                .args(["-E", "-s"])
+                .arg(env.converter())
+                .arg(&merged)
+                .args(["--outtype", "f32", "--model-name", name, "--outfile"])
+                .arg(&converted);
+            if declares_mtp(&checkpoint)? {
+                // A multi-token-prediction head the checkpoint declares without weights; Ardana never drafts
+                // (onnx.md).
+                convert.arg("--no-nextn");
+            }
+            env::run(&mut convert, &mut interrupt, "llama.cpp's converter").await?;
 
-    let file = format!("{name}-{}.gguf", quant.to_ascii_uppercase());
-    let gguf = out.join(&file);
-    eprintln!("quantizing {name} to {quant}");
-    // llama.cpp cannot be stopped mid-file: SIGINT ends the run once it is done.
-    interrupt
-        .blocking({
-            let (gguf, quant) = (gguf.clone(), quant.clone());
-            move |_| ardana_llama::quantize(&converted, &gguf, &quant)
-        })
-        .await
-        .context("quantizing")?;
+            let file = format!("{name}-{}.gguf", quant.to_ascii_uppercase());
+            let gguf = out.join(&file);
+            eprintln!("quantizing {name} to {quant}");
+            // llama.cpp cannot be stopped mid-file: SIGINT ends the run once it is done.
+            interrupt
+                .blocking({
+                    let quant = quant.clone();
+                    move |_| ardana_llama::quantize(&converted, &gguf, &quant)
+                })
+                .await
+                .context("quantizing")?;
+            Some(file)
+        }
+        None => {
+            write_checkpoint(&trained, &merged, &out)?;
+            None
+        }
+    };
+    let weights = |dir: &Path| match &file {
+        Some(file) => dir.join(file),
+        None => dir.to_path_buf(),
+    };
 
-    // Q11, Q30: the temperatures are fitted through the GGUF itself, read as `ardana run` reads the entry it becomes.
-    write_model(&out, &base, &split, args.epochs, &quant, name)?;
-    let model = resolve(&gguf, name, base.layout).await?;
+    // Q11, Q30: the temperatures are fitted through the model itself, read as `ardana run` reads the entry it becomes.
+    write_model(
+        &out,
+        &base,
+        &split,
+        args.epochs,
+        args.format,
+        quant.as_deref(),
+        name,
+    )?;
+    let model = resolve(&weights(&out), name, base.layout).await?;
     let calibration = owned(&split.calibration);
     eprintln!("calibrating {name} on {} lines", split.calibration.len());
-    let fitted = interrupt
+    let (fitted, runtime) = interrupt
         .blocking(move |stop| evaluate::calibrate(&model, &calibration, stop))
         .await?;
+    eprintln!("calibrated {name} through {runtime}");
     eprintln!("{name} answers at {}", temperatures(&fitted));
     set_temperatures(&out, &fitted)?;
-    let model = resolve(&gguf, name, base.layout).await?;
+    let model = resolve(&weights(&out), name, base.layout).await?;
 
     eprintln!(
         "answering the {} test lines with {} and {name}",
@@ -332,7 +389,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     std::fs::create_dir_all(home.join(MODELS_DIR))?;
     std::fs::rename(&out, &models)
         .with_context(|| format!("moving the model to {}", models.display()))?;
-    let model = match register(&models.join(&file), name, base.layout).await {
+    let model = match register(&weights(&models), name, base.layout).await {
         Ok(model) => model,
         Err(err) => {
             std::fs::remove_dir_all(&models).ok();
@@ -341,8 +398,12 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     };
     drop(work);
     print!("{}", report.table());
+    let what = match &quant {
+        Some(quant) => quant.clone(),
+        None => format!("{} in {DTYPE}", args.format.name()),
+    };
     println!(
-        "fine-tuned {name} from {} ({quant}, {}) in {} in {} min; try `ardana run {name}`",
+        "fine-tuned {name} from {} ({what}, {}) in {} in {} min; try `ardana run {name}`",
         base.name,
         crate::size(&model),
         models.display(),
@@ -368,7 +429,7 @@ fn text_tower(checkpoint: &Path, work: &Path) -> Result<PathBuf> {
         "preprocessor_config.json",
         "video_preprocessor_config.json",
     ];
-    let path = checkpoint.join(ardana_core::snapshot::CONFIG);
+    let path = checkpoint.join(snapshot::CONFIG);
     let config: Value = serde_json::from_str(
         &std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?,
     )?;
@@ -386,7 +447,7 @@ fn text_tower(checkpoint: &Path, work: &Path) -> Result<PathBuf> {
     let dir = work.join("text");
     std::fs::create_dir_all(&dir)?;
     std::fs::write(
-        dir.join(ardana_core::snapshot::CONFIG),
+        dir.join(snapshot::CONFIG),
         serde_json::to_string_pretty(&text)?,
     )?;
     for entry in std::fs::read_dir(checkpoint)? {
@@ -394,7 +455,7 @@ fn text_tower(checkpoint: &Path, work: &Path) -> Result<PathBuf> {
         let Some(file) = path.file_name().and_then(|f| f.to_str()) else {
             continue;
         };
-        if file != ardana_core::snapshot::CONFIG && !PROCESSOR_FILES.contains(&file) {
+        if file != snapshot::CONFIG && !PROCESSOR_FILES.contains(&file) {
             link(&std::fs::canonicalize(&path)?, &dir.join(file))?;
         }
     }
@@ -573,9 +634,70 @@ fn copy_tokenizer_files(checkpoint: &Path, merged: &Path) -> Result<()> {
     Ok(())
 }
 
+/// The architectures `--format safetensors` writes (Q10): those of `ardana_candle::ARCHITECTURES` but THX-01's
+/// decision model, the causal LMs Candle runs, so the set grows with Candle's.
+fn safetensors_architectures() -> impl Iterator<Item = &'static str> {
+    ardana_candle::ARCHITECTURES
+        .into_iter()
+        .filter(|&architecture| architecture != ardana_candle::thx01::ARCHITECTURE)
+}
+
+/// Refuses `--format safetensors` for the checkpoint `what` unless one of its `architectures` is Candle's
+/// ([`safetensors_architectures`]), as Candle picks the first name it implements: before any weight downloads, naming
+/// the architectures and `--format gguf`.
+fn candle_writes(what: &str, architectures: &[String]) -> Result<()> {
+    if architectures
+        .iter()
+        .any(|named| safetensors_architectures().any(|candle| candle == named))
+    {
+        return Ok(());
+    }
+    let named = if architectures.is_empty() {
+        format!("its {} names no architecture", snapshot::CONFIG)
+    } else {
+        format!("its architecture {}", architectures.join(", "))
+    };
+    bail!(
+        "{what}: {named} is no causal LM Candle runs ({}), so --format safetensors cannot write a model ardana runs; \
+         pass --format gguf",
+        safetensors_architectures().collect::<Vec<_>>().join(", ")
+    )
+}
+
+/// The merged checkpoint as the model (`--format safetensors`): the safetensors `merge.py` saved (with their index
+/// when sharded) moved into `out`, beside the `config.json` of the checkpoint as trained, its dtype the one merged in.
+/// Merging changes no setting of the model, and `save_pretrained`'s own `config.json` is transformers 5's
+/// (`rope_parameters` for `rope_theta`), which candle-transformers' configurations do not read.
+fn write_checkpoint(trained: &Path, merged: &Path, out: &Path) -> Result<()> {
+    let mut files = snapshot::weight_files(merged).map_err(anyhow::Error::msg)?;
+    let index = merged.join(snapshot::INDEX);
+    if index.is_file() {
+        files.push(index);
+    }
+    for path in files {
+        let file = path.file_name().context("a weight file's name")?;
+        std::fs::rename(&path, out.join(file))
+            .with_context(|| format!("moving {}", path.display()))?;
+    }
+    let path = trained.join(snapshot::CONFIG);
+    let mut config: Value = serde_json::from_str(
+        &std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?,
+    )?;
+    for key in ["dtype", "torch_dtype"] {
+        if config.get(key).is_some() {
+            config[key] = json!(DTYPE);
+        }
+    }
+    std::fs::write(
+        out.join(snapshot::CONFIG),
+        serde_json::to_string_pretty(&config)? + "\n",
+    )?;
+    Ok(())
+}
+
 /// Whether the checkpoint's `config.json` (or its text model's) declares a multi-token-prediction head.
 fn declares_mtp(checkpoint: &Path) -> Result<bool> {
-    let path = checkpoint.join(ardana_core::snapshot::CONFIG);
+    let path = checkpoint.join(snapshot::CONFIG);
     let config: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?,
     )?;
@@ -587,14 +709,16 @@ fn declares_mtp(checkpoint: &Path) -> Result<bool> {
     Ok(declares(&config) || declares(&config["text_config"]))
 }
 
-/// The model's files besides the GGUF: the base's tokenizer with its chat template files, `decider_config.json` in
-/// the base's layout and score-level mode (Q7) and `finetune.json`, the record of the run.
+/// The model's files besides its weights: the base's tokenizer with its chat template files, `decider_config.json` in
+/// the base's layout and score-level mode (Q7) and `finetune.json`, the record of the run (`quant` null for a
+/// checkpoint).
 fn write_model(
     out: &Path,
     base: &Base,
     split: &finetune::Split<'_>,
     epochs: u32,
-    quant: &str,
+    format: Format,
+    quant: Option<&str>,
     name: &str,
 ) -> Result<()> {
     let dir = base
@@ -622,7 +746,7 @@ fn write_model(
     let record = json!({
         "base": base.name,
         "checkpoint": base.checkpoint,
-        "format": "gguf",
+        "format": format.name(),
         "quant": quant,
         "device": DEVICE,
         "dtype": DTYPE,
@@ -642,12 +766,37 @@ fn write_model(
     Ok(())
 }
 
-/// The entry `ardana pull <gguf> --name <name> --layout <layout>` would record for the GGUF, not recorded: the
-/// tokenizer and `decider_config.json` beside it give the profile.
-async fn resolve(gguf: &Path, name: &str, layout: LayoutKind) -> Result<ResolvedModel> {
-    let reference = gguf
+/// The entry of the model's `weights`, not recorded: for a GGUF the one `ardana pull <gguf> --name <name> --layout
+/// <layout>` would record, the tokenizer and `decider_config.json` beside it giving the profile; for a checkpoint
+/// directory the same from the files in it, its runtime the first that supports it, as `ardana pull` picks one.
+async fn resolve(weights: &Path, name: &str, layout: LayoutKind) -> Result<ResolvedModel> {
+    if weights.is_dir() {
+        let tokenizer = weights.join(ardana_registry::TOKENIZER_FILE);
+        let profile = ardana_registry::read_profile(
+            &tokenizer,
+            &ardana_registry::load_tokenizer(&tokenizer)?,
+            Some(&weights.join(ardana_registry::DECIDER_CONFIG)),
+            layout,
+            name,
+        )?;
+        let runtime = crate::runtimes()
+            .for_weights(weights)
+            .with_context(|| format!("no runtime of this ardana loads {}", weights.display()))?
+            .id()
+            .to_string();
+        return Ok(ResolvedModel {
+            name: name.to_string(),
+            source: weights.display().to_string(),
+            weights: weights.to_path_buf(),
+            tokenizer,
+            runtime,
+            profile,
+            pulled_at: ardana_registry::today(),
+        });
+    }
+    let reference = weights
         .to_str()
-        .with_context(|| format!("{} is no UTF-8 path", gguf.display()))?;
+        .with_context(|| format!("{} is no UTF-8 path", weights.display()))?;
     let opts = PullOptions {
         name: Some(name.to_string()),
         layout: Some(layout),
@@ -662,9 +811,9 @@ async fn resolve(gguf: &Path, name: &str, layout: LayoutKind) -> Result<Resolved
     .await?)
 }
 
-/// Records the GGUF in the registry as [`resolve`] reads it.
-async fn register(gguf: &Path, name: &str, layout: LayoutKind) -> Result<ResolvedModel> {
-    let (model, _) = crate::record(resolve(gguf, name, layout).await?)?;
+/// Records the model's `weights` in the registry as [`resolve`] reads them.
+async fn register(weights: &Path, name: &str, layout: LayoutKind) -> Result<ResolvedModel> {
+    let (model, _) = crate::record(resolve(weights, name, layout).await?)?;
     Ok(model)
 }
 
@@ -772,6 +921,45 @@ impl Interrupt {
                 let _ = task.await;
                 bail!(INTERRUPTED);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// R4.3: `--format safetensors` accepts every name of `ardana_candle::ARCHITECTURES` but THX-01's decision model,
+    /// read from the list itself, also as one of several names; anything else is refused naming it and `--format gguf`.
+    #[test]
+    fn safetensors_follows_candle_architectures() {
+        let names = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
+        for architecture in ardana_candle::ARCHITECTURES {
+            let written = candle_writes("a checkpoint", &names(&[architecture]));
+            if architecture == ardana_candle::thx01::ARCHITECTURE {
+                let err = written.expect_err("THX-01 accepted").to_string();
+                assert!(
+                    err.contains(&format!("its architecture {architecture} is no causal LM")),
+                    "{err}"
+                );
+            } else {
+                written.unwrap_or_else(|err| panic!("{architecture} refused: {err}"));
+                candle_writes("a checkpoint", &names(&["Other", architecture])).unwrap();
+            }
+        }
+        assert_eq!(
+            safetensors_architectures().count(),
+            ardana_candle::ARCHITECTURES.len() - 1
+        );
+        for refused in [names(&["Qwen3_5ForConditionalGeneration"]), Vec::new()] {
+            let err = candle_writes("a checkpoint", &refused)
+                .expect_err("an architecture Candle lacks accepted")
+                .to_string();
+            assert!(err.ends_with("; pass --format gguf"), "{err}");
+            assert!(
+                err.contains(&safetensors_architectures().collect::<Vec<_>>().join(", ")),
+                "{err}"
+            );
         }
     }
 }

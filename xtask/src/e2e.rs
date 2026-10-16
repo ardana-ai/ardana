@@ -340,6 +340,22 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
         expect: Expect::Answers,
         gain: Gain::Unchecked,
     },
+    // The merged checkpoint itself (`Qwen3ForCausalLM`), which Candle runs, calibrates through and reports on.
+    FinetuneFixture {
+        name: "safetensors",
+        base: "hf.co/Qwen/Qwen3-0.6B",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-st",
+            "--format",
+            "safetensors",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Above,
+    },
 ];
 
 /// One row of the `rust` suite: the `#[ignore]`d workspace tests that need the same weights.

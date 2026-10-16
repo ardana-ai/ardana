@@ -2,8 +2,10 @@
 //! named by file, line and question once the base's tokenizer is read, before the training environment and the
 //! checkpoint's weights; a name an entry or the library holds is refused before even the base is read; a base whose
 //! checkpoint is unknown is refused naming `--checkpoint`, and an entry pulled from a GGUF repository resolves to the
-//! checkpoint its card names (R3.4). Every run is offline, on the files `cargo xtask fetch` put into `tmp/hf`
-//! (qwen3:1.7b's tokenizer and checkpoint listing, which the library snapshot pins, and its GGUF repository's card).
+//! checkpoint its card names (R3.4); `--format safetensors` of a checkpoint Candle does not run is refused (R4.2).
+//! Every run is offline, on the files `cargo xtask fetch` put into `tmp/hf` (qwen3:1.7b's tokenizer and checkpoint
+//! listing, which the library snapshot pins, and its GGUF repository's card; qwen3.5:0.8b's tokenizer and
+//! `config.json`).
 
 mod common;
 
@@ -351,5 +353,54 @@ fn entry_resolves_checkpoint_from_card() -> Result<()> {
         )) && stderr.contains(&format!("{data}: 99 labelled lines")),
         "the entry did not resolve to hf.co/Qwen/Qwen3-1.7B at {commit}:\n{stderr}"
     );
+    Ok(())
+}
+
+/// R4.2: `--format safetensors` on qwen3.5:0.8b, whose checkpoint's `config.json` (offline, from the hub cache `cargo
+/// xtask fetch --tests` fills) names `Qwen3_5ForConditionalGeneration`, no causal LM Candle runs, is refused with exit
+/// 1 naming the architecture and `--format gguf`, before the data (its 99 labelled lines would be refused), the
+/// training environment and any download: the hub cache is as it was. `--quant` is refused with `--format
+/// safetensors`, which writes no GGUF.
+#[test]
+fn safetensors_refuses_other_architectures() -> Result<()> {
+    let ardana = Ardana::new("finetune-safetensors-architectures")?;
+    let dir = ardana.home.parent().context("the home's directory")?;
+    let questions = questions(dir)?;
+    let questions = questions.to_str().context("a UTF-8 path")?;
+    let line = json!({"state": "ls", "answers": {"risk": "safe", "outside": false}}).to_string();
+    let data = data(dir, 98, 0, &line)?;
+    let data = data.to_str().context("a UTF-8 path")?;
+    let config = common::hf_file("Qwen/Qwen3.5-0.8B", "config.json")?;
+    let config: Value = serde_json::from_str(&std::fs::read_to_string(config)?)?;
+    ensure!(
+        config["architectures"] == json!(["Qwen3_5ForConditionalGeneration"]),
+        "{config}"
+    );
+    let hub = hub_paths()?;
+    let args = [
+        "qwen3.5:0.8b",
+        data,
+        "--questions",
+        questions,
+        "--name",
+        "mine",
+        "--format",
+        "safetensors",
+    ];
+    let stderr = refused(&ardana, &args)?;
+    ensure!(
+        stderr.contains(
+            "its architecture Qwen3_5ForConditionalGeneration is no causal LM Candle runs"
+        ) && stderr.contains(
+            "so --format safetensors cannot write a model ardana runs; pass --format gguf"
+        ) && !stderr.contains("labelled lines"),
+        "qwen3.5:0.8b was not refused naming its architecture and --format gguf:\n{stderr}"
+    );
+    let stderr = refused(&ardana, &[&args[..], &["--quant", "q8_0"]].concat())?;
+    ensure!(
+        stderr.contains("--format safetensors writes no GGUF") && !stderr.contains("fine-tuning "),
+        "--quant was not refused with --format safetensors before the base was read:\n{stderr}"
+    );
+    ensure!(hub_paths()? == hub, "a refused run changed the hub cache");
     Ok(())
 }

@@ -5,7 +5,8 @@
 //! its `teacher_data/custom_questions.jsonl`, each with its own questions; then it starts one `ardana serve` on the
 //! home, which runs until the suite ends. A row that answers fine-tunes its base three times: stopped by SIGINT
 //! mid-training, then with a trainer that exits non-zero (its script moved out of the venv and back), neither leaving
-//! an entry or a model directory, then to the end; its report of base against tuned on the test split is checked, its
+//! an entry or a model directory, then to the end; its model (a GGUF, or under `--format safetensors` a checkpoint
+//! Candle runs and was calibrated through) and its report of base against tuned on the test split are checked, its
 //! model answers through `ardana run` and through the running server alike, and `ardana rm` removes it. A row passing
 //! `--trust-remote-code` is first refused without it, before any weight downloads; a row whose base is an `hf.co/` GGUF
 //! reference then fine-tunes again from that GGUF's file in the hub cache with `--checkpoint <the checkpoint's
@@ -539,6 +540,31 @@ fn cached_gguf(hub: &Path, org: &str, repo: &str, file: &HfFile) -> Result<PathB
     }
 }
 
+/// The checkpoint `repo` (`<org>/<repo>`) as `finetune.json` records it, `{"repo", "commit"}` with the commit of the one
+/// snapshot in the hub cache holding `config.json`, and that snapshot's directory.
+fn cached_checkpoint(hub: &Path, repo: &str) -> Result<(Value, PathBuf)> {
+    let snapshots = hub.join(repo_dir(repo)).join("snapshots");
+    let held: Vec<PathBuf> = std::fs::read_dir(&snapshots)
+        .with_context(|| format!("reading {}", snapshots.display()))?
+        .map(|entry| entry.map(|e| e.path()))
+        .collect::<std::io::Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|dir| dir.join("config.json").is_file())
+        .collect();
+    let [dir] = &held[..] else {
+        bail!(
+            "{} holds {} checkpoints, not one",
+            snapshots.display(),
+            held.len()
+        );
+    };
+    let commit = dir.file_name().unwrap_or_default().to_string_lossy();
+    Ok((
+        json!({"repo": format!("hf.co/{repo}"), "commit": commit}),
+        dir.clone(),
+    ))
+}
+
 /// `models--<org>--<repo>`, the hub cache's directory of `org/repo`.
 fn repo_dir(repo: &str) -> String {
     format!("models--{}", repo.replace('/', "--"))
@@ -573,6 +599,11 @@ impl Run {
     /// The value the run's args give `flag`.
     fn flag(&self, name: &str) -> Option<&str> {
         flag(&self.args, name)
+    }
+
+    /// What the run writes: its `--format`, else `ardana finetune`'s default, `gguf` (Q9).
+    fn format(&self) -> &str {
+        self.flag("--format").unwrap_or("gguf")
     }
 
     /// The epochs the run trains: its `--epochs`, else `ardana finetune`'s default (Q23).
@@ -829,10 +860,12 @@ impl Cli<'_> {
 
     /// What `run`'s model is checked against, as the base names it: a library size by its library entry; an `hf.co/` GGUF
     /// reference by its card (`README.md` in the hub cache), whose one `base_model` is the checkpoint, its snapshot the
-    /// one in the cache holding `config.json`; a local GGUF file by `--checkpoint <dir>`.
+    /// one in the cache holding `config.json`; an `hf.co/` safetensors checkpoint by itself, that snapshot; a local GGUF
+    /// file by `--checkpoint <dir>`. A `--format safetensors` run expects no quant.
     fn expected(&self, run: &Run) -> Result<Expected> {
         let library = Library::from_file(&self.sandbox.snapshot())?;
         let quant = run.flag("--quant").map(str::to_string);
+        let writes_gguf = run.format() == "gguf";
         if let Some(pick) = library.find(&run.base)? {
             // The tokenizer the size pins, else its GGUF repository's, as `ardana pull` reads it.
             let (repo, commit) = match &pick.size.tokenizer {
@@ -848,9 +881,17 @@ impl Cli<'_> {
                 ardana_registry::LayoutKind::Chat => "chat",
             });
             let checkpoint = pick.size.source.as_ref().or(pick.size.tokenizer.as_ref());
+            let config = checkpoint.map_or_else(PathBuf::new, |pin| {
+                hub::dir(self.sandbox)
+                    .join(repo_dir(pin.repo.trim_start_matches("hf.co/")))
+                    .join("snapshots")
+                    .join(&pin.commit)
+                    .join("config.json")
+            });
             return Ok(Expected {
                 checkpoint: json!(checkpoint),
-                quant: quant.unwrap_or_else(|| pick.quant.quant.clone()),
+                config,
+                quant: writes_gguf.then(|| quant.unwrap_or_else(|| pick.quant.quant.clone())),
                 tokenizer,
                 layout,
                 license: json!(pick.size.license),
@@ -865,7 +906,8 @@ impl Cli<'_> {
                 .map(|(quant, _)| quant.to_string())
                 .with_context(|| format!("{file} is in no quant the suite checks"))
         };
-        let (gguf, checkpoint, quant, license) = match Ref::parse(&run.base)? {
+        // The directory of the base's weights, the checkpoint, the quant and the license.
+        let (beside, checkpoint, quant, license) = match Ref::parse(&run.base)? {
             Ref::Hf {
                 org,
                 repo,
@@ -877,22 +919,6 @@ impl Cli<'_> {
                 let [checkpoint] = &base_models[..] else {
                     bail!("{} names the base models {base_models:?}", card.display());
                 };
-                let snapshots = hub.join(repo_dir(checkpoint)).join("snapshots");
-                let held: Vec<PathBuf> = std::fs::read_dir(&snapshots)
-                    .with_context(|| format!("reading {}", snapshots.display()))?
-                    .map(|entry| entry.map(|e| e.path()))
-                    .collect::<std::io::Result<Vec<_>>>()?
-                    .into_iter()
-                    .filter(|dir| dir.join("config.json").is_file())
-                    .collect();
-                let [dir] = &held[..] else {
-                    bail!(
-                        "{} holds {} checkpoints, not one",
-                        snapshots.display(),
-                        held.len()
-                    );
-                };
-                let commit = dir.file_name().unwrap_or_default().to_string_lossy();
                 let quant = match (&quant, &file) {
                     (Some(quant), _) => quant.clone(),
                     (None, HfFile::Quant(named)) => named.to_ascii_lowercase(),
@@ -900,12 +926,28 @@ impl Cli<'_> {
                 };
                 let license = card_values(&card, "license")?.into_iter().next();
                 (
-                    gguf,
-                    (
-                        json!({"repo": format!("hf.co/{checkpoint}"), "commit": commit}),
-                        dir.clone(),
-                    ),
-                    quant,
+                    gguf.parent().context("the GGUF's directory")?.to_path_buf(),
+                    cached_checkpoint(&hub, checkpoint)?,
+                    writes_gguf.then_some(quant),
+                    license,
+                )
+            }
+            // A safetensors checkpoint: itself, with its own tokenizer, card and layout.
+            Ref::Hf {
+                org,
+                repo,
+                file: None,
+            } => {
+                let (checkpoint, dir) = cached_checkpoint(&hub, &format!("{org}/{repo}"))?;
+                let license = card_values(&dir.join("README.md"), "license")?
+                    .into_iter()
+                    .next();
+                // Q24: a base without a GGUF of its own is quantized to q4_k_m.
+                let quant = quant.unwrap_or_else(|| "q4_k_m".into());
+                (
+                    dir.clone(),
+                    (checkpoint, dir),
+                    writes_gguf.then_some(quant),
                     license,
                 )
             }
@@ -926,62 +968,50 @@ impl Cli<'_> {
                 let license = card_values(&dir.join("README.md"), "license")?
                     .into_iter()
                     .next();
-                (gguf, (json!({"path": dir}), dir), quant, license)
+                (
+                    gguf.parent().context("the GGUF's directory")?.to_path_buf(),
+                    (json!({"path": dir}), dir),
+                    writes_gguf.then_some(quant),
+                    license,
+                )
             }
             _ => {
-                bail!("the suite checks library sizes, hf.co/ GGUF references and local GGUF files")
+                bail!("the suite checks library sizes, hf.co/ references and local GGUF files")
             }
         };
-        let ((checkpoint, dir), beside) =
-            (checkpoint, |file: &str| gguf.with_file_name(file).is_file());
+        let (checkpoint, dir) = checkpoint;
+        let has = |file: &str| beside.join(file).is_file();
+        let layout = if has("decider_config.json") {
+            "plain"
+        } else {
+            "chat"
+        };
         Ok(Expected {
             checkpoint,
             quant,
+            config: dir.join("config.json"),
             // The weights' own tokenizer, else the checkpoint's.
-            tokenizer: if beside("tokenizer.json") {
-                gguf.parent().context("the GGUF's directory")?.to_path_buf()
-            } else {
-                dir
-            },
-            layout: if beside("decider_config.json") {
-                "plain"
-            } else {
-                "chat"
-            },
+            tokenizer: if has("tokenizer.json") { beside } else { dir },
+            layout,
             license: json!(license),
             pick: None,
         })
     }
 
-    /// R1.1, R3.2: the model's entry and its directory: the GGUF in the expected quant, the base's tokenizer and chat
-    /// template files as they are, `decider_config.json` in the base's layout and `finetune.json` as the Contract has
-    /// it, its checkpoint the one `expected` names. Returns that `finetune.json`.
+    /// R1.1, R3.2, R4.1: the model's entry and its directory: the GGUF in the expected quant ([`Cli::gguf`]) or the
+    /// checkpoint ([`Cli::checkpoint`]), the base's tokenizer and chat template files as they are, `decider_config.json`
+    /// in the base's layout and `finetune.json` as the Contract has it, its checkpoint the one `expected` names. Returns
+    /// that `finetune.json`.
     fn model(&self, run: &Run, expected: &Expected) -> Result<Value> {
         let name = run.name.as_str();
         ensure!(self.listed(name)?, "ardana list does not list {name}");
         let entry: Value =
             serde_json::from_str(&run_stdout(self.command().args(["show", name, "--json"]))?)?;
         let dir = self.home.join("models").join(name);
-        let quant = expected.quant.as_str();
-        let gguf = dir.join(format!("{name}-{}.gguf", quant.to_ascii_uppercase()));
-        ensure!(
-            entry["runtime"] == "llama.cpp"
-                && Path::new(entry["weights"].as_str().unwrap_or_default()) == gguf,
-            "{name} is recorded as {entry}"
-        );
-        let file_type = gguf_file_type(&gguf)?;
-        let wanted = FILE_TYPES
-            .iter()
-            .find(|(q, _)| *q == quant)
-            .map(|(_, t)| *t)
-            .with_context(|| format!("no file type for {quant}"))?;
-        ensure!(
-            file_type == wanted,
-            "{} has the file type {file_type}, not {quant}'s {wanted}",
-            gguf.display()
-        );
-
-        let mut files = vec![gguf.file_name().unwrap().to_string_lossy().into_owned()];
+        let mut files = match &expected.quant {
+            Some(quant) => self.gguf(name, quant, &entry, &dir)?,
+            None => self.checkpoint(name, expected, &entry, &dir)?,
+        };
         for file in [
             "tokenizer.json",
             "tokenizer_config.json",
@@ -1016,8 +1046,8 @@ impl Cli<'_> {
         let wanted = json!({
             "base": run.base,
             "checkpoint": expected.checkpoint,
-            "format": "gguf",
-            "quant": quant,
+            "format": run.format(),
+            "quant": expected.quant,
             "device": "cpu",
             "dtype": "float32",
             "qlora": false,
@@ -1048,6 +1078,101 @@ impl Cli<'_> {
             held.join(", ")
         );
         Ok(record)
+    }
+
+    /// R1.1: `name` is recorded with llama.cpp as its runtime and `<name>-<QUANT>.gguf` in `dir` as its weights, a GGUF of
+    /// `quant`'s file type. Returns the file's name.
+    fn gguf(&self, name: &str, quant: &str, entry: &Value, dir: &Path) -> Result<Vec<String>> {
+        let gguf = dir.join(format!("{name}-{}.gguf", quant.to_ascii_uppercase()));
+        ensure!(
+            entry["runtime"] == "llama.cpp"
+                && Path::new(entry["weights"].as_str().unwrap_or_default()) == gguf,
+            "{name} is recorded as {entry}"
+        );
+        let file_type = gguf_file_type(&gguf)?;
+        let wanted = FILE_TYPES
+            .iter()
+            .find(|(q, _)| *q == quant)
+            .map(|(_, t)| *t)
+            .with_context(|| format!("no file type for {quant}"))?;
+        ensure!(
+            file_type == wanted,
+            "{} has the file type {file_type}, not {quant}'s {wanted}",
+            gguf.display()
+        );
+        Ok(vec![
+            gguf.file_name().unwrap().to_string_lossy().into_owned(),
+        ])
+    }
+
+    /// R4.1: `name` is recorded with Candle as its runtime, which `ardana show` prints, and `dir` itself as its weights:
+    /// the checkpoint's `config.json` (its text tower's for a multimodal one) with the dtype float32, and the
+    /// safetensors its index names (else `model.safetensors`), every tensor in F32. Returns those files' names.
+    fn checkpoint(
+        &self,
+        name: &str,
+        expected: &Expected,
+        entry: &Value,
+        dir: &Path,
+    ) -> Result<Vec<String>> {
+        ensure!(
+            entry["runtime"] == "candle"
+                && Path::new(entry["weights"].as_str().unwrap_or_default()) == dir,
+            "{name} is recorded as {entry}"
+        );
+        let shown = run_stdout(self.command().args(["show", name]))?;
+        ensure!(
+            shown
+                .lines()
+                .any(|line| line.split_whitespace().eq(["runtime", "candle"])),
+            "ardana show {name} prints no runtime candle:\n{shown}"
+        );
+        let mut wanted = read_json(&expected.config)?;
+        if let Some(text) = wanted.get("text_config").cloned() {
+            let architecture = wanted["architectures"][0]
+                .as_str()
+                .unwrap_or_default()
+                .replace("ForConditionalGeneration", "ForCausalLM");
+            wanted = text;
+            wanted["architectures"] = json!([architecture]);
+        }
+        for key in ["dtype", "torch_dtype"] {
+            if wanted.get(key).is_some() {
+                wanted[key] = json!("float32");
+            }
+        }
+        let config = read_json(&dir.join("config.json"))?;
+        ensure!(
+            config == wanted,
+            "{name}'s config.json is {config}, not the checkpoint's {wanted}"
+        );
+        let mut files = vec!["config.json".to_string()];
+        let index = dir.join("model.safetensors.index.json");
+        let weights: BTreeSet<String> = if index.is_file() {
+            files.push("model.safetensors.index.json".into());
+            read_json(&index)?["weight_map"]
+                .as_object()
+                .context("the index's weight_map")?
+                .values()
+                .filter_map(|file| file.as_str().map(str::to_string))
+                .collect()
+        } else {
+            BTreeSet::from(["model.safetensors".to_string()])
+        };
+        for file in &weights {
+            let dtypes = safetensors_dtypes(&dir.join(file))?;
+            ensure!(
+                dtypes.iter().all(|dtype| dtype == "F32"),
+                "{name}'s {file} holds the dtypes {dtypes:?}, not F32 alone"
+            );
+        }
+        println!(
+            "e2e finetune: {name} runs through candle, its config.json the checkpoint's in float32 ({}), {} in F32",
+            config["architectures"],
+            weights.iter().cloned().collect::<Vec<_>>().join(", ")
+        );
+        files.extend(weights);
+        Ok(files)
     }
 
     /// The lines of a run's data as JSONL lines: the CSV of the commands data holds the commands data's lines.
@@ -1166,11 +1291,23 @@ impl Cli<'_> {
         Ok(())
     }
 
-    /// R2.1: the temperatures the run fitted, as its stderr says them (`temperature T over N calibration answers`, then
-    /// `; <type> T over n` or `; <type> takes it (n, fewer than 50)` per type), follow Q30, are those of the model's
-    /// `decider_config.json`, and `ardana show <name> --json` prints them in its profile.
+    /// R2.1, R4.1: the temperatures the run fitted, through the runtime its model is recorded with (Q11: llama.cpp for a
+    /// GGUF, Candle for a checkpoint), as its stderr says them (`calibrated <name> through <runtime>`, the id of the
+    /// runtime that loaded the model, then `temperature T over N calibration answers` and `; <type> T over n` or `;
+    /// <type> takes it (n, fewer than 50)` per type), follow Q30, are those of the model's `decider_config.json`, and
+    /// `ardana show <name> --json` prints them in its profile.
     fn calibrated(&self, run: &Run, log: &str) -> Result<()> {
         let name = run.name.as_str();
+        let runtime = match run.format() {
+            "safetensors" => "candle",
+            _ => "llama.cpp",
+        };
+        let through = format!("calibrated {name} through {runtime}");
+        ensure!(
+            log.lines().any(|line| line == through),
+            "the run does not say `{through}`:\n{}",
+            tail(log)
+        );
         let said = log
             .lines()
             .find_map(|line| line.strip_prefix(&format!("{name} answers at temperature ")))
@@ -1224,7 +1361,7 @@ impl Cli<'_> {
             "ardana show {name} --json prints the profile {profile}, its decider_config.json is {config}"
         );
         println!(
-            "e2e finetune {}: {name} answers at temperature {said}",
+            "e2e finetune {}: {through}; {name} answers at temperature {said}",
             run.row
         );
         Ok(())
@@ -1467,7 +1604,10 @@ impl Cli<'_> {
 struct Expected {
     /// `finetune.json#checkpoint`.
     checkpoint: Value,
-    quant: String,
+    /// The GGUF's quant; none for `--format safetensors`.
+    quant: Option<String>,
+    /// The checkpoint's `config.json`.
+    config: PathBuf,
     /// The directory of the tokenizer files the model copies.
     tokenizer: PathBuf,
     layout: &'static str,
@@ -1504,6 +1644,26 @@ fn card_values(path: &Path, key: &str) -> Result<Vec<String>> {
     Ok(values
         .iter()
         .map(|value| value.trim().trim_matches(['"', '\'']).to_string())
+        .collect())
+}
+
+/// The dtypes of the tensors of the safetensors file at `path`, from its header: a little-endian `u64` length, then that
+/// many bytes of JSON naming every tensor (and `__metadata__`).
+fn safetensors_dtypes(path: &Path) -> Result<BTreeSet<String>> {
+    let mut file =
+        std::fs::File::open(path).with_context(|| format!("opening {}", path.display()))?;
+    let mut len = [0; 8];
+    file.read_exact(&mut len)?;
+    let mut header = vec![0; usize::try_from(u64::from_le_bytes(len))?];
+    file.read_exact(&mut header)?;
+    let header: Value =
+        serde_json::from_slice(&header).with_context(|| format!("{}'s header", path.display()))?;
+    Ok(header
+        .as_object()
+        .context("a header object")?
+        .iter()
+        .filter(|(key, _)| *key != "__metadata__")
+        .filter_map(|(_, tensor)| tensor["dtype"].as_str().map(str::to_string))
         .collect())
 }
 

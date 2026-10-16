@@ -48,6 +48,8 @@ pub struct Base {
     pub name: String,
     /// The transformers checkpoint it trains from.
     pub checkpoint: Checkpoint,
+    /// The checkpoint's `config.json#architectures`.
+    pub architectures: Vec<String>,
     /// The quant of the base's own GGUF, when the library or the reference names one.
     pub quant: Option<String>,
     /// The file name of the base's own GGUF, when it is one with a name of its own (not an Ollama blob).
@@ -168,7 +170,7 @@ async fn library_base(
             ));
         }
     };
-    let checkpoint = open(hub, &files, opts.trust_remote_code).await?;
+    let (checkpoint, architectures) = open(hub, &files, opts.trust_remote_code).await?;
 
     // The GGUF repository is read, at its commit, for what `ardana pull` takes from it besides the weights: its
     // tokenizer when the size pins none, and `decider_config.json` when the size names no layout (Q7).
@@ -210,6 +212,7 @@ async fn library_base(
     Ok(Base {
         name,
         checkpoint,
+        architectures,
         quant: Some(pick.quant.quant.clone()),
         gguf: Some(pick.quant.file.clone()),
         license: size.license.clone(),
@@ -248,7 +251,7 @@ async fn entry_base(
             ));
         }
     };
-    let checkpoint = open(hub, &files, opts.trust_remote_code).await?;
+    let (checkpoint, architectures) = open(hub, &files, opts.trust_remote_code).await?;
     let license = license(hub, card, &files).await?;
     let quant = match source {
         Ok(Ref::Hf {
@@ -264,6 +267,7 @@ async fn entry_base(
     Ok(Base {
         name: entry.name.clone(),
         checkpoint,
+        architectures,
         quant,
         gguf: entry
             .weights
@@ -353,7 +357,7 @@ async fn reference_base(
             (files, beside(DECIDER_CONFIG), beside(TOKENIZER_FILE))
         }
     };
-    let checkpoint = open(hub, &files, opts.trust_remote_code).await?;
+    let (checkpoint, architectures) = open(hub, &files, opts.trust_remote_code).await?;
     let (tokenizer, pull_tokenizer) = match own_tokenizer {
         Some(path) => (path, None),
         None => match &checkpoint {
@@ -387,6 +391,7 @@ async fn reference_base(
         },
         name,
         checkpoint,
+        architectures,
         quant,
         gguf,
         license: license(hub, card, &files).await?,
@@ -424,14 +429,14 @@ async fn named_checkpoint(hub: &Hub, checkpoint: &str) -> Result<Files, Registry
     }
 }
 
-/// `files` as a checkpoint to train from: no decision model (Q17), a `config.json` (fetched, no weight) and its
-/// weights, and, unless `trust_remote_code`, no `auto_map` in its `config.json`, which would run the code it ships
-/// (Q14).
+/// `files` as a checkpoint to train from, with the architectures its `config.json` names: no decision model (Q17), a
+/// `config.json` (fetched, no weight) and its weights, and, unless `trust_remote_code`, no `auto_map` in its
+/// `config.json`, which would run the code it ships (Q14).
 async fn open(
     hub: &Hub,
     files: &Files,
     trust_remote_code: bool,
-) -> Result<Checkpoint, RegistryError> {
+) -> Result<(Checkpoint, Vec<String>), RegistryError> {
     let (checkpoint, config, code) = match files {
         Files::Hub(snapshot) => {
             let id = snapshot.id();
@@ -488,7 +493,8 @@ async fn open(
             (Checkpoint::Dir { path: dir.clone() }, config, code)
         }
     };
-    if read_json(&config)?.get("auto_map").is_some() && !trust_remote_code {
+    let config = read_json(&config)?;
+    if config.get("auto_map").is_some() && !trust_remote_code {
         let shipped = if code.is_empty() {
             "code from other repositories".to_string()
         } else {
@@ -502,7 +508,7 @@ async fn open(
             ),
         });
     }
-    Ok(checkpoint)
+    Ok((checkpoint, ardana_core::snapshot::architectures(&config)))
 }
 
 /// The checkpoint the card of `snapshot` names: its one `base_model`, listed at `main`.

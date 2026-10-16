@@ -1,8 +1,8 @@
-//! What a fine-tune does with its GGUF once it is built (Q11, Q30): the temperatures fitted on the calibration split,
-//! read through that GGUF as `ardana run` reads it, then the test split answered by the base as `ardana run <base>`
-//! answers it and by the model at its fitted temperatures, each answer graded against its label
-//! ([`ardana_core::calibrate`]). The decodes run on a thread of their own and stop between two lines once `stop` is
-//! raised.
+//! What a fine-tune does with its model once it is built (Q11, Q30): the temperatures fitted on the calibration split,
+//! read through that model as `ardana run` reads it (a GGUF through llama.cpp, a checkpoint through Candle), then the
+//! test split answered by the base as `ardana run <base>` answers it and by the model at its fitted temperatures, each
+//! answer graded against its label ([`ardana_core::calibrate`]). The decodes run on a thread of their own and stop
+//! between two lines once `stop` is raised.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -16,19 +16,30 @@ use serde_json::{Value, json};
 use super::INTERRUPTED;
 use crate::render;
 
-/// `model`'s decider and weights, as `ardana run <name>` reads and loads them (the default window and offload).
-fn load(model: &ResolvedModel) -> Result<(Decider, Loaded)> {
+/// `model`'s decider and weights, as `ardana run <name>` reads and loads them (the default window and offload), and
+/// the id of the runtime that loaded them: the first that supports them, as [`ResolvedModel::load`] picks it.
+fn load(model: &ResolvedModel) -> Result<(Decider, Loaded, &'static str)> {
     let decider = Decider::new(
         ardana_registry::load_tokenizer(&model.tokenizer)?,
         model.profile.clone(),
     )?;
-    let loaded = model.load(&crate::runtimes(), &LoadOptions::default())?;
-    Ok((decider, loaded))
+    let runtimes = crate::runtimes();
+    let loaded = model.load(&runtimes, &LoadOptions::default())?;
+    let runtime = runtimes
+        .for_weights(&model.weights)
+        .context("the runtime that loaded the model")?
+        .id();
+    Ok((decider, loaded, runtime))
 }
 
-/// The temperatures Q30 fits for `model` on `examples`, the calibration split, read at temperature 1.
-pub fn calibrate(model: &ResolvedModel, examples: &[Example], stop: &AtomicBool) -> Result<Fitted> {
-    let (decider, loaded) = load(model)?;
+/// The temperatures Q30 fits for `model` on `examples`, the calibration split, read at temperature 1, and the runtime
+/// they were read through.
+pub fn calibrate(
+    model: &ResolvedModel,
+    examples: &[Example],
+    stop: &AtomicBool,
+) -> Result<(Fitted, &'static str)> {
+    let (decider, loaded, runtime) = load(model)?;
     let Loaded::Causal(mut loaded) = loaded else {
         bail!(
             "{} is a decision model, which reads no prompt rows",
@@ -45,7 +56,9 @@ pub fn calibrate(model: &ResolvedModel, examples: &[Example], stop: &AtomicBool)
                 .with_context(|| format!("reading calibration line {}", example.line))?,
         );
     }
-    calibrate::fit_by_type(&records).context("the calibration split labels no answer")
+    let fitted =
+        calibrate::fit_by_type(&records).context("the calibration split labels no answer")?;
+    Ok((fitted, runtime))
 }
 
 /// The answers `model` gives `examples`, as `ardana run <model>` gives them, graded against their labels.
@@ -54,7 +67,7 @@ pub fn answer(
     examples: &[Example],
     stop: &AtomicBool,
 ) -> Result<Vec<Graded>> {
-    let (decider, mut loaded) = load(model)?;
+    let (decider, mut loaded, _) = load(model)?;
     let mut graded = Vec::new();
     for example in examples {
         if stop.load(Ordering::Relaxed) {

@@ -43,6 +43,10 @@ building and readout stay in `ardana-core` and never call Candle.
   `CandleRuntime::supports` is true for a directory whose `config.json`
   names one of them, so `Runtimes::for_weights` hands a GGUF file to llama.cpp and a snapshot directory to Candle.
   `CandleRuntime::load` returns a `Loaded::Causal` for a causal LM and a `Loaded::Decision` for `THXDecisionModel`.
+- `ardana finetune --format safetensors` writes such a directory, `$ARDANA_HOME/models/<name>/`, for the causal names
+  of `ARCHITECTURES` (every name but `THXDecisionModel`, read from the list): the merged safetensors beside the
+  trained checkpoint's own `config.json`. A `config.json` transformers 5 saves does not read here: it writes
+  `rope_parameters` without `rope_theta`, which `qwen3::Config` requires (`missing field rope_theta`).
 - One architecture is four things in `crates/ardana-candle/src/lib.rs` and nothing else: its name in `ARCHITECTURES`,
   its arm in `configuration`, `impl Architecture` for its configuration type (`shape`: the vocabulary, the hidden
   size, the positions and whether the head is tied; `build`: the decoder from the root `VarBuilder`) and
