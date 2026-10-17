@@ -10,6 +10,8 @@ llama.cpp.
 - `llama-cpp-2` 0.1.159 — safe, near-raw bindings to llama.cpp; its `llama-cpp-sys-2` dependency bundles llama.cpp
   at commit `26394b4` (`26394b4e6749a41c3633db040e0987500a5f7013`), which knows the `qwen35` architecture. Pin it
   with `=0.1.159`: the crate tracks llama.cpp closely and does not follow semver meaningfully.
+- `llama-cpp-sys-2` 0.1.159 — the raw bindings themselves, a direct dependency of `ardana-llama` for
+  `llama_model_quantize` alone, at the version llama-cpp-2 builds (`=0.1.159`, `default-features = false`).
 
 ## Rules
 
@@ -38,6 +40,15 @@ llama.cpp.
 - Do not enable a GPU feature on macOS: llama.cpp turns Metal on by default on Apple targets and the build script only
   switches it off for watchOS. Expose `cuda` and `vulkan` as `ardana-llama` (and `ardana`) cargo features that forward
   to `llama-cpp-2/cuda` and `llama-cpp-2/vulkan`; they pass through unverified (Q16), so never claim they work.
+
+### Quantization
+- `ardana_llama::quantize(input, output, quant)` is `llama-quantize <input> <output> <type>` without an importance
+  matrix: `llama_model_quantize_default_params()` with its `ftype` set, then `llama_model_quantize` (non-zero is an
+  error naming the file and the quant), after the backend's one `init`. `QUANTS` names the file types it writes
+  lowercase as the library writes its quants (`q8_0`, `q4_k_m`, `bf16`, ...), every type of `quantize.cpp`'s list that
+  needs no importance matrix, its aliases (`q4_k`) left out; `is_quant` checks a name first, so `ardana finetune`
+  refuses an unknown `--quant` before it trains. With logs silenced, llama.cpp's reason for a failure is not in the
+  error.
 
 ### Backend and logging
 - Call `LlamaBackend::init()` exactly once per process and keep the value alive for as long as any model or context
@@ -170,3 +181,4 @@ llama.cpp.
 - https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md — Metal on by default on macOS, `-ngl 0` caveat, CMake flags
 - https://github.com/ggml-org/llama.cpp/blob/26394b4e6749a41c3633db040e0987500a5f7013/include/llama.h — batch logits flag, decode return codes, negative `n_gpu_layers`, memory clear
 - https://github.com/ggml-org/llama.cpp/blob/26394b4e6749a41c3633db040e0987500a5f7013/src/llama-arch.cpp — `qwen35` architecture name
+- https://github.com/ggml-org/llama.cpp/blob/26394b4e6749a41c3633db040e0987500a5f7013/tools/quantize/quantize.cpp — the file types and their names

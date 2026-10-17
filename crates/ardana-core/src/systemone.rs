@@ -66,8 +66,9 @@ pub fn render_state(state: &Value) -> String {
 pub enum Names {
     /// Choice option names.
     Choice(Vec<String>),
-    /// Score levels `0..n`.
-    Score(usize),
+    /// Score levels, lowest first, each by the name a label gives it: its index (`"0"`, `"1"`, ...) for list
+    /// criteria, its key for a legend.
+    Score(Vec<String>),
     /// Noul: false, true.
     Noul,
 }
@@ -166,20 +167,24 @@ pub fn render_question(spec: &Value) -> Result<RenderedQuestion, String> {
             ))
         }
         Some("score") => {
-            let levels: Vec<&Value> = match crit {
+            let levels: Vec<(String, &Value)> = match crit {
                 Some(Value::Object(map)) => {
                     let mut keyed = Vec::with_capacity(map.len());
                     for (k, v) in map {
                         let key = py::float_from_str(k).ok_or_else(|| {
                             format!("could not convert string to float: {}", py::str_repr(k))
                         })?;
-                        keyed.push((key, v));
+                        keyed.push((key, k, v));
                     }
                     keyed
                         .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-                    keyed.into_iter().map(|(_, v)| v).collect()
+                    keyed.into_iter().map(|(_, k, v)| (k.clone(), v)).collect()
                 }
-                Some(Value::Array(items)) => items.iter().collect(),
+                Some(Value::Array(items)) => items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| (i.to_string(), v))
+                    .collect(),
                 _ => {
                     return Err(format!(
                         "score criteria: an ordered list of 2..{MAX_LEVELS} level descriptions"
@@ -191,17 +196,17 @@ pub fn render_question(spec: &Value) -> Result<RenderedQuestion, String> {
                     "score criteria: an ordered list of 2..{MAX_LEVELS} level descriptions"
                 ));
             }
-            let legend: Vec<String> = levels.iter().map(|c| txt(c)).collect();
+            let legend: Vec<String> = levels.iter().map(|(_, c)| txt(c)).collect();
             let options = legend
                 .iter()
                 .enumerate()
                 .map(|(i, c)| format!("{i}: {c}"))
                 .collect();
-            let n = legend.len();
+            let names = levels.into_iter().map(|(name, _)| name).collect();
             Ok(rendered(
                 options,
                 AnswerType::Score,
-                Names::Score(n),
+                Names::Score(names),
                 legend,
             ))
         }
@@ -388,12 +393,16 @@ pub fn score_confidence(p: &[f64]) -> f64 {
     clip01(1.0 - spread / uniform)
 }
 
-/// `format_answer`: probabilities in option order -> the typed answer with decider's rounding, extras `x_`-prefixed.
-pub fn format_answer(rq: &RenderedQuestion, p: &[f64]) -> Answer {
-    let p = &p[..rq.options.len().min(p.len())];
+/// The probabilities [`format_answer`] reports: divided by their sum, a zero sum leaving them as they are.
+pub fn scaled(p: &[f64]) -> Vec<f64> {
     let s = py::sum(p.iter().copied());
     let s = if s == 0.0 { 1.0 } else { s };
-    let p: Vec<f64> = p.iter().map(|x| x / s).collect();
+    p.iter().map(|x| x / s).collect()
+}
+
+/// `format_answer`: probabilities in option order -> the typed answer with decider's rounding, extras `x_`-prefixed.
+pub fn format_answer(rq: &RenderedQuestion, p: &[f64]) -> Answer {
+    let p = scaled(&p[..rq.options.len().min(p.len())]);
     let j = argmax(&p);
     let r4 = |x: f64| py::round(x, 4);
     match &rq.names {
@@ -431,6 +440,13 @@ pub fn format_answer(rq: &RenderedQuestion, p: &[f64]) -> Answer {
     }
 }
 
+/// `combine_isolated`: each isolated level's P(yes) over their sum (the fit mass, 1e-9 when it is 0), and that sum.
+pub fn combine_isolated(fit: &[f64]) -> (Vec<f64>, f64) {
+    let tot = py::sum(fit.iter().copied());
+    let tot = if tot == 0.0 { 1e-9 } else { tot };
+    (fit.iter().map(|x| x / tot).collect(), tot)
+}
+
 /// `assemble`: one probability list per planned row -> the answers in request order. Isolated levels are combined
 /// into one distribution, with each level's own fit and the fit mass as extras.
 pub fn assemble(
@@ -445,9 +461,7 @@ pub fn assemble(
             RowKind::List => format_answer(rq, &probs[span.first]),
             RowKind::Iso => {
                 let fit: Vec<f64> = (0..span.count).map(|j| probs[span.first + j][1]).collect();
-                let tot = py::sum(fit.iter().copied());
-                let tot = if tot == 0.0 { 1e-9 } else { tot };
-                let p: Vec<f64> = fit.iter().map(|x| x / tot).collect();
+                let (p, tot) = combine_isolated(&fit);
                 let mut answer = format_answer(rq, &p);
                 if let Answer::Score(score) = &mut answer {
                     score.x_level_fit = Some(

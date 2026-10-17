@@ -8,6 +8,7 @@ pub mod e2e;
 pub mod env;
 pub mod export;
 pub mod fetch;
+pub mod finetune;
 mod guard;
 pub mod hub;
 pub mod onnx;

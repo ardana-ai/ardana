@@ -9,6 +9,7 @@
 //! library model they pull first. [`pull_browser`] resolves a library model's browser variant (ONNX weights a
 //! visitor's tab runs) the same way, into the hub cache only: a browser variant is never a registry entry.
 
+pub mod base;
 pub mod hub;
 pub mod library;
 pub mod ollama;
@@ -40,7 +41,7 @@ pub const DECIDER_CONFIG: &str = "decider_config.json";
 pub const TOKENIZER_FILE: &str = "tokenizer.json";
 /// The tokenizer files `ardana pull` fetches with `tokenizer.json` when the repository has them: the special tokens
 /// and the chat template the chat layout reads.
-const TOKENIZER_EXTRAS: [&str; 2] = [
+pub const TOKENIZER_EXTRAS: [&str; 2] = [
     ardana_core::chat::CONFIG_FILE,
     ardana_core::chat::TEMPLATE_FILE,
 ];
@@ -411,7 +412,7 @@ pub struct PullOptions {
     /// Where the tokenizer comes from: `hf.co/<org>/<repo>` or a local `tokenizer.json` (or its directory); default
     /// the weights' own repository or directory.
     pub tokenizer: Option<String>,
-    /// The layout (default plain with `decider_config.json`, else chat).
+    /// The layout (default the one `decider_config.json` names, plain unless it says chat; else chat).
     pub layout: Option<LayoutKind>,
     /// Print each download's progress to stderr (bytes so far and the file's size).
     pub progress: bool,
@@ -572,7 +573,10 @@ async fn pull_ref(
                 Some(Config::Decider(path)) => Some(path.as_path()),
                 _ => None,
             };
-            let layout = opts.layout.unwrap_or_else(|| default_layout(config));
+            let layout = match opts.layout {
+                Some(layout) => layout,
+                None => default_layout(config)?,
+            };
             read_profile(&tokenizer_path, &tokenizer, config, layout, &name)?
         }
     };
@@ -642,12 +646,16 @@ fn decision_profile(path: &Path) -> Result<ModelProfile, RegistryError> {
     })
 }
 
-/// The layout of a model that names none: plain with a `decider_config.json`, else chat.
-fn default_layout(config: Option<&Path>) -> LayoutKind {
-    match config {
-        Some(_) => LayoutKind::Plain,
-        None => LayoutKind::Chat,
-    }
+/// The layout of a model that names none: the one its `decider_config.json` names (plain unless it says chat), else
+/// chat.
+fn default_layout(config: Option<&Path>) -> Result<LayoutKind, RegistryError> {
+    let Some(path) = config else {
+        return Ok(LayoutKind::Chat);
+    };
+    ardana_core::decider_layout(&read_json(path)?).map_err(|err| RegistryError::Profile {
+        path: path.to_path_buf(),
+        err,
+    })
 }
 
 /// A library size's browser variant in the hub cache: the files a tab downloads ([`BROWSER_FILES`]) and the profile it
@@ -720,10 +728,10 @@ async fn browser_files(
 ) -> Result<BrowserModel, RegistryError> {
     let located = browser_paths(hub, model, browser).await?;
     let tokenizer = load_tokenizer(&located.tokenizer)?;
-    let layout = model
-        .size
-        .layout
-        .unwrap_or_else(|| default_layout(located.config.as_deref()));
+    let layout = match model.size.layout {
+        Some(layout) => layout,
+        None => default_layout(located.config.as_deref())?,
+    };
     let name = model.name();
     let mut profile = read_profile(
         &located.tokenizer,
@@ -860,7 +868,7 @@ async fn snapshot_weights(
     snapshot: &Snapshot,
     runtimes: &Runtimes,
 ) -> Result<PathBuf, RegistryError> {
-    use ardana_core::snapshot::{CONFIG, INDEX, SINGLE, architectures};
+    use ardana_core::snapshot::{CONFIG, architectures};
     let config = hub.file(snapshot, CONFIG).await?;
     let dir = config
         .parent()
@@ -875,26 +883,30 @@ async fn snapshot_weights(
             architectures: architectures(&read_json(&config)?),
         });
     }
-    let files = if snapshot.has(INDEX) {
-        let index = hub.file(snapshot, INDEX).await?;
-        ardana_core::snapshot::shards(&read_json(&index)?).map_err(|msg| {
-            RegistryError::Invalid {
-                what: format!("{} file {INDEX}", snapshot.id()),
-                msg,
-            }
-        })?
-    } else if snapshot.has(SINGLE) {
-        vec![SINGLE.to_string()]
-    } else {
-        return Err(RegistryError::Invalid {
-            what: snapshot.id(),
-            msg: format!("it has {CONFIG} but neither {INDEX} nor {SINGLE}"),
-        });
-    };
-    for file in files {
+    for file in safetensors(hub, snapshot).await? {
         hub.file(snapshot, &file).await?;
     }
     Ok(dir)
+}
+
+/// The safetensors files of the checkpoint `snapshot`: the shards its index names (downloading the index), else its
+/// one `model.safetensors`.
+async fn safetensors(hub: &Hub, snapshot: &Snapshot) -> Result<Vec<String>, RegistryError> {
+    use ardana_core::snapshot::{CONFIG, INDEX, SINGLE};
+    if snapshot.has(INDEX) {
+        let index = hub.file(snapshot, INDEX).await?;
+        ardana_core::snapshot::shards(&read_json(&index)?).map_err(|msg| RegistryError::Invalid {
+            what: format!("{} file {INDEX}", snapshot.id()),
+            msg,
+        })
+    } else if snapshot.has(SINGLE) {
+        Ok(vec![SINGLE.to_string()])
+    } else {
+        Err(RegistryError::Invalid {
+            what: snapshot.id(),
+            msg: format!("it has {CONFIG} but neither {INDEX} nor {SINGLE}"),
+        })
+    }
 }
 
 /// The JSON document at `path`.
@@ -1095,8 +1107,8 @@ pub fn weights_format(weights: &Path) -> Option<&'static str> {
         .and_then(|()| (&magic == b"GGUF").then_some("gguf"))
 }
 
-/// Today's UTC date, `YYYY-MM-DD`.
-fn today() -> String {
+/// Today's UTC date, `YYYY-MM-DD`: the `pulled_at` of every entry.
+pub fn today() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());

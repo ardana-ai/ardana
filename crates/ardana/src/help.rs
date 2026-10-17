@@ -93,9 +93,89 @@ pub fn rm() -> String {
   ardana rm <name>
   ardana rm <name> my-model
 
-A name is an entry's as `ardana list` prints it. Only the entries are removed: the weights stay in the Hugging Face
-cache, the Ollama store or where they were."
+A name is an entry's as `ardana list` prints it. A model `ardana finetune` made is removed with its directory,
+$ARDANA_HOME/models/<name>/; of any other only the entry goes: the weights stay in the Hugging Face cache, the Ollama
+store or where they were."
         .to_string()
+}
+
+pub fn finetune() -> String {
+    use crate::finetune::{
+        DEFAULT_EPOCHS, LEARNING_RATE, LLAMA_CPP_COMMIT, LORA_ALPHA, LORA_RANK, PYTHON, SEED,
+        TORCH, UV_VERSION,
+    };
+    use ardana_core::calibrate::{ECE_BINS, MIN_ANSWERS};
+    use ardana_core::finetune::{MIN_LINES, MIN_OPTION_EXAMPLES};
+    let llama_cpp = &LLAMA_CPP_COMMIT[..7];
+    format!(
+        "Examples:
+  ardana finetune <family>:<size> data.jsonl --questions questions.json --name my-model
+  ardana finetune <family>:<size> data.jsonl --name my-model --epochs 1 --quant q4_k_m
+  ardana finetune hf.co/<org>/<repo>-GGUF:Q8_0 data.csv --questions questions.json --name my-model
+  ardana finetune model.gguf data.jsonl --checkpoint hf.co/<org>/<repo> --name my-model
+  ardana run my-model --request request.json
+
+Base: any model ardana runs: a library size, a pulled model's name, an hf.co/ reference (a safetensors checkpoint
+or a GGUF), an ollama: reference or a local GGUF file. Training reads the base's transformers checkpoint: the one
+the library pins for a size, an hf.co/ checkpoint itself, and for an hf.co/ GGUF (or a model pulled from one) the
+base_model its repository's card names when it names exactly one. --checkpoint hf.co/<org>/<repo> or --checkpoint
+<dir> names it for any base, and a base whose checkpoint is unknown is refused naming it. A checkpoint whose
+config.json or tokenizer_config.json has auto_map loads by running the Python code it ships; it is refused unless
+--trust-remote-code.
+
+Data: one JSON object a line,
+  {{\"state\": <text or JSON>, \"questions\": {{<id>: <question spec>}}, \"answers\": {{<id>: <label>}}}}
+the specs as a /v1/systemone request writes them, and a label the option's name (choice), true or false (noul),
+the level's index or its key in a legend (score), or null where the line does not answer. A line without
+\"questions\" asks those of --questions (a map of id to spec, or a /v1/systemone request). A CSV file (.csv) holds
+the same lines: a header naming a state column and a column per question id of --questions, which a CSV always
+takes, each cell written as a line's label, an empty cell unlabelled. The lines are split by line, seeded: 80% to
+train on, 10% to calibrate on, 10% to test on. At least {MIN_LINES} labelled lines are needed; an option with fewer
+than {MIN_OPTION_EXAMPLES} training examples is warned about.
+
+Training: a LoRA of rank {LORA_RANK} and alpha {LORA_ALPHA} on every linear layer, trained with TRL's sft on the rows
+ardana reads at run time, the loss on the answer token alone: learning rate {LEARNING_RATE}, {DEFAULT_EPOCHS} epochs
+(--epochs), seed {SEED}, the epoch with the lowest calibration loss kept. It runs on --device: auto takes an NVIDIA
+GPU (cuda), then Apple's GPU (mps), then the CPU, as PyTorch finds them, and a device it does not find is refused
+naming those it does. It trains in bfloat16 on cuda and mps (mps needs macOS 14 for it) and in float32 on the
+CPU. A run whose estimated memory (the checkpoint's weights, the adapter and the longest rows' activations) is more
+than the device has (the GPU's on cuda, the machine's on mps and the CPU) is refused before the checkpoint
+downloads; on cuda, a base that fits only with its weights in 4-bit trains with QLoRA (NF4) instead. The merged model is converted to GGUF and quantized
+to --quant, by default the quant of the base's own GGUF (the library's, the one an hf.co/ reference or the file
+name names), else q4_k_m.
+
+Calibration and report: the GGUF's temperatures are fitted on the calibration lines (one over every answer, and one
+per answer type with at least {MIN_ANSWERS} answers), and `ardana show <name>` prints them. Then the base, pulled as
+`ardana run <base>` pulls it, and the model answer the test lines; stdout prints the accuracy, NLL, Brier score and
+{ECE_BINS}-bin ECE of both per answer type and overall, which finetune.json's report holds too.
+
+Files: the first run downloads uv {UV_VERSION}, CPython {PYTHON}, PyTorch (CUDA's build with an NVIDIA driver, and
+bitsandbytes), Transformers, PEFT and TRL, and llama.cpp's converter ({llama_cpp}) into $ARDANA_HOME/finetune/, which
+later runs reuse; the base's checkpoint goes to the
+Hugging Face cache. The model is written to $ARDANA_HOME/models/<name>/ (the GGUF, the tokenizer and chat template,
+decider_config.json with the fitted temperatures, and finetune.json) and registered as <name>; `ardana rm <name>`
+removes both, and a run that stops leaves neither. Fine-tuning runs on Linux and on macOS with Apple Silicon (PyTorch
+{TORCH} ships no Intel macOS wheels)."
+    )
+}
+
+pub fn push() -> String {
+    use ardana_registry::hub::TOKEN_VAR;
+    format!(
+        "Examples:
+  ardana push my-model hf.co/<org>/my-model --dry-run
+  ardana push my-model hf.co/<org>/my-model
+  ardana pull hf.co/<org>/my-model:Q8_0        Anywhere else, then `ardana run my-model`
+
+Pushes a model `ardana finetune` made, GGUF or safetensors, to a Hugging Face repository, which is created private
+unless --public; a repository that exists is pushed to only when it has the visibility asked for. The repository
+gets the files of $ARDANA_HOME/models/<name>/ but finetune.json (the GGUF, or config.json and the safetensors; the
+tokenizer and chat template; decider_config.json) and a model card, README.md, with the base's license and checkpoint,
+the commands that pull and run the model, its training settings and its test report. --dry-run prints all of it and
+sends nothing.
+
+Token: {TOKEN_VAR}, else the one `hf auth login` saved in $HF_HOME/token; it needs write access to the repository's owner."
+    )
 }
 
 pub fn update() -> String {

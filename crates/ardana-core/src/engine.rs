@@ -143,6 +143,25 @@ impl Plan {
     pub fn sequences(&self) -> &[DecisionSequence] {
         &self.sequences
     }
+
+    /// The question `id` as the plan validated and rendered it.
+    pub fn question(&self, id: &str) -> Option<&RenderedQuestion> {
+        self.rqs.get(id)
+    }
+
+    /// What each prompt row asks, in the order [`Decider::decodes`] yields the rows: its question's id and, for a row
+    /// of an isolated score question, the level it judges; nothing for a decision model's plan.
+    pub fn row_questions(&self) -> impl Iterator<Item = (&str, Option<usize>)> {
+        let causal = self.sequences.is_empty();
+        self.index.iter().filter(move |_| causal).flat_map(|span| {
+            (0..span.count).map(move |level| {
+                (
+                    span.id.as_str(),
+                    (span.kind == RowKind::Iso).then_some(level),
+                )
+            })
+        })
+    }
 }
 
 /// One row as [`Decider::run`] decodes it: [`LoadedModel::slot_logits`]'s arguments.

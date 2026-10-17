@@ -1,9 +1,10 @@
 //! `cargo xtask e2e <suite>`: end-to-end suites, each run under the home guard. `rust` runs the plain workspace tests,
 //! then the rows of [`RUST_FIXTURES`]: each downloads its weights, runs its `#[ignore]`d tests and removes the weights.
 //! The API suites (`jevcompat`, `sdk`, `jevbench`) run their harness from `tmp/` against a release `ardana serve` on
-//! decider:2b; the browser suites (`playground`, `standalone`, `design`) live in [`crate::browser`], and the `candle`
-//! suite, which checks the rows of [`CANDLE_FIXTURES`], in [`crate::candle`]. Every suite but `candle`, which pulls
-//! through `ardana`, gets the weights it reads from [`hub::with_weights`], and leaves `tmp/hf` as it found it.
+//! decider:2b; the browser suites (`playground`, `standalone`, `design`) live in [`crate::browser`], the `candle`
+//! suite, which checks the rows of [`CANDLE_FIXTURES`], in [`crate::candle`], and the `finetune` suite, which runs the
+//! rows of [`FINETUNE_FIXTURES`], in [`crate::finetune`]. Every suite but `candle` and `finetune`, which pull through
+//! `ardana`, gets the weights it reads from [`hub::with_weights`], and leaves `tmp/hf` as it found it.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -15,7 +16,7 @@ use serde_json::Value;
 
 use crate::sandbox::{Sandbox, cargo, run as run_command};
 use crate::serve::{Server, build_ardana};
-use crate::{browser, candle, hub};
+use crate::{browser, candle, finetune, hub};
 
 pub const SUITES: &[&str] = &[
     "smoke",
@@ -27,6 +28,7 @@ pub const SUITES: &[&str] = &[
     "standalone",
     "design",
     "candle",
+    "finetune",
 ];
 
 /// A Hub repository `<org>/<name>` at one commit.
@@ -214,6 +216,166 @@ pub const CANDLE_FIXTURES: &[CandleFixture] = &[
     },
 ];
 
+/// One fine-tune the `finetune` suite runs.
+#[derive(Debug)]
+pub struct FinetuneFixture {
+    /// The row's name in the suite's output.
+    pub name: &'static str,
+    /// The base `ardana finetune` is given.
+    pub base: &'static str,
+    /// The arguments after the base: the data and questions files, which the suite writes into its directory and
+    /// names relative to it, `--name` and any other flag.
+    pub args: &'static [&'static str],
+    pub expect: Expect,
+    /// What the model's test accuracy must be against the base's.
+    pub gain: Gain,
+}
+
+/// What a fine-tune row expects of `ardana finetune`.
+#[derive(Debug)]
+pub enum Expect {
+    /// It exits 0, its model is registered and `ardana run` answers with it.
+    Answers,
+    /// It exits 1 before downloading any weight, its message holding this text.
+    Refused(&'static str),
+}
+
+/// The overall test accuracy a fine-tune row expects of its model against the base's.
+#[derive(Debug, Clone, Copy)]
+pub enum Gain {
+    /// Above the base's.
+    Above,
+    /// At least the base's minus this.
+    Within(f64),
+    /// Not compared: the row makes no model, or what it checks of its model is that it answers.
+    Unchecked,
+}
+
+/// The fine-tunes `cargo xtask e2e finetune` runs, in run order, on one suite home.
+pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
+    FinetuneFixture {
+        name: "qwen3:0.6b",
+        base: "qwen3:0.6b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Above,
+    },
+    FinetuneFixture {
+        name: "thx-01",
+        base: "hf.co/doofz/THX-01",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "thx-risk",
+        ],
+        expect: Expect::Refused("is a decision model"),
+        gain: Gain::Unchecked,
+    },
+    // decider's plain layout with isolated score levels, on questions of its own training mixture: no loss.
+    FinetuneFixture {
+        name: "decider:0.8b",
+        base: "decider:0.8b",
+        args: &[
+            finetune::CUSTOM,
+            "--name",
+            "custom-decider",
+            "--epochs",
+            "1",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Within(0.05),
+    },
+    // A multimodal checkpoint (`Qwen3_5ForConditionalGeneration`) in the chat layout.
+    FinetuneFixture {
+        name: "qwen3.5:0.8b",
+        base: "qwen3.5:0.8b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-qwen3.5",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Above,
+    },
+    // An `hf.co/` GGUF reference on the CSV data: its checkpoint the base_model its card names (Qwen/Qwen3-0.6B), then
+    // the same GGUF as a local file with `--checkpoint <that snapshot directory>` and `--epochs 1`.
+    FinetuneFixture {
+        name: "hf.co-gguf",
+        base: "hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0",
+        args: &[
+            finetune::COMMANDS_CSV,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-gguf",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Unchecked,
+    },
+    // A checkpoint whose `config.json` has `auto_map` (`Spark2_5ForCausalLM`): refused without `--trust-remote-code`,
+    // then run with it, one epoch, as far as the trainer importing the checkpoint's own code (R3.5 as amended: that
+    // code targets transformers 4.57 and does not load under the pinned 5.18).
+    FinetuneFixture {
+        name: "spark-x2.5:1.7b",
+        base: "spark-x2.5:1.7b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-spark",
+            "--epochs",
+            "1",
+        ],
+        expect: Expect::Refused("--trust-remote-code"),
+        gain: Gain::Unchecked,
+    },
+    // The merged checkpoint itself (`Qwen3ForCausalLM`), which Candle runs, calibrates through and reports on.
+    FinetuneFixture {
+        name: "safetensors",
+        base: "hf.co/Qwen/Qwen3-0.6B",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-st",
+            "--format",
+            "safetensors",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Above,
+    },
+    // The device and memory limits, on a machine without CUDA: qwen3.8:27b on the CPU, about 260 GB in float32, exits 1
+    // naming that estimate and the machine's memory, and with `--device cuda` exits 1 naming the devices torch finds;
+    // neither run downloads a weight.
+    FinetuneFixture {
+        name: "limits",
+        base: "qwen3.8:27b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-27b",
+            "--device",
+            "cpu",
+        ],
+        expect: Expect::Refused("of memory to train on cpu in float32, more than the"),
+        gain: Gain::Unchecked,
+    },
+];
+
 /// One row of the `rust` suite: the `#[ignore]`d workspace tests that need the same weights.
 #[derive(Debug)]
 pub struct RustFixture {
@@ -346,6 +508,7 @@ pub fn run(sandbox: &Sandbox, suite: &str) -> Result<()> {
         "standalone" => in_browser(browser::standalone),
         "design" => in_browser(browser::design),
         "candle" => candle::candle(sandbox, CANDLE_FIXTURES),
+        "finetune" => finetune::finetune(sandbox, FINETUNE_FIXTURES),
         other => bail!("unknown e2e suite `{other}`; suites: {}", SUITES.join(", ")),
     }
 }
