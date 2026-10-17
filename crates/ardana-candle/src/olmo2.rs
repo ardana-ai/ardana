@@ -26,10 +26,8 @@
 //   frequency inside the correction range of `beta_fast` and `beta_slow` is divided by `factor`, one outside it is
 //   left as it is, between them a linear ramp; sin and cos are multiplied by `attention_factor`); a sliding layer
 //   rotates with `rope_theta` unscaled, as transformers and llama.cpp do. Upstream has one unscaled table.
-// - The attention scores are computed over `QUERY_CHUNK` query rows at a time, each chunk softmaxed and multiplied by
-//   the values before the next, and the chunks concatenated: the same numbers as upstream's one `[heads, len, len]`
-//   matmul, in a bounded memory (Olmo-3-7B-Instruct in F32 needs 29 GB for its weights alone, and a 5k-token prompt
-//   would add 3.5 GB per score tensor).
+// - Rotary positions, frequencies, trig and the YaRN factor are computed in F32 before conversion to model dtype.
+// - Attention uses the shared query chunks, synchronizing Metal after each to release completed score buffers.
 // - No key-value cache: upstream keeps every layer's keys and values for a next call with a `seqlen_offset`, which
 //   nothing here makes (a prompt is decoded alone, whole), and for a 5k-token prompt they hold 5.5 GB of its 32
 //   MHA layers. `Attention::forward`, `DecoderLayer::forward` and `Model::forward` therefore take `&self`.
@@ -53,9 +51,6 @@ use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::{Activation, Linear, RmsNorm, VarBuilder, linear_b, linear_no_bias, rms_norm};
 use candle_transformers::models::olmo2::Config as Olmo2Config;
 use candle_transformers::utils;
-
-/// The query rows one attention matmul covers: its scores are `[heads, QUERY_CHUNK, len]`, never `[heads, len, len]`.
-const QUERY_CHUNK: usize = 512;
 
 /// One layer's attention, `config.json#layer_types`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,16 +171,8 @@ impl RotaryEmbedding {
             }
             Some(yarn) => (yarn.inv_freq(dim, cfg.rope_theta), yarn.attention_factor),
         };
-        let inv_freq_len = inv_freq.len();
-        let inv_freq = Tensor::from_vec(inv_freq, (1, inv_freq_len), dev)?.to_dtype(dtype)?;
-        let t = Tensor::arange(0u32, max_seq_len as u32, dev)?
-            .to_dtype(dtype)?
-            .reshape((max_seq_len, 1))?;
-        let freqs = t.matmul(&inv_freq)?;
-        Ok(Self {
-            sin: (freqs.sin()? * attention_factor)?,
-            cos: (freqs.cos()? * attention_factor)?,
-        })
+        let (sin, cos) = crate::ops::rotary(&inv_freq, max_seq_len, attention_factor, dtype, dev)?;
+        Ok(Self { sin, cos })
     }
 
     fn apply_rotary_emb_qkv(
@@ -313,24 +300,14 @@ impl Attention {
         let key_states = utils::repeat_kv(key_states, self.num_kv_groups)?.contiguous()?;
         let value_states = utils::repeat_kv(value_states, self.num_kv_groups)?.contiguous()?;
 
-        let attn_output = {
-            let scale = 1f64 / f64::sqrt(self.head_dim as f64);
-            let key_states = key_states.transpose(2, 3)?;
-            let mut chunks = Vec::with_capacity(q_len.div_ceil(QUERY_CHUNK));
-            for start in (0..q_len).step_by(QUERY_CHUNK) {
-                let len = QUERY_CHUNK.min(q_len - start);
-                let queries = query_states.narrow(2, start, len)?;
-                let attn_weights = (queries.matmul(&key_states)? * scale)?;
-
-                let attn_weights = match attention_mask {
-                    None => attn_weights,
-                    Some(mask) => attn_weights.broadcast_add(&mask.narrow(2, start, len)?)?,
-                };
-                let attn_weights = candle_nn::ops::softmax_last_dim(&attn_weights)?;
-                chunks.push(attn_weights.matmul(&value_states)?);
-            }
-            Tensor::cat(&chunks, 2)?
-        };
+        let attn_output = crate::ops::attention(
+            &query_states,
+            &key_states,
+            &value_states,
+            attention_mask,
+            1f64 / f64::sqrt(self.head_dim as f64),
+            None,
+        )?;
         attn_output
             .transpose(1, 2)?
             .reshape((b_sz, q_len, self.hidden_size))?

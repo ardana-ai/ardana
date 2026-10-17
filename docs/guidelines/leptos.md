@@ -207,7 +207,8 @@ gates every UI change (Q23, Q27).
   `fixed2`, `verbatim`). Formatting (`ardana_api::format`, shared with `ardana run`) rounds the number's decimal
   text half up (`round_decimal`), never the binary value, so `0.1235` shows `12.4%` on every platform; the Playwright
   helpers apply the same rule with BigInt.
-- The page speaks only real model names; no text on it mentions Jev. The model picker lists `/v1/models`: the pulled
+- The page speaks only real model names, without the legacy Jev brand or `jev-*` compatibility aliases. Canonical
+  names such as `jevk5:2b` remain visible. The model picker lists `/v1/models`: the pulled
   models (`x_pulled` not `false`) in an optgroup "Pulled", then every model with an `x_browser` in "In browser · runs
   in this tab", labelled with that size, then the library models this server has not pulled in "Library · runs with
   the ardana CLI", labelled with their `x_size` (`decider:4b · 2.7 GB`, `ardana_api::human_size`); a share link naming

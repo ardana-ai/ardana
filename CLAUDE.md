@@ -37,10 +37,10 @@ change them) and its Requirements are the definition of done.
   `cargo xtask fetch --check` verifies them. It also runs `npm ci` in `e2e/playground` (`@playwright/test`,
   `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it
   before `cargo test`: plain tests read the library models' (decider:2b, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8,
-  Llama 3.2) tokenizers, configs and chat templates (Qwen3.5-0.8B's `config.json`, whose architecture `ardana finetune
-  --format safetensors` refuses, among them), and Qwen3-1.7B's (with its GGUF repository's card, `README.md`, whose
-  `base_model` `ardana finetune` reads), from `tmp/hf`. `cargo xtask fetch --tests`
-  installs only those files (every `[[hf]]` file but the GGUF, ONNX and safetensors weights, no token), which is what
+  Llama 3.2, Spark X2.5, Granite 4.2, Nemotron 3 Nano, Apertus) tokenizers, configs and chat templates (Qwen3.5-0.8B's
+  `config.json`, whose architecture `ardana finetune --format safetensors` refuses, among them), and Qwen3-1.7B's (with
+  its GGUF repository's card, `README.md`, whose `base_model` `ardana finetune` reads), from `tmp/hf`.
+  `cargo xtask fetch --tests` installs only those files (every `[[hf]]` file but the GGUF, ONNX and safetensors weights, no token), which is what
   CI runs. No fetch installs weights: `[[hf]]` pins them, and the `cargo xtask e2e` suite that reads them downloads
   them into `tmp/hf` and removes them when it ends (`xtask/src/hub.rs`).
 - CI (`.github/workflows/ci.yml`) checks every pull request and push to `main`: `cargo fmt --check`, clippy with

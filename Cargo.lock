@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "ardana"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "ardana-api",
@@ -177,7 +177,7 @@ dependencies = [
 
 [[package]]
 name = "ardana-api"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "indexmap",
  "serde",
@@ -186,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "ardana-candle"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "ardana-core",
@@ -198,7 +198,7 @@ dependencies = [
 
 [[package]]
 name = "ardana-core"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "ardana-api",
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "ardana-engine"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "ardana-api",
@@ -226,7 +226,7 @@ dependencies = [
 
 [[package]]
 name = "ardana-llama"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "ardana-core",
@@ -236,7 +236,7 @@ dependencies = [
 
 [[package]]
 name = "ardana-playground"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "ardana-api",
  "indexmap",
@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "ardana-registry"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "ardana-core",
@@ -268,7 +268,7 @@ dependencies = [
 
 [[package]]
 name = "ardana-server"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "ardana-api",
@@ -6208,7 +6208,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "ardana-registry",

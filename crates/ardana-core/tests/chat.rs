@@ -16,6 +16,10 @@ const QWEN38: &str = "Qwen/Qwen3.8-27B";
 /// The ungated mirror the library reads llama-3.2:3b's tokenizer from: meta-llama/Llama-3.2-3B-Instruct's vocabulary
 /// and its chat template, character for character.
 const LLAMA32: &str = "unsloth/Llama-3.2-3B-Instruct";
+const SPARK_X25: &str = "XHToken/Spark-X2.5-4B";
+const GRANITE42: &str = "ibm-granite/granite-4.2-3b";
+const NEMOTRON3_NANO: &str = "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16";
+const APERTUS: &str = "swiss-ai/Apertus-8B-Instruct-2509";
 
 /// The chat layout of the tokenizer and template files of `repo`'s pinned snapshot.
 fn layout(repo: &str) -> Result<(Tokenizer, Vec<u32>, Vec<u32>)> {
@@ -131,6 +135,59 @@ fn llama32_layout() -> Result<()> {
         chat::chat_layout(&changed, &tok, &specials)?,
         Layout::Chat { head, tail }
     );
+    Ok(())
+}
+
+/// Spark X2.5's `tokenizer_config.json` saves `bos_token` as an `AddedToken` object, read by its content; the
+/// template writes that token out itself around each turn.
+#[test]
+fn spark_x25_layout() -> Result<()> {
+    let (_, specials) = chat::read_template(&common::hf_snapshot(SPARK_X25)?)?;
+    assert_eq!(
+        specials.bos_token.as_deref(),
+        Some("<｜start▁of▁sentence｜>")
+    );
+    let (tok, head, tail) = layout(SPARK_X25)?;
+    assert_eq!(
+        decode(&tok, &head)?,
+        "<｜start▁of▁sentence｜><|System|>\nyou are a helpful assistant.<｜end▁of▁sentence｜><｜start▁of▁sentence｜><|User|>"
+    );
+    assert_eq!(
+        decode(&tok, &tail)?,
+        "<｜end▁of▁sentence｜><｜start▁of▁sentence｜><|Bot|></think>"
+    );
+    Ok(())
+}
+
+/// Granite 4.2's and Nemotron 3 Nano's templates guard their tools block with `tools is iterable and tools | length
+/// > 0`; `tools` is `none`, so the block is skipped as Jinja2 skips it.
+#[test]
+fn granite42_and_nemotron3_nano_layout() -> Result<()> {
+    for repo in [GRANITE42, NEMOTRON3_NANO] {
+        let (tok, head, tail) = layout(repo)?;
+        assert_eq!(
+            decode(&tok, &head)?,
+            "<|im_start|>system\n<|im_end|>\n<|im_start|>user\n",
+            "{repo}"
+        );
+        assert_eq!(
+            decode(&tok, &tail)?,
+            "<|im_end|>\n<|im_start|>assistant\n<think></think>",
+            "{repo}"
+        );
+    }
+    Ok(())
+}
+
+/// Apertus's template dates its system turn with `strftime_now("%Y-%m-%d")`, the fixed template date.
+#[test]
+fn apertus_layout() -> Result<()> {
+    let (tok, head, tail) = layout(APERTUS)?;
+    assert_eq!(
+        decode(&tok, &head)?,
+        "<s><|system_start|>You are Apertus, a helpful assistant created by the SwissAI initiative.\nKnowledge cutoff: 2024-04\nCurrent date: 2024-07-26<|system_end|><|developer_start|>Deliberation: disabled\nTool Capabilities: disabled<|developer_end|><|user_start|>"
+    );
+    assert_eq!(decode(&tok, &tail)?, "<|user_end|><|assistant_start|>");
     Ok(())
 }
 

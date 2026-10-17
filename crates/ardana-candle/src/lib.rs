@@ -9,7 +9,8 @@
 //!
 //! candle-transformers' Llama, Phi-3, Granite, LFM2, Gemma 3 and OLMo 2 narrow to the last position inside the model,
 //! so [`llama`], [`phi3`], [`granite`], [`lfm2`], [`gemma3`] and [`olmo2`] (Olmo 3) are its 0.11.0 files, copied and
-//! changed as each one's header lists.
+//! changed as each one's header lists. [`qwen2`] also vendors its decoder to preserve long rotary positions and
+//! bound attention buffers on Metal.
 //!
 //! One architecture is no causal LM: [`thx01`] (`THXDecisionModel`) is the THX-01 decision model, candle-transformers'
 //! ModernBERT under the `thx01` package's decision head, loaded as a [`ardana_core::runtime::DecisionModel`] in F32 on
@@ -20,7 +21,9 @@ mod granite;
 mod lfm2;
 mod llama;
 mod olmo2;
+mod ops;
 mod phi3;
+mod qwen2;
 pub mod thx01;
 
 use std::collections::HashMap;
@@ -32,8 +35,8 @@ use ardana_core::snapshot;
 use candle_core::safetensors::MmapedSafetensors;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
+use candle_transformers::models::qwen3;
 use candle_transformers::models::smol::smollm3;
-use candle_transformers::models::{qwen2, qwen3};
 use serde_json::Value;
 
 /// The `config.json#architectures` names this runtime implements: the causal LMs, then the decision model.
@@ -192,8 +195,8 @@ trait Architecture {
 
 /// One architecture's decoder, without its output projection.
 trait Decoder: Send {
-    /// The final-normed hidden states `[1, len, hidden]` of the one prompt `input` (`[1, len]`), decoded alone: on a
-    /// key-value cache that starts empty and is dropped with the call.
+    /// The final-normed hidden states `[1, len, hidden]` of the one prompt `input` (`[1, len]`), decoded alone;
+    /// any key-value cache starts empty and is dropped with the call.
     fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor>;
 }
 
@@ -269,10 +272,10 @@ impl Architecture for qwen2::Config {
     }
 }
 
-/// Without an attention mask of its own, `forward` builds the causal one.
+/// A whole prompt uses the causal mask and retains no key-value cache.
 impl Decoder for qwen2::Model {
     fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
-        self.clone().forward(input, 0, None)
+        self.forward(input, 0)
     }
 }
 
@@ -352,7 +355,7 @@ impl Architecture for phi3::Config {
 
 impl Decoder for phi3::Model {
     fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
-        self.clone().forward(input, 0)
+        self.forward(input, 0)
     }
 }
 
@@ -535,11 +538,10 @@ impl Architecture for Gemma3TextTower {
     }
 }
 
-/// Each prompt runs a clone of the loaded decoder, whose key-value caches start empty; a sliding layer attends over
-/// the whole prompt under its window's mask.
+/// A whole prompt retains no key-value cache; a sliding layer attends under its window's mask.
 impl Decoder for gemma3::Model {
     fn hidden_states(&self, input: &Tensor) -> candle_core::Result<Tensor> {
-        self.clone().forward(input, 0)
+        self.forward(input, 0)
     }
 }
 
@@ -868,6 +870,35 @@ mod tests {
         }
         let err = qwen2_config(&config(json!(4096), true)).unwrap_err();
         assert!(err.to_string().contains("use_sliding_window"), "{err:#}");
+    }
+
+    #[test]
+    fn qwen2_keeps_upstream_hidden_states_without_retaining_a_prompt() -> Result<()> {
+        let config = json!({
+            "vocab_size": 20, "hidden_size": 16, "intermediate_size": 24,
+            "num_hidden_layers": 2, "num_attention_heads": 2, "num_key_value_heads": 1,
+            "max_position_embeddings": 1024, "sliding_window": null, "max_window_layers": 2,
+            "tie_word_embeddings": true, "rope_theta": 1_000_000.0, "rms_norm_eps": 1e-6,
+            "use_sliding_window": false, "hidden_act": "silu"
+        });
+        let (decoder, weights) = random_decoder("Qwen2ForCausalLM", &config);
+        let vb = VarBuilder::from_tensors(weights, DType::F32, &Device::Cpu);
+        let original = candle_transformers::models::qwen2::Model::new(&qwen2_config(&config)?, vb)?;
+        // The second call crosses the attention chunk; the final call repeats the first after another prompt.
+        for len in [5, 513, 5] {
+            let ids: Vec<u32> = (0..len).map(|i| (i % 20) as u32).collect();
+            let input = Tensor::from_slice(&ids, (1, len), &Device::Cpu)?;
+            let expected = original.clone().forward(&input, 0, None)?;
+            let actual = decoder.hidden_states(&input)?;
+            assert_eq!(actual.dims(), &[1, len, 16]);
+            let gap = (actual - expected)?
+                .abs()?
+                .flatten_all()?
+                .max(0)?
+                .to_scalar::<f32>()?;
+            assert!(gap < 1e-5, "{len} tokens: {gap}");
+        }
+        Ok(())
     }
 
     /// The decoder of `architecture` for `config` over random weights, and those weights by name.

@@ -94,6 +94,17 @@ llama.cpp.
   `with_n_ubatch(min(2048, n_ctx))`, as decider's `engine_gguf.py` does, so any prompt that fits the window goes to
   one `decode` call; keep `n_seq_max` at its default of 1 and the other defaults (threads, flash attention auto)
   that decider also keeps. The defaults (n_ctx 512, n_batch 2048, n_ubatch 512) are never right for Ardana.
+- Add `with_swa_full(false)`. The API default (`llama_context_default_params`) is `true`, which gives every
+  sliding-window layer of a Gemma model a KV cache of `n_ctx` cells so that a sequence can be rewound past the
+  window; llama.cpp's own tools default to `false`, the window plus one micro-batch. Ardana never rewinds (it clears
+  the cache before every prompt), and at `n_ctx` 40,960 the full-size cache of gemma-4:31b's sliding layers is
+  32,000 MiB against 2,400 MiB: with the weights (17,144 MiB), the other layers' cache (3,200 MiB) and the compute
+  buffer (2,132 MiB) that is past the 53,084 MiB Metal allows on a 64 GB Mac. Both caches hold the cells a token
+  attends to (a cell is reused only once the window masks it), so the label logits are bit for bit the same while
+  the prompt fits one micro-batch. Past it the cells sit in another order and the logits move by rounding: at 5,010
+  and 12,230 tokens by up to 0.009 for gemma-4:e2b and 0.29 for gemma-3:1b on Metal. One build differs more than
+  that between Metal and `--gpu-layers 0` on those prompts: 0.13 for gemma-4:e2b (5,010 tokens), 2.1 to 3.8 for
+  gemma-3:1b.
 - `LoadOptions::default()` is decider's GGUF engine default: `n_ctx` 40,960, every layer offloaded.
 - Report `LoadedModel::n_ctx()` from `ctx.n_ctx()` after creation, not from the requested value.
 
@@ -112,6 +123,14 @@ llama.cpp.
   (`invalid logit index`, llama.cpp returning no row) when `i` was not flagged in the last decode, so only pass
   indices you flagged in this batch.
 - Copy the label logits out immediately: the slice borrows the context and is overwritten by the next decode.
+- A Metal command buffer that fails (out of GPU memory) does not fail its own decode. At `26394b4` `llama_decode`
+  has returned 0 by then; `llama_get_logits_ith` synchronises, finds the failure and reports nothing, and the row it
+  returns holds what was there: only the next decode returns -3 (`backend is in error state`). llama.cpp zeroes the
+  logits buffer when it allocates it, so on a context's first decode that row is all zeros (262,144 of 262,144 on
+  gemma-4:31b) and its softmax is a flat distribution that reads as an answer. `decode` returns an error when every
+  label logit of a slot is exactly 0. A model that does not fit fails at that first decode, since
+  `clear_kv_cache` writes the whole KV buffer before every prompt; a failure after an earlier decode would leave
+  that decode's logits in the row, which this check does not see.
 
 ### Logits width versus tokenizer vocabulary
 - Logit rows are `model.n_vocab()` wide, taken from the GGUF, not from `tokenizer.json`. Qwen3.5 rows are 248,320
@@ -152,6 +171,8 @@ llama.cpp.
 - https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/token/struct.LlamaToken.html — `LlamaToken(i32)` wrapper
 - https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/fn.send_logs_to_tracing.html — llama.cpp and ggml logs into `tracing`, callable before backend init
 - https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/context/params/struct.LlamaContextParams.html#method.with_n_ubatch — `with_n_ubatch`
+- https://docs.rs/llama-cpp-2/0.1.159/llama_cpp_2/context/params/struct.LlamaContextParams.html#method.with_swa_full — `with_swa_full`
+- https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055 — what the full-size sliding-window cache is for
 - https://github.com/utilityai/llama-cpp-rs/blob/0.1.159/llama-cpp-2/Cargo.toml — default features `openmp`, `common`, `android-shared-stdcxx`
 - https://github.com/utilityai/llama-cpp-rs — README: build from source, semver policy, cuda feature
 - https://github.com/utilityai/llama-cpp-rs/tree/0.1.159/llama-cpp-sys-2 — llama.cpp submodule at `26394b4`
