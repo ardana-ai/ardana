@@ -315,16 +315,13 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     let script = work.dir.join("merge.py");
     std::fs::write(&script, include_str!("merge.py"))?;
     let mut merge = python(&env, &work);
-    merge
-        .arg("-I")
-        .arg(&script)
-        .arg(&trained)
-        .arg(&adapter)
-        .arg(&merged)
-        .arg(dtype);
-    if args.trust_remote_code {
-        merge.arg("--trust-remote-code");
-    }
+    merge.arg("-I").arg(&script).args(merge_args(
+        &trained,
+        &adapter,
+        &merged,
+        dtype,
+        args.trust_remote_code,
+    ));
     env::run(&mut merge, &mut interrupt, "merging the adapter (merge.py)").await?;
 
     // The GGUF's file in the model's directory; a checkpoint is the directory itself.
@@ -668,6 +665,27 @@ fn python(env: &env::Env, work: &Work) -> Command {
         .env("TMPDIR", &work.tmp)
         .env("PYTHONUNBUFFERED", "1");
     cmd
+}
+
+/// `merge.py`'s arguments: the checkpoint, the adapter, the merged model's directory and the dtype, then
+/// `--trust-remote-code` under the flag alone, so the checkpoint's own code runs only when asked (Q14).
+fn merge_args(
+    checkpoint: &Path,
+    adapter: &Path,
+    merged: &Path,
+    dtype: &str,
+    trust_remote_code: bool,
+) -> Vec<std::ffi::OsString> {
+    let mut args = vec![
+        checkpoint.into(),
+        adapter.into(),
+        merged.into(),
+        dtype.into(),
+    ];
+    if trust_remote_code {
+        args.push("--trust-remote-code".into());
+    }
+    args
 }
 
 /// Copies the checkpoint's files that `save_pretrained` does not write (the tokenizer's) into the merged model, which
@@ -1070,6 +1088,25 @@ mod tests {
             assert_eq!(copied, wanted, "--trust-remote-code: {trusted}");
         }
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Q14, R3.5: `merge.py` takes `<checkpoint> <adapter> <out> <dtype>` and runs the checkpoint's own code only when
+    /// `--trust-remote-code` follows them, which it does under the flag alone.
+    #[test]
+    fn merge_runs_remote_code_only_when_trusted() {
+        let (checkpoint, adapter, merged) = (Path::new("c"), Path::new("a"), Path::new("m"));
+        for trusted in [false, true] {
+            let mut wanted = vec!["c", "a", "m", "float32"];
+            if trusted {
+                wanted.push("--trust-remote-code");
+            }
+            assert_eq!(
+                merge_args(checkpoint, adapter, merged, "float32", trusted),
+                wanted,
+                "--trust-remote-code: {trusted}"
+            );
+        }
+        assert!(include_str!("merge.py").contains(r#""--trust-remote-code" in flags"#));
     }
 
     /// Q24: every library size's default quant is one the linked llama.cpp writes, `llama-quantize`'s aliases among

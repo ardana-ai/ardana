@@ -323,7 +323,8 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
         gain: Gain::Unchecked,
     },
     // A checkpoint whose `config.json` has `auto_map` (`Spark2_5ForCausalLM`): refused without `--trust-remote-code`,
-    // then trained with it, one epoch.
+    // then run with it, one epoch, as far as the trainer importing the checkpoint's own code (R3.5 as amended: that
+    // code targets transformers 4.57 and does not load under the pinned 5.18).
     FinetuneFixture {
         name: "spark-x2.5:1.7b",
         base: "spark-x2.5:1.7b",
@@ -333,11 +334,10 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
             finetune::COMMANDS_QUESTIONS,
             "--name",
             "cmd-risk-spark",
-            "--trust-remote-code",
             "--epochs",
             "1",
         ],
-        expect: Expect::Answers,
+        expect: Expect::Refused("--trust-remote-code"),
         gain: Gain::Unchecked,
     },
     // The merged checkpoint itself (`Qwen3ForCausalLM`), which Candle runs, calibrates through and reports on.

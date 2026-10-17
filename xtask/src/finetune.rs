@@ -8,13 +8,13 @@
 //! an entry or a model directory, then to the end; its model (a GGUF, or under `--format safetensors` a checkpoint
 //! Candle runs and was calibrated through) and its report of base against tuned on the test split are checked, its
 //! model answers through `ardana run` and through the running server alike, `ardana push --dry-run` lists its files as
-//! they are on disk, and `ardana rm` removes it. A row passing
-//! `--trust-remote-code` is first refused without it, before any weight downloads; a row whose base is an `hf.co/` GGUF
+//! they are on disk, and `ardana rm` removes it. A row whose base is an `hf.co/` GGUF
 //! reference then fine-tunes again from that GGUF's file in the hub cache with `--checkpoint <the checkpoint's
 //! snapshot directory>` and `--epochs 1`. The rows after the first that answers find the training environment as that
 //! row left it. A refused row's run exits 1 naming why, before any weight downloads; one passing `--device` names the
 //! memory estimate above the machine's, and the same run with `--device cuda` is refused naming the devices torch
-//! finds. Whatever a row's checks found, the entries, model directories and hub paths it added are removed when they
+//! finds; one refused naming `--trust-remote-code` runs again with it, as far as the trainer importing the checkpoint's
+//! own code. Whatever a row's checks found, the entries, model directories and hub paths it added are removed when they
 //! end; the training environment in the home stays for the next row, and the suite removes the home when it ends, also
 //! when a row failed.
 
@@ -282,8 +282,7 @@ fn row(
     let run = Run::of(fixture)?;
     let local = format!("{}-local", run.name);
     let checked = match fixture.expect {
-        Expect::Answers => untrusted(cli, &run, &before)
-            .and_then(|()| answers(cli, server, &run))
+        Expect::Answers => answers(cli, server, &run)
             .and_then(|record| from_local_gguf(cli, server, &run, &local, &record))
             .and_then(|()| {
                 let files = cli.environment_files()?;
@@ -301,7 +300,8 @@ fn row(
                 }
             }),
         Expect::Refused(why) => refused(cli, &run, why, &before, "")
-            .and_then(|message| limits(cli, &run, &message, &before)),
+            .and_then(|message| limits(cli, &run, &message, &before))
+            .and_then(|()| trusted(cli, &run, why)),
     };
     let removed = cli
         .remove(&[run.name.as_str(), local.as_str()], &entries)
@@ -320,23 +320,37 @@ fn row(
     checked.and(removed.map(drop))
 }
 
-/// R3.5 for a row that passes `--trust-remote-code`: the same run without it exits 1 naming the flag, before any
-/// weight downloads (its checkpoint's `config.json` has `auto_map`). Nothing for any other row.
-fn untrusted(cli: &Cli, run: &Run, before: &BTreeSet<PathBuf>) -> Result<()> {
+/// R3.5, as amended, for a row refused naming `--trust-remote-code`: the same run with the flag reaches the trainer,
+/// which imports the checkpoint's own code (its traceback or its log names the `transformers_modules` transformers
+/// copies that code into), and, when it stops there, leaves no entry and no model directory. Nothing for any other row.
+fn trusted(cli: &Cli, run: &Run, why: &str) -> Result<()> {
     const FLAG: &str = "--trust-remote-code";
-    if !run.args.iter().any(|arg| arg == FLAG) {
+    if why != FLAG {
         return Ok(());
     }
-    let without = Run {
-        args: run
-            .args
-            .iter()
-            .filter(|arg| *arg != FLAG)
-            .cloned()
-            .collect(),
+    let mut args = run.args.clone();
+    args.push(FLAG.into());
+    let with = Run {
+        args,
         ..run.clone()
     };
-    refused(cli, &without, FLAG, before, "-untrusted").map(drop)
+    let log = cli.dir.join(format!("{}-trusted.log", run.name));
+    let status = cli.spawn(&with, &log, None)?.wait()?;
+    let text = std::fs::read_to_string(&log)?;
+    ensure!(
+        text.contains("transformers_modules"),
+        "ardana finetune {} {FLAG} exited {status} without the trainer importing the checkpoint's code:\n{}",
+        run.base,
+        tail(&text)
+    );
+    if !status.success() {
+        cli.left_nothing(&run.name)?;
+    }
+    println!(
+        "e2e finetune {}: with {FLAG} the trainer imported the checkpoint's own code, then exited {status}",
+        run.row
+    );
+    Ok(())
 }
 
 /// R5.2 and R5.3 for a refused row that passes `--device`: its refusal `message` names the memory the run needs and
@@ -1665,12 +1679,11 @@ impl Cli<'_> {
     /// built a part of it, and every file of it is as the first row left it.
     fn reused(&self, run: &Run, first: &Files, files: &Files) -> Result<()> {
         let name = &run.name;
-        // The row's runs: the three it always makes, then the untrusted and the local one when it makes them.
+        // The row's runs: the three it always makes, then the local one when it makes it.
         for (log, always) in [
             ("-interrupted", true),
             ("-failing", true),
             ("", true),
-            ("-untrusted", false),
             ("-local", false),
         ] {
             let log = self.dir.join(format!("{name}{log}.log"));

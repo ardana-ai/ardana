@@ -364,17 +364,19 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   `Gain::Within(0.05)`: its training mixture holds the custom component, so the row checks for no loss),
   `qwen3.5:0.8b` (commands data, the multimodal checkpoint, chat layout, `Gain::Above`), `hf.co-gguf`
   (`hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, `cmd-risk-gguf`, `Gain::Unchecked`: R3.2 asks that it answers),
-  `spark-x2.5:1.7b` (`Spark2_5ForCausalLM`, whose `config.json` has `auto_map`, `--trust-remote-code --epochs 1`,
-  `Gain::Unchecked`: it checks the refusal, then the fine-tune with the flag, which fails under the pinned
-  transformers 5.18, the checkpoint's own code targeting transformers 4.57), `safetensors` (`hf.co/Qwen/Qwen3-0.6B` on
+  `spark-x2.5:1.7b` (`Spark2_5ForCausalLM`, whose `config.json` has `auto_map`, `--epochs 1`,
+  `Expect::Refused("--trust-remote-code")`, `Gain::Unchecked`: R3.5 as amended, the checkpoint's own code targeting
+  transformers 4.57 and not loading under the pinned 5.18), `safetensors` (`hf.co/Qwen/Qwen3-0.6B` on
   the commands data, `--format safetensors`, `cmd-risk-st`, `Gain::Above`: the base answers through Candle too) and
   `limits` (`qwen3.8:27b` on the commands data with `--device cpu`, `cmd-risk-27b`, `Expect::Refused` on the memory
   estimate, `Gain::Unchecked`). A refused row
   whose args pass `--device` (R5.2, R5.3; the suite's machine has no CUDA) checks that its refusal names two sizes, the
   estimate above the memory, then runs again with `--device cuda`, which must exit 1 with `--device cuda: torch finds
   no CUDA device` and the devices found (`cpu`, or `mps, cpu`), no weight file reaching the hub cache either time. A
-  row whose args hold `--trust-remote-code` first runs without it, which must exit 1 naming the flag with no weight
-  file reaching the hub cache. A row whose base is an `hf.co/` GGUF reference, once its runs are checked, fine-tunes
+  row refused naming `--trust-remote-code` (whose refusal shows no weight file reached the hub cache) runs again with
+  the flag (`<name>-trusted.log`), which must reach the trainer importing the checkpoint's own code (the log names
+  `transformers_modules`) and, when it stops there, leave no entry and no model directory; `merge.py` getting the
+  flag is the unit test `finetune::tests::merge_runs_remote_code_only_when_trusted`. A row whose base is an `hf.co/` GGUF reference, once its runs are checked, fine-tunes
   `<name>-local` from that GGUF's file in the hub cache with `--checkpoint <the snapshot directory of the checkpoint
   its finetune.json recorded>` and `--epochs 1`, run to the end and checked the same way.
 - What a model is checked against (`Cli::expected`): a library size's entry; for an `hf.co/` safetensors checkpoint

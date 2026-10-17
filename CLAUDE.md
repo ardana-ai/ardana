@@ -221,10 +221,11 @@ change them) and its Requirements are the definition of done.
   `Qwen/Qwen3-0.6B`, the `base_model` of the repository's card, recorded with its commit, the base answering as
   `ardana pull` resolves the reference, not recorded; then `cmd-risk-gguf-local` from that GGUF's file in `tmp/hf`
   with `--checkpoint <the checkpoint's snapshot directory>` and `--epochs 1`, recorded as `{"path"}`) and
-  `spark-x2.5:1.7b` (`cmd-risk-spark`, `--trust-remote-code --epochs 1`: first run without the flag, which exits 1
-  naming it with no weight file reaching `tmp/hf`, as `XHToken/Spark-X2.5-1.7B`'s `config.json` has `auto_map`; then
-  the fine-tune with the flag, which fails under the pinned transformers 5.18, the checkpoint's own code targeting
-  transformers 4.57); `hf.co-gguf` checks that the model answers, not its accuracy; and `safetensors`
+  `spark-x2.5:1.7b` (`cmd-risk-spark`, `--epochs 1`, refused: without `--trust-remote-code` it exits 1 naming the flag
+  with no weight file reaching `tmp/hf`, as `XHToken/Spark-X2.5-1.7B`'s `config.json` has `auto_map`; then the same
+  run with the flag reaches the trainer, which imports the checkpoint's own code (its log names
+  `transformers_modules`), and stops there leaving nothing, that code targeting transformers 4.57, not the pinned
+  5.18); `hf.co-gguf` checks that the model answers, not its accuracy; and `safetensors`
   (`cmd-risk-st` from `hf.co/Qwen/Qwen3-0.6B` on the commands data, `--format safetensors`: its directory holds the
   checkpoint's `config.json` in float32 and the merged `model.safetensors`, every tensor F32, besides the tokenizer
   files, `decider_config.json` and `finetune.json` (`"format": "safetensors"`, `quant` null), `ardana show` prints
