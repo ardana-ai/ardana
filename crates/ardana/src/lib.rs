@@ -68,7 +68,7 @@ pub enum Command {
     /// Remove models
     #[command(after_help = help::rm())]
     Rm(RmArgs),
-    /// Fine-tune a library model on labelled data into a model of your own
+    /// Fine-tune a model on labelled data into a model of your own
     #[command(after_help = help::finetune())]
     Finetune(finetune::FinetuneArgs),
     /// Upload a model ardana finetune made to Hugging Face
