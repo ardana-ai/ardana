@@ -66,8 +66,10 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   wheels, so going back costs no download.
 - Every Python process runs the venv's interpreter with `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` on the
   checkpoint's snapshot directory, which `ardana` downloaded with hf-hub; `HF_HOME` (the datasets cache among it) and
-  `TMPDIR` point into the run's working directory. The trainer and `merge.py` run with `-I`; the converter with `-E
-  -s`, since it imports `conversion/` from beside itself.
+  `TMPDIR` point into the run's working directory. The trainer, `merge.py` and `convert.py` run with `-I`
+  (`convert.py` puts the converter's directory, whose `conversion/` it imports, on the path itself), which ignores
+  every `PYTHON*` variable, so each process runs with `-u` for unbuffered output (the trainer's losses, which TRL prints to stdout, came all at once at its end under
+  `PYTHONUNBUFFERED=1`).
 
 ### Data and rows
 - The JSONL line is `{"state": <string | JSON>, "questions"?: {<id>: <spec>}, "answers": {<id>: <label>}}`
@@ -116,12 +118,24 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   safetensors `snapshot::weight_files` names, made absolute) wins over any of them. Every refusal names both forms.
 - The checkpoint is opened before any weight: refused as a decision model when its listing (or directory) holds
   `rl_agent_config.json` (Q17), refused when it has no `config.json`, whose bytes are fetched (no weight) and read
-  for `auto_map`: a checkpoint that has it loads by running the Python files it ships, so without
-  `--trust-remote-code` it is refused naming the flag and those files (Q14), the hub cache holding no weight file.
-  Its `tokenizer_config.json`, when it has one, is fetched and read the same way (`base::remote_code`): an `auto_map`
-  there loads the tokenizer by the checkpoint's code, and llama.cpp's converter calls
-  `AutoTokenizer.from_pretrained(<dir>, trust_remote_code=True)` for many architectures (`conversion/base.py`,
-  `chatglm.py`, `glm.py`, `hunyuan.py`, `deepseek.py`, ...), so without the flag it is refused too.
+  for `auto_map`. Its `tokenizer_config.json`, when it has one, is fetched and read the same way: an `auto_map` there
+  loads the tokenizer by the checkpoint's code, and llama.cpp's converter calls
+  `AutoTokenizer.from_pretrained(<dir>, trust_remote_code=True)` for many architectures (`conversion/base.py`'s
+  `get_vocab_base`, which most BPE models take, `chatglm.py`, `glm.py`, `hunyuan.py`, `deepseek.py`, ...), so
+  without `--trust-remote-code` it is refused there, naming the flag and the checkpoint's `*.py` (`base::remote_code`,
+  Q14), the hub cache holding no weight file. A `config.json` with `auto_map` names the code that loads the model,
+  but transformers runs it only under `trust_remote_code`: without it, it loads the model by its own classes when it
+  implements the config's `model_type` (`resolve_trust_remote_code`; measured on a Phi-3 checkpoint whose `auto_map`
+  names files it does not hold: transformers' `Phi3ForCausalLM` loads, `save_pretrained` keeps `auto_map`, and the
+  converter's `AutoTokenizer(trust_remote_code=True)` and `AutoConfig` load without the files). So without the flag
+  `Base::model_code` keeps the code's names, and once the environment is built, before any weight, `native.py` asks
+  its transformers whether it implements the `model_type` (its config class, and the class `architectures` names or
+  `AutoModelForCausalLM`'s): when it does the run says so and goes on, never running that code (phi-4:mini's `phi3`,
+  nemotron-3-nano:4b's `nemotron_h`); when it does not, the run is refused naming the flag and the code
+  (spark-x2.5's `spark2_5`, ling-3.0's `bailing_hybrid`; under the flag ling-3.0:tiny's `modeling_bailing_moe_v3.py`
+  stops importing `einops` and `fla`, flash-linear-attention's Triton kernels, which the Q29 venv does not hold and
+  macOS does not run). Under the flag transformers runs the checkpoint's code
+  whether or not it has its own.
 - `finetune.json#checkpoint` is `{"repo", "commit"}` for a Hub checkpoint (the commit its listing read) and
   `{"path"}` for a directory; the run prints `fine-tuning <base> from the checkpoint <it>` once the base is read.
 - The base's profile is the one `ardana pull` derives: a library size's from its tokenizer at its pin, else the GGUF
@@ -142,19 +156,37 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   used as it is); an entry as recorded; a reference resolved as `ardana pull <reference> [--tokenizer <checkpoint>]
   --layout <its layout>` resolves it (`ardana_registry::pull`, downloading the GGUF), not recorded: a reference has no
   canonical name to record it under, and `ardana run` takes names.
-- A multimodal checkpoint (`config.json` names a `*ForConditionalGeneration` and holds a `text_config`, Qwen3.5's
-  `Qwen3_5ForConditionalGeneration`) trains its text tower alone, the model Ardana runs: `work/<name>-<pid>/text/`
-  holds the `text_config` as `config.json` (its `architectures` the `*ForCausalLM` of the same prefix) and links to
-  the checkpoint's files but `config.json` and the processor's (`processor_config.json`, `preprocessor_config.json`,
-  `video_preprocessor_config.json`). transformers loads `Qwen3_5ForCausalLM` from the checkpoint's
-  `model.language_model.*` tensors (`conversion_mapping.py`, `qwen3_5_text`: a `PrefixChange`), and TRL's
-  `AutoProcessor` then finds the tokenizer: given the multimodal checkpoint it builds `Qwen3VLProcessor`, whose image
-  processor needs torchvision and Pillow, which the Q29 venv does not hold. The trainer, `merge.py` and the converter
-  all read the text tower, so the GGUF is the text model.
+- A multimodal checkpoint (`config.json` names a `*ForConditionalGeneration` and holds a `text_config`: Qwen3.5's
+  `Qwen3_5ForConditionalGeneration`, Gemma 3's and Gemma 4's) trains its text tower alone, the model Ardana runs
+  (`mod.rs#text_model`): `work/<name>-<pid>/text/` holds the `text_config` as `config.json` (its `architectures` the
+  `*ForCausalLM` of the same prefix) and links to the checkpoint's files but `config.json` and the processor's
+  (`processor_config.json`, `preprocessor_config.json`, `video_preprocessor_config.json`), so TRL's `AutoProcessor`
+  finds the tokenizer: given the multimodal checkpoint it builds `Qwen3VLProcessor`, whose image processor needs
+  torchvision and Pillow, which the Q29 venv does not hold. The text tower's tensors keep the multimodal names,
+  `model.language_model.*` (Qwen3.5, Gemma 4) or `language_model.model.*` (Gemma 3); transformers 5.18 maps
+  Qwen3.5's to the text model's itself (`conversion_mapping.py`, `qwen3_5_text`: a `PrefixChange`) and Gemma's not,
+  so a Gemma text tower would load none of its weights (29 of 29 tensors of a Gemma 3 text model missing, 40 of 40
+  of a Gemma 4, measured on small random models) and train from random ones with only a warning. The trainer
+  therefore gets `--model_init_kwargs '{"key_mapping": <TEXT_TOWER>}'` (TRL hands `model_init_kwargs` to
+  `from_pretrained`) and `merge.py` `--key-mapping <JSON>`: `^model\.language_model\.` and `^language_model\.model\.`
+  to `model.`, `^language_model\.lm_head\.` to `lm_head.` (a pattern that does not match changes nothing; Qwen3.5's
+  loads the same with it), and `merge.py` saves the merged text tower with `save_original_format=False`, under the
+  text model's own names: by default transformers 5 maps the names back to the checkpoint's on save, which llama.cpp's
+  converter reads (it drops `language_model.` from every name) but Candle's `Gemma3ForCausalLM` does not. No
+  conversion of these text models' (`gemma3_text`, `gemma4_text`, `qwen3_5_text`) changes a tensor, so their own
+  names are the converter's too.
+- A checkpoint whose `tokenizer_config.json` names a `processor_class` is read through `work/<name>-<pid>/text/` too,
+  with a copy of that file without the key: every Gemma 3 and 4 checkpoint names its multimodal processor
+  (`Gemma3Processor`, `Gemma4Processor`, `Gemma4UnifiedProcessor`), the text-only `unsloth/gemma-3-1b-it` among them,
+  and TRL's `AutoProcessor` would build it, failing for want of `preprocessor_config.json`. The model's own directory
+  keeps the base's tokenizer files as they are.
 
 ### Training
-- `python -I -m trl.scripts.sft`: the script `trl sft` launches through `accelerate launch`, run directly, one process,
-  so the signal and the exit status are the trainer's own. The dataset is the run's `data/` directory,
+- `python -I train.py <device> <arguments>`: TRL's `trl.scripts.sft`, the script `trl sft` launches through
+  `accelerate launch`, run as `python -m` runs it (its `make_parser`, `parse_args_and_config` and `main`), one process,
+  so the signal and the exit status are the trainer's own. On `mps` alone it first sets TRL's vocabulary tile
+  (`trl.trainer.utils._CHUNKED_LOGPROB_CHUNK_SIZE`, which the fused LM head reads when it is called) to 16,384, from
+  32,768 (Device and memory). The dataset is the run's `data/` directory,
   `train.jsonl` and `validation.jsonl` (the calibration split), each line `{"input_ids", "completion_mask"}`;
   `load_dataset` takes the splits from the file names, and TRL skips its own tokenization for a dataset with
   `input_ids` and builds the labels from `completion_mask` under `--completion_only_loss True`.
@@ -163,6 +195,13 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   True --metric_for_best_model eval_loss --greater_is_better False` (the epoch with the lowest calibration loss is the
   adapter saved), `--dtype` the run's dtype (below), `--max_length` the longest row (TRL's default of 1,024 would cut
   a long state's answer token off), `--report_to none`.
+- PEFT expands `all-linear` to every `nn.Linear` but the LM head, a Mamba layer's `out_proj` among them, and then
+  refuses LoRA on `out_proj` and `conv1d` for the model types it lists (`tuners_utils.py#_check_lora_target_modules_mamba`:
+  `falcon_h1`, `mamba`, `mamba2`, `falcon_mamba`, `nemotron_h`), so nemotron-3-nano:4b's run ended before training
+  (`Module 'out_proj' is incompatible with Mamba-based models`). TRL's CLI has no flag for PEFT's `exclude_modules`;
+  `train.py` wraps `trl.get_peft_config`, which `sft.main` imports from `trl` when it runs, to set `exclude_modules`
+  to those two for those types. LFM2's convolution layers, whose type PEFT does not list, keep their `out_proj`
+  adapted.
 - `--trust_remote_code True` only under `--trust-remote-code` (TRL's `SFTConfig` field, forwarded to
   `from_pretrained` and `AutoProcessor`): transformers then imports the checkpoint's own modules from its snapshot
   directory into `HF_HOME/modules`, the run's working directory, never the venv.
@@ -171,8 +210,9 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
 
 ### Device and memory
 - Once the environment is built, `devices.py` (`python -I`, in the run's working directory) asks torch which devices it
-  finds: the first CUDA device's name and `total_memory` (`torch.cuda.get_device_properties(0)`), whether
-  `torch.backends.mps.is_available()`, and the machine's physical memory (`os.sysconf`: `SC_PAGE_SIZE` ×
+  finds: the first CUDA device's name and `total_memory` (`torch.cuda.get_device_properties(0)`), when
+  `torch.backends.mps.is_available()` the working set Metal recommends Apple's GPU (`torch.mps.recommended_max_memory()`),
+  and the machine's physical memory (`os.sysconf`: `SC_PAGE_SIZE` ×
   `SC_PHYS_PAGES`, on Linux and macOS alike, no psutil). `--device auto` (the default) takes `cuda`, then `mps`, then
   `cpu` (Q4); `--device cuda` or `mps` on a machine whose torch does not find it exits 1, `--device cuda: torch finds no
   CUDA device on this machine; it finds cpu` (the devices found in auto's order, a GPU with its name and memory).
@@ -194,7 +234,11 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   - activations of a step, TRL's 8 rows of `T` tokens: per token `n·23·(h+i)·w` without gradient checkpointing (the
     CPU), `n·h·w + 23·(h+i)·w` with it (CUDA, MPS: each layer's input, one layer recomputed); TRL 1.16's fused LM head
     scores only the answer positions, so no `(rows, T, vocab)` logits are held;
-  - 1 GB for Python, torch and a GPU's context.
+  - 1 GB for Python, torch and a GPU's context; 4 GB on `mps` (`MPS_RUNTIME`), where the trainer's peak footprint
+    (`vmmap`'s physical footprint) passed the estimate made with 1 GB by 0.9 to 2.8 GB on five bases of 0.6B to 3B
+    parameters (qwen3:0.6b 3.1 against 5.6 GB, llama-3.2:1b 4.4 against 6.2, lfm2.5:1.2b 4.4 against 5.3,
+    minicpm5:1b 3.8 against 6.6, smollm3:3b 9.0 against 10.7, on the commands data), the same at every size: Metal's
+    buffers, which torch's allocator keeps cached.
   The 23 bounds the trainer's peak resident memory (`VmHWM`, `/proc/<pid>/status`) measured on this CPU in float32,
   beyond the weights, the adapter and the runtime: Qwen3-0.6B on 8 rows of up to 128 tokens of the commands data peaks
   at 10.5 GB (13·(h+i) a token and layer; estimated 15.1 GB), decider:0.8b on rows of 261 tokens of the custom data at
@@ -204,8 +248,33 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   22.4 GB in bfloat16 and 11.4 GB with QLoRA, so a 16 GB card trains it with QLoRA. The suite's rows on this machine's
   67.3 GB: qwen3:0.6b 15.8 GB, qwen3.5:0.8b 16.0 GB, spark-x2.5:1.7b 35.3 GB, decider:0.8b 31.6 GB (rows of 136, 138,
   151 and 336 tokens).
-- The estimate is held against the GPU's memory on `cuda` and the machine's on `mps` and `cpu`. When it fits, the run
-  says `<base> trains on <device> in <dtype>, needing about <estimate> of the <memory> …`. On `cuda`, a run that does
+- Metal hangs on a float32 matrix product that sums 32,768 terms, at random: about 3 calls in 100 of `[M, 32768] @
+  [32768, 1024]` for M from 189 to 1,199 on the M1 Max under macOS 27.0.1 and torch 2.14.1 (93 of the 1,199 row counts,
+  three calls each, the first at 189 rows), and none of about 25,000 float32 products summing 24,576 terms or fewer
+  (16,384 at hidden sizes 1,024 to 5,120 and up to 4,100 rows; 8,192; 4,096), nor a bfloat16 product of 32,768 or
+  151,936 terms. TRL 1.16's fused LM head makes such a product: off CUDA, where Triton does not run, it scores every
+  position in vocabulary tiles of 32,768 and its backward multiplies each tile by the LM head in float32
+  (`kernels/chunked_logprob.py#_addmm_fp32`). torch raises nothing when the command buffer fails: it prints `Error:
+  command buffer exited with error status.` and `Caused GPU Hang Error (00000003:kIOGPUCommandBufferCallbackErrorHang)`,
+  macOS then ignores the process's later submissions (`kIOGPUCommandBufferCallbackErrorSubmissionsIgnored`), every
+  result reads zeros, and the trainer logs a loss and a gradient norm of 0 to the end and saves an adapter that merges
+  into NaN weights (qwen3:0.6b on the commands data: a failure within the first 13 steps of 400 in each of three runs; the
+  quantizer then refuses `found nan value`, a `--format safetensors` checkpoint would have been kept). Neither the
+  dtype, gradient checkpointing, eager attention, the optimizer, gradient clipping, pinned memory nor autocast changes
+  it; the model's own loss over full logits does not hang, nor does TRL's head in a loop of 40 steps of our own. So
+  `train.py` sets the tile to 16,384 on `mps` (the head then makes ten products a step instead of five, the same
+  result: the tiles fold the log-softmax online). trl 1.16.0 and torch 2.14.1 are the latest releases.
+- Every step `env::run` runs (uv, the trainer, `merge.py`, the converter; `devices.py` and `native.py` do no GPU work
+  and are read whole) passes its stderr on and is stopped as soon as it prints Metal's `command buffer
+  exited with error status`: the run fails `the trainer (TRL sft) stopped: Metal failed a command buffer of its GPU work
+  (<Metal's reason line>), …; run again, or pass --device cpu`, removing its files as any failed run does, never
+  registering a model trained on lost work.
+- The estimate is held against the GPU's memory on `cuda`, the working set Metal recommends Apple's GPU on `mps`
+  (`torch.mps.recommended_max_memory()`, `recommendedMaxWorkingSetSize`: 55.7 GB of the M1 Max's 68.7 GB; past it
+  the GPU's work slows and the machine swaps, and torch's MPS allocator sets its own limits from it), and the
+  machine's memory on `cpu`. qwen3.8:27b on `mps` needs about 64 GB, under the machine's memory and over the working
+  set, so it is refused before its 54 GB download, not trained in swap. When it fits, the run says `<base> trains on
+  <device> in <dtype>, needing about <estimate> of the <memory> …`. On `cuda`, a run that does
   not fit in bfloat16 is estimated again with its weights in 4-bit; when that fits it trains with QLoRA, saying so
   (`… training with QLoRA, its weights in 4-bit NF4, needing about …`): TRL's `--load_in_4bit True
   --bnb_4bit_quant_type nf4` (`ModelConfig`, turned into a `BitsAndBytesConfig` by `get_quantization_config`, its
@@ -215,18 +284,46 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   67.3 GB this machine has; pick a smaller base` (on `cuda` both estimates and the GPU's memory).
 
 ### Merge, GGUF and quantization
-- `merge.py <checkpoint> <adapter> <out> <dtype> [--trust-remote-code]` loads the base with TRL's
-  `create_model_from_path` (the class and dtype the trainer used, `trust_remote_code` only under the flag) with
+- `merge.py <checkpoint> <adapter> <out> <dtype> [--trust-remote-code] [--key-mapping <JSON>]` loads the base with
+  TRL's `create_model_from_path` (the class and dtype the trainer used, `trust_remote_code` only under the flag, a text
+  tower's `key_mapping`, saved then under the text model's own names: Base) with
   `device_map=None`, on the CPU whatever the device trained (the function's own choice on the CPU and MPS; on CUDA
   `"auto"` would offload the bfloat16 base of a QLoRA run, larger than the GPU), the adapter with
   `PeftModel.from_pretrained`, and saves `merge_and_unload()` with `save_pretrained`: neither TRL nor PEFT has a merge
-  command. A QLoRA adapter merges into the base at bfloat16, not 4-bit. The checkpoint's other root files (the
+  command. A QLoRA adapter merges into the base at bfloat16, not 4-bit. transformers 5.18's `save_pretrained` validates
+  the generation config strictly and refuses to save one the checkpoint itself ships when it fails
+  (nemotron-3-nano:4b's `top_p` 0.95 without `do_sample`: `GenerationConfig is invalid`), so such a config is replaced
+  by `GenerationConfig.from_model_config` first; nothing reads it (the converter reads no `generation_config.json`,
+  and a checkpoint's model leaves it out). The checkpoint's other root files (the
   tokenizer's) are copied beside it for the converter, its `*.py` only under `--trust-remote-code`: the converter loads
   tokenizers with `trust_remote_code=True`, so a Python file beside them would run.
-- `convert_hf_to_gguf.py <merged> --outtype f32 --model-name <name> --outfile <name>-float32.gguf`, at the training
+- `convert.py <converter> <the trained checkpoint's config.json> <merged> --outtype f32 --model-name <name> --outfile
+  <name>-float32.gguf` runs `convert_hf_to_gguf.py` as `python <it>` runs it (`runpy`, `conversion/` and `gguf-py/`
+  on the path as it puts them) with one change: a NemotronH checkpoint whose own `config.json` sets no
+  `num_experts_per_tok` converts as the dense model it is. The converter's `ModelBase.load_hparams` reads the config
+  through transformers' `AutoConfig`, whose 5.18 `NemotronHConfig` fills in a mixture of experts for every NemotronH
+  (`num_experts_per_tok` 2, `n_routed_experts` 8, `n_group` 1, `topk_group` 1, the MoE sizes, ...) and writes the
+  checkpoint's `hybrid_override_pattern` (`M-M-M-MM-…`) as a `layers_block_type` list (`linear_attention`, `mlp`,
+  ...). nemotron-3-nano:4b, fine-tuned, went three ways wrong: the converter took it for a mixture of experts when
+  `num_experts_per_tok` was there (`conversion/nemotron.py#NemotronHModel`, `has_moe_params`; llama.cpp's `master`
+  the same) and llama.cpp did not load the GGUF; without that key its generic metadata (`base.py`,
+  `find_hparam(["num_local_experts", "num_experts", "n_routed_experts"])`) still named 8 experts with none used, and
+  llama.cpp's loader aborted the process in the quantizer (`GGML_ASSERT(n_expert_used_max > 0)`); and from the list
+  the converter found no MLP layer, as it counts `moe` alone there (`_MLP_LAYER_TYPES`) where the pattern's `-` is
+  one, so llama.cpp did not load that GGUF either. `convert.py` wraps `load_hparams` so that, for `nemotron_h` with no
+  `num_experts_per_tok` declared, the converter reads every setting the checkpoint declares as it declares it, the
+  pattern among them, and none of the MoE settings (`NEMOTRON_H_MOE`) it does not; NVIDIA's own checkpoint, so
+  converted, loads and answers in llama.cpp. The converter itself is run
+  on the merged model at the training
   dtype (it has no remote-code flag: it reads `config.json` itself when `AutoConfig` will not, and its own
   architecture classes, `conversion/spark2_5.py` among them, convert the merged weights); `--no-nextn` only when `config.json` (or its `text_config`) declares `mtp_num_hidden_layers` or
-  `num_nextn_predict_layers` above 0: the converter refuses the flag for an architecture without an MTP head.
+  `num_nextn_predict_layers` above 0: the converter refuses the flag for an architecture without an MTP head. A
+  multimodal checkpoint's merged text tower reaches it named as the checkpoint is (`mod.rs#name_for_converter`: its
+  `config.json`'s `architectures` the checkpoint's `*ForConditionalGeneration`). The converter picks its class by the
+  first of `architectures`, and it registers its text model under every multimodal name it converts but not always
+  under the `*ForCausalLM`: b11074 has `Gemma4UnifiedForConditionalGeneration` and no `Gemma4UnifiedForCausalLM`, so
+  gemma-4:12b, trained, ended with `Model Gemma4UnifiedForCausalLM is not supported`. Where it has both names
+  (`Qwen3_5…`, `Gemma3…`, `Gemma4…`) they are one class, which reads no name; the tensors keep the text model's names.
 - `--format safetensors` (Q9, Q10) skips the converter and the quantizer: the model is the merged checkpoint, the
   safetensors `merge.py` saved (with `model.safetensors.index.json` when sharded) moved into `out/` beside the
   `config.json` of the checkpoint as trained (the text tower's for a multimodal one), its `dtype` or `torch_dtype`
@@ -344,8 +441,18 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   CUDA build's alone; Intel macOS and Windows refused by `runs_here`),
   `finetune::device::tests::pick_takes_cuda_then_mps_then_cpu` (R5.2: `--device auto` over CUDA and MPS, MPS alone
   and the CPU alone, and a device named that torch does not find refused naming those it finds),
+  `finetune::device::tests::fit_holds_mps_to_metals_working_set` (a 54 GB base in bfloat16 fits the M1 Max's 68.7 GB
+  and not Metal's 55.7 GB working set, so `mps` refuses it naming both and the CPU refuses it in float32; Qwen3-0.6B
+  trains on either, its estimate with `MPS_RUNTIME` 3 GB above the same with `RUNTIME`),
   `finetune::tests::library_quants_are_written` (every library size's default quant, phi-4:14b's `q4_k` among them),
-  `finetune::tests::merged_model_gets_python_only_when_trusted`, `finetune::env::tests::unpack_refuses_links`,
+  `finetune::tests::merged_model_gets_python_only_when_trusted`, `finetune::tests::merge_runs_remote_code_only_when_trusted`
+  (with a text tower's `--key-mapping`), `finetune::tests::text_models_read_without_processors` (a plain checkpoint as
+  it is; gemma-3:1b's `processor_class` dropped from a copy; a Gemma 3 and a Qwen3.5 multimodal checkpoint read as their
+  `*ForCausalLM` without processor files, with `TEXT_TOWER`), `finetune::tests::converter_reads_a_tower_under_its_checkpoints_name`
+  (a merged `Gemma4UnifiedForCausalLM` renamed `Gemma4UnifiedForConditionalGeneration`, nothing else changed),
+  `finetune::env::tests::metal_failures_stop_the_step`
+  (Metal's failure message whole, in pieces and without a reason line stops a step that would run a minute more, naming
+  the reason; other stderr passes), `finetune::env::tests::unpack_refuses_links`,
   `ardana-llama`'s `quantize::tests::quants_are_named_like_the_library` (the aliases too), `ardana-registry`'s
   `base::tests::auto_map_in_either_config_runs_remote_code` and `ardana-core`'s
   `finetune::tests::sparse_options_count_each_question_apart` (`q1` given to a noul on 60 lines, a choice on 30 and a
@@ -363,16 +470,24 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   `Gain::Unchecked`), `decider:0.8b` (the custom data, plain layout with isolated levels, `--epochs 1`,
   `Gain::Within(0.05)`: its training mixture holds the custom component, so the row checks for no loss),
   `qwen3.5:0.8b` (commands data, the multimodal checkpoint, chat layout, `Gain::Above`), `hf.co-gguf`
-  (`hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, `cmd-risk-gguf`, `Gain::Unchecked`: R3.2 asks that it answers),
+  (`hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, `cmd-risk-gguf`, `--device cpu`, so a Mac trains one row on
+  its CPU, `Gain::Unchecked`: R3.2 asks that it answers),
   `spark-x2.5:1.7b` (`Spark2_5ForCausalLM`, whose `config.json` has `auto_map`, `--epochs 1`,
   `Expect::Refused("--trust-remote-code")`, `Gain::Unchecked`: R3.5 as amended, the checkpoint's own code targeting
   transformers 4.57 and not loading under the pinned 5.18), `safetensors` (`hf.co/Qwen/Qwen3-0.6B` on
-  the commands data, `--format safetensors`, `cmd-risk-st`, `Gain::Above`: the base answers through Candle too) and
-  `limits` (`qwen3.8:27b` on the commands data with `--device cpu`, `cmd-risk-27b`, `Expect::Refused` on the memory
-  estimate, `Gain::Unchecked`). A refused row
+  the commands data, `--format safetensors`, `cmd-risk-st`, `Gain::Above`: the base answers through Candle too),
+  `gemma-3:1b` (`Gemma3ForCausalLM`, whose `tokenizer_config.json` names `Gemma3Processor`, `cmd-risk-gemma3`),
+  `gemma-4:e2b` (`Gemma4ForConditionalGeneration`, its text tower through `TEXT_TOWER`, `cmd-risk-gemma4`) and
+  `phi-4:mini` (`Phi3ForCausalLM`, whose `config.json` has `auto_map` for a model transformers implements, trained
+  without the flag, `cmd-risk-phi4`), each on the commands data with `--epochs 1` and `Gain::Above`, and `limits`
+  (`qwen3.8:27b` on the commands data with `--device cpu`, `cmd-risk-27b`, `Expect::Refused` on the memory estimate,
+  `Gain::Unchecked`). A refused row
   whose args pass `--device` (R5.2, R5.3; the suite's machine has no CUDA) checks that its refusal names two sizes, the
   estimate above the memory, then runs again with `--device cuda`, which must exit 1 with `--device cuda: torch finds
-  no CUDA device` and the devices found (`cpu`, or `mps, cpu`), no weight file reaching the hub cache either time. A
+  no CUDA device` and the devices found (`cpu`, or `mps, cpu`), and on a Mac of 64 GiB or less (`sysctl hw.memsize`;
+  a larger Mac's working set could hold the base, and the run would download and train it) with `--device mps`, which must exit 1
+  naming three sizes, the estimate above the working set Metal recommends and that below the machine's memory, no
+  weight file reaching the hub cache any time. A
   row refused naming `--trust-remote-code` (whose refusal shows no weight file reached the hub cache) runs again with
   the flag (`<name>-trusted.log`), which must reach the trainer importing the checkpoint's own code (the log names
   `transformers_modules`) and, when it stops there, leave no entry and no model directory; `merge.py` getting the
@@ -393,8 +508,10 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   `trl/scripts/sft.py` is moved out of the venv for it (and back afterwards: uv's check reads metadata, not files),
   and one to the end, whose stdout it keeps apart, then checks: the directory, the GGUF file type (or, for
   `--format safetensors`, runtime `candle` in `ardana show` and `--json`, the directory as the weights, `config.json`
-  the checkpoint's with the dtype `float32`, every tensor of the safetensors `F32` by their headers) and
-  `finetune.json`; that the run says `calibrated <name> through <runtime>`, llama.cpp for a GGUF, candle for a
+  the checkpoint's with the dtype the run trained in, every tensor of the safetensors in it, `F32` or `BF16`, by their
+  headers) and `finetune.json`, whose `device` and `dtype` are the run's: its `--device`, else `mps` on macOS and `cpu`
+  elsewhere (the suite's machine has no CUDA), `float32` on `cpu` and `bfloat16` on `mps`; the venv's torch is the
+  machine's build, `2.14.1` (PyPI) on macOS and `2.14.1+cpu` on Linux; that the run says `calibrated <name> through <runtime>`, llama.cpp for a GGUF, candle for a
   checkpoint; the temperatures the run's stderr says it fitted against Q30 (a type's own only over 50 answers or
   more), `decider_config.json` and `ardana show <name> --json`; the base's entry, pulled from its default quant; the
   report (the base's and the model's names, every type's metrics in range, the same answers for both, the stdout table
@@ -408,6 +525,25 @@ This is the one place Ardana runs Python itself; `python-tooling.md` covers the 
   environment`, uv's `Downloading` and `Installed`). An `Expect::Refused` row checks the exit code, the message and
   that no weight file reached the hub cache. Each row removes every entry it added (its model, a base it pulled), its
   model directory and every hub path it added when its checks end.
+- Measured by hand on Apple Silicon (M1 Max, 64 GB, macOS 27.0.1, the release `ardana`): one epoch of the suite's
+  commands data on `mps` in bfloat16 for a size of each architecture the library holds, the overall test accuracy of
+  the base and of the model (the trainer's peak footprint against the estimate, with `MPS_RUNTIME`): llama-3.2:1b
+  `LlamaForCausalLM` 0.555 → 0.81, minicpm5:1b `LlamaForCausalLM` 0.485 → 0.83, lfm2.5:1.2b `Lfm2ForCausalLM`
+  0.555 → 0.85, smollm3:3b `SmolLM3ForCausalLM` 0.68 → 0.86, granite-4.2:3b `GraniteForCausalLM` 0.41 → 0.875,
+  phi-4:mini `Phi3ForCausalLM` 0.455 → 0.825 (11.8 against 12.9 GB), gemma-3:1b 0.405 → 0.83 (5.2 against 6.7),
+  gemma-3:4b's text tower 0.675 → 0.86 (12.5 against 14.0) and as `--format safetensors` through Candle 0.675 →
+  0.845, gemma-4:e2b's text tower 0.63 → 0.89 (14.9 against 16.3), gemma-4:12b's
+  (`Gemma4UnifiedForConditionalGeneration`) 0.75 → 0.865 (30.1 against 30.8), qwen3.5:0.8b's text tower 0.355 → 0.765 (5.1
+  against 6.3), olmo-3:7b `Olmo3ForCausalLM` 0.465 → 0.86 (19.3 against 20.6), apertus:8b `ApertusForCausalLM`
+  0.55 → 0.81 (22.8 against 23.2), nemotron-3-nano:4b `NemotronHForCausalLM` 0.62 → 0.88 (16.4 against 13.6: its
+  Mamba layers on transformers' reference torch kernels, `mamba_ssm` being CUDA's), lfm2.5:8b-a1b
+  `Lfm2MoeForCausalLM` 0.42 → 0.795 (30.0 against 23.6: the estimate
+  reads a mixture of experts' `intermediate_size`, not its experts'), and decider:0.8b on the custom data 0.9618 →
+  0.9618 (10.9 against 6.5: rows of 336 tokens through Qwen3.5's pure-torch linear attention, the footprint growing
+  from 8.7 to 10.9 GB over the epoch as torch's allocator caches blocks of every length). Training took 8 to 80
+  minutes a model (0.6B at 1.7 s a step of 8 rows, 8B at 18 s, 12B at 24 s), against 81 to 90 minutes for two epochs of
+  qwen3:0.6b on the CPU. Refused before any weight, as they must be: qwen3.6:35b-a3b on `mps` (about 85 GB), and
+  ling-3.0:tiny without `--trust-remote-code` (`bailing_hybrid`); with it, its code wants `einops` and `fla`.
 
 ## Sources
 - https://huggingface.co/docs/trl/sft_trainer — SFTTrainer: pre-tokenized datasets, `completion_mask`, `completion_only_loss`, `max_length`

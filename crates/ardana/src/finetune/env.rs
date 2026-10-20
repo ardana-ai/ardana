@@ -326,10 +326,36 @@ fn uv_command(root: &Path, uv: &Path) -> Command {
     cmd
 }
 
-/// Runs `cmd` with its output on stderr, until it exits or `interrupt` stops it; fails unless it exits 0.
+/// What PyTorch writes to stderr when a Metal command buffer fails (a GPU hang or error, or one of the submissions
+/// macOS ignores after them). It raises nothing: the work encoded on the buffer never ran, and every later result reads
+/// the zeros it left, so a trainer goes on to a loss of 0 and saves weights that are not the model.
+const METAL_FAILED: &str = "command buffer exited with error status";
+
+/// Runs `cmd` with its output on stderr, until it exits or `interrupt` stops it; fails unless it exits 0. It is stopped,
+/// and fails, as soon as its stderr says a Metal command buffer failed ([`METAL_FAILED`]).
 pub async fn run(cmd: &mut Command, interrupt: &mut Interrupt, what: &str) -> Result<()> {
-    cmd.stdout(std::io::stderr()).kill_on_drop(true);
+    cmd.stdout(std::io::stderr())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
     let mut child = cmd.spawn().with_context(|| format!("starting {what}"))?;
+    let stderr = child.stderr.take().context("the child's stderr")?;
+    let failed = tokio::select! {
+        failed = forward(stderr) => failed.with_context(|| format!("reading {what}'s output"))?,
+        () = interrupt.recv() => {
+            child.kill().await.with_context(|| format!("stopping {what}"))?;
+            bail!(super::INTERRUPTED);
+        }
+    };
+    if let Some(reason) = failed {
+        child
+            .kill()
+            .await
+            .with_context(|| format!("stopping {what}"))?;
+        bail!(
+            "{what} stopped: Metal failed a command buffer of its GPU work ({reason}), and torch goes on without \
+             that work, with zeros for what it computes; run again, or pass --device cpu"
+        );
+    }
     let status = tokio::select! {
         status = child.wait() => status.with_context(|| format!("waiting for {what}"))?,
         () = interrupt.recv() => {
@@ -339,6 +365,53 @@ pub async fn run(cmd: &mut Command, interrupt: &mut Interrupt, what: &str) -> Re
     };
     ensure!(status.success(), "{what} failed ({status})");
     Ok(())
+}
+
+/// Copies `stderr` to this process's stderr until it ends, or until it says [`METAL_FAILED`]: then it also copies what
+/// is already written after it (Metal's reason, which follows on the next lines) and returns that reason, the line
+/// naming a `kIOGPUCommandBufferCallbackError` when there is one.
+async fn forward(mut stderr: impl tokio::io::AsyncRead + Unpin) -> std::io::Result<Option<String>> {
+    use tokio::io::AsyncReadExt;
+    let mut chunk = [0; 8192];
+    // The output since the end of the last line before the marker could have started.
+    let mut text = Vec::new();
+    loop {
+        let n = stderr.read(&mut chunk).await?;
+        if n == 0 {
+            return Ok(None);
+        }
+        std::io::stderr().write_all(&chunk[..n])?;
+        text.extend_from_slice(&chunk[..n]);
+        let Some(at) = text
+            .windows(METAL_FAILED.len())
+            .position(|w| w == METAL_FAILED.as_bytes())
+        else {
+            text.drain(..text.len().saturating_sub(METAL_FAILED.len()));
+            continue;
+        };
+        // Metal writes its reason a few lines on, in the same message; read what has arrived, a moment at most.
+        let mut rest = text.split_off(at);
+        let wait = tokio::time::sleep(Duration::from_millis(500));
+        tokio::pin!(wait);
+        while !String::from_utf8_lossy(&rest).contains("kIOGPUCommandBufferCallbackError") {
+            tokio::select! {
+                read = stderr.read(&mut chunk) => match read? {
+                    0 => break,
+                    n => {
+                        std::io::stderr().write_all(&chunk[..n])?;
+                        rest.extend_from_slice(&chunk[..n]);
+                    }
+                },
+                () = &mut wait => break,
+            }
+        }
+        let rest = String::from_utf8_lossy(&rest);
+        let reason = rest
+            .lines()
+            .find(|line| line.contains("kIOGPUCommandBufferCallbackError"))
+            .unwrap_or(METAL_FAILED);
+        return Ok(Some(reason.trim().to_string()));
+    }
 }
 
 /// Downloads `url` to `to` through `<to>.part`, which it becomes only once its sha256 is `digest`.
@@ -429,6 +502,60 @@ fn unpack(archive: &Path, into: &Path, keep: impl Fn(&Path) -> Option<PathBuf>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A step whose stderr says a Metal command buffer failed is stopped there and fails naming Metal's reason, also
+    /// when the message comes in pieces or names no reason; any other output is only passed on, and the step's exit
+    /// status decides. The failing steps would sleep a minute more (`exec`, so the kill stops the sleep itself).
+    #[tokio::test]
+    async fn metal_failures_stop_the_step() {
+        const HANG: &str = "Caused GPU Hang Error (00000003:kIOGPUCommandBufferCallbackErrorHang)";
+        let mut interrupt = Interrupt::listen().unwrap();
+        let sh = |script: &str| {
+            let mut cmd = Command::new("sh");
+            cmd.args(["-c", script]);
+            cmd
+        };
+        let message = format!(
+            "printf '  2%%|| 8/400\\rError: command buffer exited with error status.\\n\\tThe Metal Performance Shaders \
+             operations encoded on it may not have completed.\\n\\tError: \\n\\t(null)\\n\\t{HANG}\\n' >&2; exec sleep 60"
+        );
+        let pieces = format!(
+            "printf 'Error: command buf' >&2; sleep 0.2; printf 'fer exited with error status.\\n' >&2; sleep 0.1; \
+             printf '\\t{HANG}\\n' >&2; exec sleep 60"
+        );
+        let bare = "echo 'Error: command buffer exited with error status.' >&2; exec sleep 60";
+        for (script, reason) in [
+            (message.as_str(), HANG),
+            (pieces.as_str(), HANG),
+            (bare, METAL_FAILED),
+        ] {
+            let started = std::time::Instant::now();
+            let err = run(&mut sh(script), &mut interrupt, "the trainer")
+                .await
+                .expect_err("a Metal failure passed")
+                .to_string();
+            assert_eq!(
+                err,
+                format!(
+                    "the trainer stopped: Metal failed a command buffer of its GPU work ({reason}), and torch goes on \
+                     without that work, with zeros for what it computes; run again, or pass --device cpu"
+                )
+            );
+            assert!(started.elapsed() < Duration::from_secs(10), "{script}");
+        }
+        run(
+            &mut sh("echo 'Error: something else' >&2; echo progress"),
+            &mut interrupt,
+            "a step",
+        )
+        .await
+        .unwrap();
+        let err = run(&mut sh("echo fine >&2; exit 3"), &mut interrupt, "a step")
+            .await
+            .expect_err("exit 3 passed")
+            .to_string();
+        assert_eq!(err, "a step failed (exit status: 3)");
+    }
 
     /// `unpack` writes the files and directories it keeps and refuses a kept link, which it never creates: a symbolic
     /// link to a path outside the directory, and a hard link.

@@ -205,6 +205,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
 
     let env = env::prepare(&home, &mut interrupt).await?;
     let work = Work::create(env.work(name))?;
+    own_classes(&env, &work, &mut interrupt, &base).await?;
     // The device and the memory it has, before the checkpoint downloads (Q4, Q16).
     let found = device::probe(&env, &work, &mut interrupt).await?;
     let device = device::pick(args.device, &found)?;
@@ -242,7 +243,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         }
     };
 
-    let trained = text_tower(&checkpoint, &work.dir)?;
+    let trained = text_model(&checkpoint, &work.dir)?;
     let out = work.dir.join("out");
     std::fs::create_dir_all(&out)?;
     write_rows(&work.dir.join("data/train.jsonl"), &train)?;
@@ -259,10 +260,15 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
         if args.epochs == 1 { "" } else { "s" }
     );
     let adapter = work.dir.join("adapter");
+    let script = work.dir.join("train.py");
+    std::fs::write(&script, include_str!("train.py"))?;
     let mut trainer = python(&env, &work);
     trainer
-        .args(["-I", "-m", "trl.scripts.sft", "--model_name_or_path"])
-        .arg(&trained)
+        .arg("-I")
+        .arg(&script)
+        .arg(training.device.name())
+        .arg("--model_name_or_path")
+        .arg(&trained.dir)
         .arg("--dataset_name")
         .arg(work.dir.join("data"))
         .args(["--dataset_train_split", "train"])
@@ -309,6 +315,12 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     if args.trust_remote_code {
         trainer.args(["--trust_remote_code", "True"]);
     }
+    if let Some(mapping) = trained.key_mapping() {
+        // TRL passes these to `from_pretrained`.
+        trainer
+            .arg("--model_init_kwargs")
+            .arg(json!({ "key_mapping": mapping }).to_string());
+    }
     env::run(&mut trainer, &mut interrupt, "the trainer (TRL sft)").await?;
 
     let merged = work.dir.join("merged");
@@ -327,13 +339,20 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
     // The GGUF's file in the model's directory; a checkpoint is the directory itself.
     let file = match &quant {
         Some(quant) => {
-            copy_tokenizer_files(&trained, &merged, args.trust_remote_code)?;
+            copy_tokenizer_files(&trained.dir, &merged, args.trust_remote_code)?;
+            if let Some(architecture) = &trained.tower {
+                name_for_converter(&merged, architecture)?;
+            }
             let converted = work.dir.join(format!("{name}-float32.gguf"));
+            let script = work.dir.join("convert.py");
+            std::fs::write(&script, include_str!("convert.py"))?;
             let mut convert = python(&env, &work);
-            // Not isolated: the converter imports its `conversion/` package from beside itself.
+            // `convert.py` puts the converter's directory on the path, which `-I` leaves out with the work directory.
             convert
-                .args(["-E", "-s"])
+                .arg("-I")
+                .arg(&script)
                 .arg(env.converter())
+                .arg(trained.dir.join(snapshot::CONFIG))
                 .arg(&merged)
                 .args(["--outtype", "f32", "--model-name", name, "--outfile"])
                 .arg(&converted);
@@ -358,7 +377,7 @@ async fn run(args: &FinetuneArgs) -> Result<()> {
             Some(file)
         }
         None => {
-            write_checkpoint(&trained, &merged, &out, dtype)?;
+            write_checkpoint(&trained.dir, &merged, &out, dtype)?;
             None
         }
     };
@@ -442,50 +461,175 @@ fn owned(examples: &[&Example]) -> Vec<Example> {
     examples.iter().map(|&example| example.clone()).collect()
 }
 
-/// The checkpoint as the trainer and `merge.py` load it. A multimodal checkpoint (its `config.json` names a
-/// `*ForConditionalGeneration` and holds a `text_config`) trains its text tower alone, the model Ardana runs: `<work>/
+/// Q14 for a base whose `config.json` has `auto_map` and no `--trust-remote-code` ([`Base::model_code`]): the run goes
+/// on when the environment's transformers implements the config's `model_type` itself (`native.py`), and so loads the
+/// model by its own classes, never running the code the checkpoint ships (phi-4:mini's Phi-3, nemotron-3-nano:4b's
+/// NemotronH); it is refused, naming the flag, when only that code loads it (spark-x2.5's). Before any weight.
+async fn own_classes(
+    env: &env::Env,
+    work: &Work,
+    interrupt: &mut Interrupt,
+    base: &Base,
+) -> Result<()> {
+    let Some(code) = &base.model_code else {
+        return Ok(());
+    };
+    let config = work.dir.join("checkpoint-config.json");
+    std::fs::write(&config, base.config.to_string())?;
+    let script = work.dir.join("native.py");
+    std::fs::write(&script, include_str!("native.py"))?;
+    let mut cmd = python(env, work);
+    cmd.arg("-I").arg(&script).arg(&config).kill_on_drop(true);
+    let output = interrupt
+        .or(async { cmd.output().await.context("starting native.py") })
+        .await?;
+    ensure!(
+        output.status.success(),
+        "asking transformers for the model's classes (native.py) failed ({}):\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let answer: Value =
+        serde_json::from_slice(&output.stdout).context("reading native.py's answer")?;
+    let model_type = answer["model_type"].as_str().unwrap_or("no model_type");
+    if answer["native"].as_bool() == Some(true) {
+        eprintln!(
+            "{}: its config.json has auto_map, and transformers implements {model_type} itself, so the model loads \
+             without the Python code it names ({code})",
+            base.checkpoint
+        );
+        return Ok(());
+    }
+    bail!(
+        "{}: its config.json has auto_map, and transformers implements no {model_type} itself, so it loads the model by \
+         running the Python code it names ({code}); pass --trust-remote-code to run that code",
+        base.checkpoint
+    )
+}
+
+/// The text model the trainer and `merge.py` load: a checkpoint directory, and for a multimodal checkpoint's text
+/// tower the checkpoint's own architecture (`*ForConditionalGeneration`).
+#[derive(Debug)]
+struct Trained {
+    dir: PathBuf,
+    tower: Option<String>,
+}
+
+impl Trained {
+    /// The `key_mapping` transformers loads a text tower's tensors with, [`TEXT_TOWER`].
+    fn key_mapping(&self) -> Option<Value> {
+        self.tower.as_ref().map(|_| {
+            Value::Object(
+                TEXT_TOWER
+                    .iter()
+                    .map(|(from, to)| (from.to_string(), json!(to)))
+                    .collect(),
+            )
+        })
+    }
+}
+
+/// The checkpoint as the trainer and `merge.py` load it, the text model Ardana runs. A multimodal checkpoint (its
+/// `config.json` names a `*ForConditionalGeneration` and holds a `text_config`) trains its text tower alone: `<work>/
 /// text/` holds the text tower's `config.json` (the `text_config`, its architecture the `*ForCausalLM` of the same
-/// name) and links to the checkpoint's files but its processor's, so transformers loads the text model from the
-/// checkpoint's `language_model` tensors and TRL reads the tokenizer, not a multimodal processor. Any other checkpoint
-/// is read as it is.
-fn text_tower(checkpoint: &Path, work: &Path) -> Result<PathBuf> {
+/// name) and links to the checkpoint's files but its processor's, and transformers loads the text model through
+/// [`TEXT_TOWER`], which finds its tensors under the multimodal checkpoint's `language_model` names. A checkpoint
+/// whose `tokenizer_config.json` names a `processor_class` (every Gemma 3 and 4 names its multimodal processor, the
+/// text-only gemma-3:1b's too) is read there through a copy of it without that key, for any checkpoint: TRL's
+/// `AutoProcessor` would build that processor, which wants an image processor's files, instead of the tokenizer. Any
+/// other checkpoint is read as it is.
+fn text_model(checkpoint: &Path, work: &Path) -> Result<Trained> {
     const PROCESSOR_FILES: [&str; 3] = [
         "processor_config.json",
         "preprocessor_config.json",
         "video_preprocessor_config.json",
     ];
-    let path = checkpoint.join(snapshot::CONFIG);
-    let config: Value = serde_json::from_str(
-        &std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?,
-    )?;
+    let read = |path: &Path| -> Result<Value> {
+        Ok(serde_json::from_str(
+            &std::fs::read_to_string(path)
+                .with_context(|| format!("reading {}", path.display()))?,
+        )?)
+    };
+    let config = read(&checkpoint.join(snapshot::CONFIG))?;
     let multimodal = config["architectures"][0]
         .as_str()
-        .and_then(|arch| arch.strip_suffix("ForConditionalGeneration"));
-    let (Some(prefix), Value::Object(text)) = (multimodal, &config["text_config"]) else {
-        return Ok(checkpoint.to_path_buf());
+        .and_then(|arch| arch.strip_suffix("ForConditionalGeneration"))
+        .zip(config["text_config"].as_object());
+    let tokenizer_config = checkpoint.join(ardana_core::chat::CONFIG_FILE);
+    let tokenizer_config = if tokenizer_config.is_file() {
+        Some(read(&tokenizer_config)?).filter(|config| config.get("processor_class").is_some())
+    } else {
+        None
     };
-    let mut text = text.clone();
-    text.insert(
-        "architectures".into(),
-        json!([format!("{prefix}ForCausalLM")]),
-    );
+    if multimodal.is_none() && tokenizer_config.is_none() {
+        return Ok(Trained {
+            dir: checkpoint.to_path_buf(),
+            tower: None,
+        });
+    }
     let dir = work.join("text");
     std::fs::create_dir_all(&dir)?;
-    std::fs::write(
-        dir.join(snapshot::CONFIG),
-        serde_json::to_string_pretty(&text)?,
-    )?;
+    let mut written = vec![];
+    if let Some((prefix, text)) = multimodal {
+        let mut text = text.clone();
+        text.insert(
+            "architectures".into(),
+            json!([format!("{prefix}ForCausalLM")]),
+        );
+        std::fs::write(
+            dir.join(snapshot::CONFIG),
+            serde_json::to_string_pretty(&text)?,
+        )?;
+        written.push(snapshot::CONFIG);
+    }
+    if let Some(mut tokenizer_config) = tokenizer_config {
+        tokenizer_config
+            .as_object_mut()
+            .context("tokenizer_config.json is no object")?
+            .remove("processor_class");
+        std::fs::write(
+            dir.join(ardana_core::chat::CONFIG_FILE),
+            serde_json::to_string_pretty(&tokenizer_config)?,
+        )?;
+        written.push(ardana_core::chat::CONFIG_FILE);
+    }
     for entry in std::fs::read_dir(checkpoint)? {
         let path = entry?.path();
         let Some(file) = path.file_name().and_then(|f| f.to_str()) else {
             continue;
         };
-        if file != snapshot::CONFIG && !PROCESSOR_FILES.contains(&file) {
+        if !written.contains(&file) && !PROCESSOR_FILES.contains(&file) {
             link(&std::fs::canonicalize(&path)?, &dir.join(file))?;
         }
     }
-    Ok(dir)
+    let tower = multimodal.map(|(prefix, _)| format!("{prefix}ForConditionalGeneration"));
+    Ok(Trained { dir, tower })
 }
+
+/// Names the merged text tower in `merged`'s `config.json` as its multimodal checkpoint is named, `architecture`, for
+/// llama.cpp's converter, which takes the first of `architectures`: it registers its text model under every multimodal
+/// name it converts (`Qwen3_5ForConditionalGeneration`, `Gemma3…`, `Gemma4…`, `Gemma4UnifiedForConditionalGeneration`)
+/// and not always under the `*ForCausalLM` (b11074 has no `Gemma4UnifiedForCausalLM`); where it has both they are one
+/// class. The tensors keep the text model's names, whose `language_model.` it would drop anyway.
+fn name_for_converter(merged: &Path, architecture: &str) -> Result<()> {
+    let path = merged.join(snapshot::CONFIG);
+    let mut config: Value = serde_json::from_str(
+        &std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?,
+    )?;
+    config["architectures"] = json!([architecture]);
+    std::fs::write(&path, serde_json::to_string_pretty(&config)? + "\n")?;
+    Ok(())
+}
+
+/// transformers' `key_mapping` for a multimodal checkpoint's text tower: the text model's own tensor names (`model.`,
+/// `lm_head.`) for those under `model.language_model.` (Qwen3.5, Gemma 4) and `language_model.model.` (Gemma 3).
+/// transformers 5.18 maps Qwen3.5's itself (`conversion_mapping.py`, `qwen3_5_text`), not Gemma's: without this a
+/// Gemma text tower loads none of its weights and trains from random ones, with a warning.
+const TEXT_TOWER: [(&str, &str); 3] = [
+    (r"^model\.language_model\.", "model."),
+    (r"^language_model\.model\.", "model."),
+    (r"^language_model\.lm_head\.", "lm_head."),
+];
 
 #[cfg(unix)]
 fn link(target: &Path, path: &Path) -> Result<()> {
@@ -654,36 +798,42 @@ fn write_rows(path: &Path, rows: &[TrainingRow]) -> Result<()> {
 }
 
 /// The venv's interpreter, offline on the hub cache (Q29), with its Hugging Face home and temporary files in the
-/// run's working directory; it writes no bytecode (`-B`), so the environment's files stay as they were built.
+/// run's working directory; it writes no bytecode (`-B`), so the environment's files stay as they were built, and its
+/// output unbuffered (`-u`), so the trainer's losses come as it logs them. Flags, not `PYTHON*` variables: every step
+/// runs with `-I` or `-E`, which ignore them.
 fn python(env: &env::Env, work: &Work) -> Command {
     let mut cmd = Command::new(env.python());
-    cmd.arg("-B")
+    cmd.args(["-B", "-u"])
         .current_dir(&work.dir)
         .env("HF_HUB_OFFLINE", "1")
         .env("TRANSFORMERS_OFFLINE", "1")
         .env("HF_HOME", work.dir.join("hf"))
-        .env("TMPDIR", &work.tmp)
-        .env("PYTHONUNBUFFERED", "1");
+        .env("TMPDIR", &work.tmp);
     cmd
 }
 
 /// `merge.py`'s arguments: the checkpoint, the adapter, the merged model's directory and the dtype, then
-/// `--trust-remote-code` under the flag alone, so the checkpoint's own code runs only when asked (Q14).
+/// `--trust-remote-code` under the flag alone, so the checkpoint's own code runs only when asked (Q14), and
+/// `--key-mapping <JSON>` for a text tower ([`Trained`]).
 fn merge_args(
-    checkpoint: &Path,
+    trained: &Trained,
     adapter: &Path,
     merged: &Path,
     dtype: &str,
     trust_remote_code: bool,
 ) -> Vec<std::ffi::OsString> {
     let mut args = vec![
-        checkpoint.into(),
+        trained.dir.as_os_str().into(),
         adapter.into(),
         merged.into(),
         dtype.into(),
     ];
     if trust_remote_code {
         args.push("--trust-remote-code".into());
+    }
+    if let Some(mapping) = trained.key_mapping() {
+        args.push("--key-mapping".into());
+        args.push(mapping.to_string().into());
     }
     args
 }
@@ -1091,22 +1241,158 @@ mod tests {
     }
 
     /// Q14, R3.5: `merge.py` takes `<checkpoint> <adapter> <out> <dtype>` and runs the checkpoint's own code only when
-    /// `--trust-remote-code` follows them, which it does under the flag alone.
+    /// `--trust-remote-code` follows them, which it does under the flag alone; a text tower's key mapping follows as
+    /// `--key-mapping <JSON>`.
     #[test]
     fn merge_runs_remote_code_only_when_trusted() {
-        let (checkpoint, adapter, merged) = (Path::new("c"), Path::new("a"), Path::new("m"));
-        for trusted in [false, true] {
-            let mut wanted = vec!["c", "a", "m", "float32"];
-            if trusted {
-                wanted.push("--trust-remote-code");
+        let (adapter, merged) = (Path::new("a"), Path::new("m"));
+        let tower = Trained {
+            dir: PathBuf::from("c"),
+            tower: Some("Gemma3ForConditionalGeneration".into()),
+        };
+        let mapping = tower.key_mapping().unwrap().to_string();
+        for (tower, mapped) in [
+            (None, &[][..]),
+            (tower.tower, &["--key-mapping", mapping.as_str()][..]),
+        ] {
+            let trained = Trained {
+                dir: PathBuf::from("c"),
+                tower,
+            };
+            for trusted in [false, true] {
+                let mut wanted = vec!["c", "a", "m", "float32"];
+                if trusted {
+                    wanted.push("--trust-remote-code");
+                }
+                wanted.extend(mapped);
+                assert_eq!(
+                    merge_args(&trained, adapter, merged, "float32", trusted),
+                    wanted,
+                    "--trust-remote-code: {trusted}"
+                );
             }
-            assert_eq!(
-                merge_args(checkpoint, adapter, merged, "float32", trusted),
-                wanted,
-                "--trust-remote-code: {trusted}"
-            );
         }
-        assert!(include_str!("merge.py").contains(r#""--trust-remote-code" in flags"#));
+        let script = include_str!("merge.py");
+        assert!(script.contains(r#""--trust-remote-code" in flags"#));
+        assert!(script.contains("save_original_format=key_mapping is None"));
+    }
+
+    /// The text model the trainer reads: a plain checkpoint as it is; one whose `tokenizer_config.json` names a
+    /// `processor_class` (gemma-3:1b's) through a copy without it; a multimodal one (Gemma 3's, Qwen3.5's) through its
+    /// `text_config` as a `*ForCausalLM`, without its processor's files, loaded with [`TEXT_TOWER`].
+    #[test]
+    fn text_models_read_without_processors() {
+        let root = std::env::temp_dir().join(format!("ardana-text-{}", std::process::id()));
+        let write = |dir: &Path, file: &str, value: &Value| {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(dir.join(file), value.to_string()).unwrap();
+        };
+        let read = |path: PathBuf| -> Value {
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+        };
+        let tokenizer = json!({"tokenizer_class": "GemmaTokenizer", "bos_token": "<bos>"});
+        let mut with_processor = tokenizer.clone();
+        with_processor["processor_class"] = json!("Gemma3Processor");
+        let text = json!({"model_type": "gemma3_text", "hidden_size": 2560});
+        let mapping: serde_json::Map<String, Value> = TEXT_TOWER
+            .iter()
+            .map(|(from, to)| (from.to_string(), json!(to)))
+            .collect();
+        for (case, architecture, tokenizer_config, multimodal) in [
+            ("plain", "Qwen3ForCausalLM", &tokenizer, false),
+            ("processor", "Gemma3ForCausalLM", &with_processor, false),
+            (
+                "gemma3",
+                "Gemma3ForConditionalGeneration",
+                &with_processor,
+                true,
+            ),
+            (
+                "qwen3_5",
+                "Qwen3_5ForConditionalGeneration",
+                &tokenizer,
+                true,
+            ),
+        ] {
+            let checkpoint = root.join(case).join("checkpoint");
+            let mut config = json!({"architectures": [architecture]});
+            if multimodal {
+                config["text_config"] = text.clone();
+                write(&checkpoint, "preprocessor_config.json", &json!({}));
+                write(&checkpoint, "processor_config.json", &json!({}));
+            }
+            write(&checkpoint, "config.json", &config);
+            write(&checkpoint, "tokenizer_config.json", tokenizer_config);
+            write(&checkpoint, "model.safetensors", &json!("weights"));
+            let work = root.join(case).join("work");
+            let trained = text_model(&checkpoint, &work).unwrap();
+            if case == "plain" {
+                assert_eq!(trained.dir, checkpoint);
+                assert!(trained.tower.is_none() && trained.key_mapping().is_none());
+                continue;
+            }
+            assert_eq!(trained.dir, work.join("text"), "{case}");
+            let mut files: Vec<String> = std::fs::read_dir(&trained.dir)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+                .collect();
+            files.sort();
+            assert_eq!(
+                files,
+                ["config.json", "model.safetensors", "tokenizer_config.json"],
+                "{case}"
+            );
+            assert_eq!(
+                read(trained.dir.join("model.safetensors")),
+                json!("weights"),
+                "{case}"
+            );
+            assert_eq!(
+                read(trained.dir.join("tokenizer_config.json")),
+                tokenizer,
+                "{case}"
+            );
+            let config = read(trained.dir.join("config.json"));
+            if multimodal {
+                let mut wanted = text.clone();
+                wanted["architectures"] =
+                    json!([architecture.replace("ForConditionalGeneration", "ForCausalLM")]);
+                assert_eq!(config, wanted, "{case}");
+                assert_eq!(trained.tower.as_deref(), Some(architecture), "{case}");
+                assert_eq!(
+                    trained.key_mapping(),
+                    Some(Value::Object(mapping.clone())),
+                    "{case}"
+                );
+            } else {
+                assert_eq!(config, json!({"architectures": [architecture]}), "{case}");
+                assert!(
+                    trained.tower.is_none() && trained.key_mapping().is_none(),
+                    "{case}"
+                );
+            }
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The merged text tower reaches llama.cpp's converter under its multimodal checkpoint's architecture, which the
+    /// converter registers (b11074 has `Gemma4UnifiedForConditionalGeneration`, no `Gemma4UnifiedForCausalLM`), every
+    /// other setting as `save_pretrained` wrote it.
+    #[test]
+    fn converter_reads_a_tower_under_its_checkpoints_name() {
+        let merged = std::env::temp_dir().join(format!("ardana-merged-{}", std::process::id()));
+        std::fs::create_dir_all(&merged).unwrap();
+        let saved = json!({"architectures": ["Gemma4UnifiedForCausalLM"], "model_type": "gemma4_unified_text",
+            "hidden_size": 3840, "dtype": "bfloat16"});
+        std::fs::write(merged.join("config.json"), saved.to_string()).unwrap();
+        name_for_converter(&merged, "Gemma4UnifiedForConditionalGeneration").unwrap();
+        let written: Value =
+            serde_json::from_str(&std::fs::read_to_string(merged.join("config.json")).unwrap())
+                .unwrap();
+        let mut wanted = saved;
+        wanted["architectures"] = json!(["Gemma4UnifiedForConditionalGeneration"]);
+        assert_eq!(written, wanted);
+        std::fs::remove_dir_all(&merged).unwrap();
     }
 
     /// Q24: every library size's default quant is one the linked llama.cpp writes, `llama-quantize`'s aliases among

@@ -58,10 +58,18 @@ const ENVIRONMENT_BUILT: [&str; 5] = [
     "Downloading ",
     "Installed ",
 ];
-/// The Q29 pins the venv must hold, as `importlib.metadata` reports them (torch from PyTorch's CPU wheels), and the
-/// interpreter (Q3) and converter (Q25) the environment is built with.
+/// The Q29 pins the venv must hold, as `importlib.metadata` reports them (torch the suite's machine's build, R5.1: PyPI's
+/// wheel on macOS, which has no local version, PyTorch's CPU wheel on Linux), and the interpreter (Q3) and converter
+/// (Q25) the environment is built with.
 const PINS: [(&str, &str); 11] = [
-    ("torch", "2.14.1+cpu"),
+    (
+        "torch",
+        if cfg!(target_os = "macos") {
+            "2.14.1"
+        } else {
+            "2.14.1+cpu"
+        },
+    ),
     ("transformers", "5.18.0"),
     ("peft", "0.21.2"),
     ("trl", "1.16.0"),
@@ -355,7 +363,9 @@ fn trusted(cli: &Cli, run: &Run, why: &str) -> Result<()> {
 
 /// R5.2 and R5.3 for a refused row that passes `--device`: its refusal `message` names the memory the run needs and
 /// the memory it has, the first the larger, and the same run with `--device cuda` exits 1 naming the devices torch
-/// finds, before any weight downloads (the suite's machine has no CUDA). Nothing for any other row.
+/// finds, before any weight downloads (the suite's machine has no CUDA). On a Mac of 64 GiB or less the same run with
+/// `--device mps` is refused too, naming the estimate above the working set Metal recommends Apple's GPU, the first of
+/// three sizes, and the machine's memory the last. Nothing for any other row.
 fn limits(cli: &Cli, run: &Run, message: &str, before: &BTreeSet<PathBuf>) -> Result<()> {
     if run.flag("--device").is_none() {
         return Ok(());
@@ -365,19 +375,21 @@ fn limits(cli: &Cli, run: &Run, message: &str, before: &BTreeSet<PathBuf>) -> Re
         matches!(sizes[..], [needs, has] if needs > has),
         "the refusal names the sizes {sizes:?}, not the memory the run needs and the smaller memory it has: {message}"
     );
-    let mut args = run.args.clone();
-    let at = args
-        .iter()
-        .position(|arg| arg == "--device")
-        .context("the row passes no --device")?;
-    args[at + 1] = "cuda".into();
-    let cuda = Run {
-        args,
-        ..run.clone()
+    let on = |device: &str| -> Result<Run> {
+        let mut args = run.args.clone();
+        let at = args
+            .iter()
+            .position(|arg| arg == "--device")
+            .context("the row passes no --device")?;
+        args[at + 1] = device.into();
+        Ok(Run {
+            args,
+            ..run.clone()
+        })
     };
     let message = refused(
         cli,
-        &cuda,
+        &on("cuda")?,
         "--device cuda: torch finds no CUDA device",
         before,
         "-cuda",
@@ -386,6 +398,40 @@ fn limits(cli: &Cli, run: &Run, message: &str, before: &BTreeSet<PathBuf>) -> Re
         message.ends_with("it finds cpu") || message.ends_with("it finds mps, cpu"),
         "the refusal of --device cuda names no devices torch finds: {message}"
     );
+    if cfg!(target_os = "macos") {
+        // The row's base needs about 64 GB on MPS, above the working set Metal recommends a Mac of 64 GiB or less (55.7
+        // GB of the M1 Max's 68.7); a larger Mac's would hold it, and the run would download the weights and train.
+        let memory: u64 = run_stdout(
+            cli.sandbox
+                .command("/usr/sbin/sysctl")
+                .args(["-n", "hw.memsize"]),
+        )?
+        .trim()
+        .parse()
+        .context("sysctl hw.memsize")?;
+        if memory > 64 << 30 {
+            println!(
+                "e2e finetune {}: --device mps not checked: this Mac's {:.1} GB could hold {}",
+                run.row,
+                memory as f64 / 1e9,
+                run.base
+            );
+            return Ok(());
+        }
+        let message = refused(
+            cli,
+            &on("mps")?,
+            "of memory to train on mps in bfloat16, more than the",
+            before,
+            "-mps",
+        )?;
+        let sizes = self::sizes(&message);
+        ensure!(
+            message.contains("Metal recommends Apple's GPU use on this machine")
+                && matches!(sizes[..], [needs, has, memory] if needs > has && has < memory),
+            "the refusal of --device mps names no estimate above Metal's working set: {message}"
+        );
+    }
     Ok(())
 }
 
@@ -676,6 +722,24 @@ impl Run {
     /// The value the run's args give `flag`.
     fn flag(&self, name: &str) -> Option<&str> {
         flag(&self.args, name)
+    }
+
+    /// Where the run trains: its `--device`, else the device `--device auto` takes on the suite's machine, which has no
+    /// CUDA (Q4): Apple's GPU on macOS, where fine-tuning runs on Apple Silicon alone, else the CPU.
+    fn device(&self) -> &str {
+        match self.flag("--device") {
+            Some(device) if device != "auto" => device,
+            _ if cfg!(target_os = "macos") => "mps",
+            _ => "cpu",
+        }
+    }
+
+    /// The dtype the run trains in (Q23), `finetune.json#dtype`: float32 on the CPU, bfloat16 on a GPU.
+    fn dtype(&self) -> &'static str {
+        match self.device() {
+            "cpu" => "float32",
+            _ => "bfloat16",
+        }
     }
 
     /// What the run writes: its `--format`, else `ardana finetune`'s default, `gguf` (Q9).
@@ -1152,7 +1216,7 @@ impl Cli<'_> {
         let dir = self.home.join("models").join(name);
         let mut files = match &expected.quant {
             Some(quant) => self.gguf(name, quant, &entry, &dir)?,
-            None => self.checkpoint(name, expected, &entry, &dir)?,
+            None => self.checkpoint(name, expected, run.dtype(), &entry, &dir)?,
         };
         for file in [
             "tokenizer.json",
@@ -1190,8 +1254,8 @@ impl Cli<'_> {
             "checkpoint": expected.checkpoint,
             "format": run.format(),
             "quant": expected.quant,
-            "device": "cpu",
-            "dtype": "float32",
+            "device": run.device(),
+            "dtype": run.dtype(),
             "qlora": false,
             "epochs": run.epochs()?,
             "rows": {"train": lines - 2 * tenth, "calibration": tenth, "test": tenth},
@@ -1248,12 +1312,13 @@ impl Cli<'_> {
     }
 
     /// R4.1: `name` is recorded with Candle as its runtime, which `ardana show` prints, and `dir` itself as its weights:
-    /// the checkpoint's `config.json` (its text tower's for a multimodal one) with the dtype float32, and the
-    /// safetensors its index names (else `model.safetensors`), every tensor in F32. Returns those files' names.
+    /// the checkpoint's `config.json` (its text tower's for a multimodal one) with the `dtype` it trained in, and the
+    /// safetensors its index names (else `model.safetensors`), every tensor in that dtype. Returns those files' names.
     fn checkpoint(
         &self,
         name: &str,
         expected: &Expected,
+        dtype: &str,
         entry: &Value,
         dir: &Path,
     ) -> Result<Vec<String>> {
@@ -1280,7 +1345,7 @@ impl Cli<'_> {
         }
         for key in ["dtype", "torch_dtype"] {
             if wanted.get(key).is_some() {
-                wanted[key] = json!("float32");
+                wanted[key] = json!(dtype);
             }
         }
         let config = read_json(&dir.join("config.json"))?;
@@ -1301,15 +1366,20 @@ impl Cli<'_> {
         } else {
             BTreeSet::from(["model.safetensors".to_string()])
         };
+        // The dtype as a safetensors header names it.
+        let stored = match dtype {
+            "float32" => "F32",
+            _ => "BF16",
+        };
         for file in &weights {
             let dtypes = safetensors_dtypes(&dir.join(file))?;
             ensure!(
-                dtypes.iter().all(|dtype| dtype == "F32"),
-                "{name}'s {file} holds the dtypes {dtypes:?}, not F32 alone"
+                dtypes.iter().all(|dtype| dtype == stored),
+                "{name}'s {file} holds the dtypes {dtypes:?}, not {stored} alone"
             );
         }
         println!(
-            "e2e finetune: {name} runs through candle, its config.json the checkpoint's in float32 ({}), {} in F32",
+            "e2e finetune: {name} runs through candle, its config.json the checkpoint's in {dtype} ({}), {} in {stored}",
             config["architectures"],
             weights.iter().cloned().collect::<Vec<_>>().join(", ")
         );

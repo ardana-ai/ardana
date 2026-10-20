@@ -2,9 +2,9 @@
 //! devices it finds (`devices.py`), and `--device auto` takes CUDA, then MPS, then the CPU. A run trains in bfloat16 on
 //! CUDA and MPS, recomputing its activations as TRL does by default, and in float32 on the CPU, keeping them. Before the
 //! checkpoint downloads, the memory it needs is estimated from the checkpoint's bytes in its listing and its
-//! `config.json` ([`Shape`]) and held against the device's: the GPU's on CUDA, the machine's on MPS and the CPU. On
-//! CUDA a run that does not fit in bfloat16 but fits with its weights in 4-bit NF4 trains with QLoRA; any other run
-//! that does not fit is refused, naming both numbers.
+//! `config.json` ([`Shape`]) and held against the device's: the GPU's on CUDA, the working set Metal recommends Apple's
+//! GPU on MPS, the machine's on the CPU. On CUDA a run that does not fit in bfloat16 but fits with its weights in 4-bit
+//! NF4 trains with QLoRA; any other run that does not fit is refused, naming both numbers.
 
 use anyhow::{Context, Result, bail, ensure};
 use ardana_api::human_size;
@@ -23,6 +23,10 @@ const BATCH: u64 = 8;
 const ACTIVATIONS: u64 = 23;
 /// Python with torch, transformers and TRL, and on a GPU its context.
 const RUNTIME: u64 = 1_000_000_000;
+/// The same on MPS, with Metal's buffers, which torch's allocator keeps cached: the trainer's peak footprint
+/// (`vmmap`'s) passed the estimate made with [`RUNTIME`] by 0.9 to 2.8 GB on five bases of 0.6B to 3B parameters
+/// (qwen3:0.6b, llama-3.2:1b, lfm2.5:1.2b, minicpm5:1b, smollm3:3b on 8 rows of 136 tokens), the same at every size.
+const MPS_RUNTIME: u64 = 4_000_000_000;
 
 /// `--device`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -53,7 +57,8 @@ impl Device {
 pub struct Found {
     /// The first CUDA device's name and memory.
     cuda: Option<(String, u64)>,
-    mps: bool,
+    /// The memory Metal recommends Apple's GPU use (`recommendedMaxWorkingSetSize`), when torch finds the device.
+    mps: Option<u64>,
     /// The machine's physical memory.
     memory: u64,
 }
@@ -65,7 +70,7 @@ impl Found {
         if let Some((gpu, memory)) = &self.cuda {
             names.push(format!("cuda ({gpu}, {})", human_size(*memory)));
         }
-        if self.mps {
+        if self.mps.is_some() {
             names.push("mps".to_string());
         }
         names.push("cpu".to_string());
@@ -100,9 +105,13 @@ pub async fn probe(env: &env::Env, work: &Work, interrupt: &mut Interrupt) -> Re
             gpu["memory"].as_u64().context("devices.py's CUDA memory")?,
         )),
     };
+    let mps = match &found["mps"] {
+        Value::Null => None,
+        mps => Some(mps.as_u64().context("devices.py's MPS memory")?),
+    };
     Ok(Found {
         cuda,
-        mps: found["mps"].as_bool().context("devices.py's mps")?,
+        mps,
         memory: found["memory"].as_u64().context("devices.py's memory")?,
     })
 }
@@ -112,13 +121,13 @@ pub async fn probe(env: &env::Env, work: &Work, interrupt: &mut Interrupt) -> Re
 pub fn pick(asked: Device, found: &Found) -> Result<Device> {
     let device = match asked {
         Device::Auto if found.cuda.is_some() => Device::Cuda,
-        Device::Auto if found.mps => Device::Mps,
+        Device::Auto if found.mps.is_some() => Device::Mps,
         Device::Auto => Device::Cpu,
         asked => asked,
     };
     let there = match device {
         Device::Cuda => found.cuda.is_some(),
-        Device::Mps => found.mps,
+        Device::Mps => found.mps.is_some(),
         Device::Auto | Device::Cpu => true,
     };
     ensure!(
@@ -193,8 +202,15 @@ impl Shape {
     /// (under `four_bit` the linear layers' in 4-bit NF4 with a 4-byte scale per 64, the embeddings' in 16 bits); the
     /// LoRA adapter of every linear layer with its gradients and Adam's two moments, 16 bytes a parameter; the
     /// activations of a step of [`BATCH`] such rows at `width`, every layer's kept, or under `checkpointing` each
-    /// layer's input and one layer's whole; and [`RUNTIME`].
-    fn needs(self, width: u64, four_bit: bool, checkpointing: bool, longest: u64) -> u64 {
+    /// layer's input and one layer's whole; and the `runtime`.
+    fn needs(
+        self,
+        width: u64,
+        four_bit: bool,
+        checkpointing: bool,
+        longest: u64,
+        runtime: u64,
+    ) -> u64 {
         let linear = self.params - self.embeddings;
         let weights = if four_bit {
             linear * 9 / 16 + self.embeddings * 2
@@ -208,7 +224,7 @@ impl Shape {
         } else {
             self.layers * layer
         };
-        weights + adapter + BATCH * longest * token + RUNTIME
+        weights + adapter + BATCH * longest * token + runtime
     }
 }
 
@@ -222,8 +238,8 @@ pub struct Training {
 }
 
 /// How `base`, of `shape`, trains on `device` with rows of up to `longest` tokens, or why it cannot: bfloat16 on CUDA
-/// when it fits the GPU, else QLoRA when that fits; bfloat16 on MPS and float32 on the CPU when it fits the machine's
-/// memory. Says what it picked.
+/// when it fits the GPU, else QLoRA when that fits; bfloat16 on MPS when it fits the working set Metal recommends the
+/// GPU, past which the machine swaps; float32 on the CPU when it fits the machine's memory. Says what it picked.
 pub fn fit(
     device: Device,
     found: &Found,
@@ -231,11 +247,12 @@ pub fn fit(
     longest: u64,
     base: &str,
 ) -> Result<Training> {
-    let (dtype, width, checkpointing) = match device {
-        Device::Cpu => ("float32", 4, false),
-        _ => ("bfloat16", 2, true),
+    let (dtype, width, checkpointing, runtime) = match device {
+        Device::Cpu => ("float32", 4, false, RUNTIME),
+        Device::Mps => ("bfloat16", 2, true, MPS_RUNTIME),
+        _ => ("bfloat16", 2, true, RUNTIME),
     };
-    let needs = shape.needs(width, false, checkpointing, longest);
+    let needs = shape.needs(width, false, checkpointing, longest, runtime);
     let training = Training {
         device,
         dtype,
@@ -251,7 +268,7 @@ pub fn fit(
             );
             return Ok(training);
         }
-        let quantized = shape.needs(width, true, checkpointing, longest);
+        let quantized = shape.needs(width, true, checkpointing, longest, runtime);
         if quantized <= has {
             eprintln!(
                 "{base} needs about {} to train in {dtype}, more than the {} of {gpu}: training with QLoRA, its weights \
@@ -272,6 +289,23 @@ pub fn fit(
             human_size(quantized),
             human_size(has)
         );
+    }
+    if let (Device::Mps, Some(has)) = (device, found.mps) {
+        ensure!(
+            needs <= has,
+            "{base} needs about {} of memory to train on mps in {dtype}, more than the {} Metal recommends Apple's \
+             GPU use on this machine (of its {}); pick a smaller base",
+            human_size(needs),
+            human_size(has),
+            human_size(found.memory)
+        );
+        eprintln!(
+            "{base} trains on mps in {dtype}, needing about {} of the {} Metal recommends Apple's GPU use on this \
+             machine",
+            human_size(needs),
+            human_size(has)
+        );
+        return Ok(training);
     }
     let has = found.memory;
     if needs > has {
@@ -303,7 +337,7 @@ mod tests {
         const GPU_MEMORY: u64 = 24_000_000_000;
         let machine = |cuda: bool, mps: bool| Found {
             cuda: cuda.then(|| ("NVIDIA L4".to_string(), GPU_MEMORY)),
-            mps,
+            mps: mps.then_some(48_000_000_000),
             memory: 64_000_000_000,
         };
         for (cuda, mps, auto) in [
@@ -345,5 +379,66 @@ mod tests {
                 human_size(GPU_MEMORY)
             )
         );
+    }
+
+    /// Q16 on Apple Silicon: a run on MPS is held against the working set Metal recommends the GPU (55.7 GB of the M1
+    /// Max's 68.7 GB), past which the machine swaps, with [`MPS_RUNTIME`]; the CPU against the machine's memory. A base
+    /// of 54 GB in bfloat16 (qwen3.8:27b's text tower: 64 layers of 5,120 and 17,408) fits the machine's memory, not
+    /// the working set, so it is refused on MPS, and on the CPU in float32.
+    #[test]
+    fn fit_holds_mps_to_metals_working_set() {
+        let machine = Found {
+            cuda: None,
+            mps: Some(55_662_788_608),
+            memory: 68_719_476_736,
+        };
+        let big = Shape::of(
+            54_000_000_000,
+            &serde_json::json!({"hidden_size": 5120, "intermediate_size": 17408, "num_hidden_layers": 64,
+                "vocab_size": 248320, "tie_word_embeddings": false, "dtype": "bfloat16"}),
+        )
+        .unwrap();
+        let needs = big.needs(2, false, true, 136, MPS_RUNTIME);
+        assert!(needs > 55_662_788_608 && needs < 68_719_476_736, "{needs}");
+        let err = fit(Device::Mps, &machine, big, 136, "big")
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            err,
+            format!(
+                "big needs about {} of memory to train on mps in bfloat16, more than the 55.7 GB Metal recommends \
+                 Apple's GPU use on this machine (of its 68.7 GB); pick a smaller base",
+                human_size(needs)
+            )
+        );
+        let err = fit(Device::Cpu, &machine, big, 136, "big")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains(
+                "of memory to train on cpu in float32, more than the 68.7 GB this machine has"
+            ),
+            "{err}"
+        );
+
+        // Qwen3-0.6B.
+        let small = Shape::of(
+            1_503_300_328,
+            &serde_json::json!({"hidden_size": 1024, "intermediate_size": 3072, "num_hidden_layers": 28,
+                "vocab_size": 151936, "tie_word_embeddings": true, "torch_dtype": "bfloat16"}),
+        )
+        .unwrap();
+        let training = fit(Device::Mps, &machine, small, 136, "small").unwrap();
+        assert_eq!(
+            (training.device, training.dtype, training.qlora),
+            (Device::Mps, "bfloat16", false)
+        );
+        assert_eq!(
+            small.needs(2, false, true, 136, MPS_RUNTIME)
+                - small.needs(2, false, true, 136, RUNTIME),
+            MPS_RUNTIME - RUNTIME
+        );
+        let training = fit(Device::Cpu, &machine, small, 136, "small").unwrap();
+        assert_eq!((training.device, training.dtype), (Device::Cpu, "float32"));
     }
 }

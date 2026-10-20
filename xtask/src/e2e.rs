@@ -308,7 +308,8 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
         gain: Gain::Above,
     },
     // An `hf.co/` GGUF reference on the CSV data: its checkpoint the base_model its card names (Qwen/Qwen3-0.6B), then
-    // the same GGUF as a local file with `--checkpoint <that snapshot directory>` and `--epochs 1`.
+    // the same GGUF as a local file with `--checkpoint <that snapshot directory>` and `--epochs 1`. On the CPU, in
+    // float32, where the other rows train on Apple's GPU on a Mac.
     FinetuneFixture {
         name: "hf.co-gguf",
         base: "hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0",
@@ -318,6 +319,8 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
             finetune::COMMANDS_QUESTIONS,
             "--name",
             "cmd-risk-gguf",
+            "--device",
+            "cpu",
         ],
         expect: Expect::Answers,
         gain: Gain::Unchecked,
@@ -356,9 +359,62 @@ pub const FINETUNE_FIXTURES: &[FinetuneFixture] = &[
         expect: Expect::Answers,
         gain: Gain::Above,
     },
+    // A text-only checkpoint (`Gemma3ForCausalLM`) whose tokenizer_config.json names a multimodal processor
+    // (`Gemma3Processor`), which the trainer reads through a copy without it.
+    FinetuneFixture {
+        name: "gemma-3:1b",
+        base: "gemma-3:1b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-gemma3",
+            "--epochs",
+            "1",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Above,
+    },
+    // A multimodal Gemma (`Gemma4ForConditionalGeneration`): its text tower loaded through a key mapping from the
+    // checkpoint's `model.language_model.` tensors, which transformers does not map itself, and merged under the text
+    // model's own names.
+    FinetuneFixture {
+        name: "gemma-4:e2b",
+        base: "gemma-4:e2b",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-gemma4",
+            "--epochs",
+            "1",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Above,
+    },
+    // A checkpoint whose `config.json` has `auto_map` (Phi-4-mini's `Phi3ForCausalLM`) for a model transformers
+    // implements itself: trained by transformers' own classes, without `--trust-remote-code`, its code never run.
+    FinetuneFixture {
+        name: "phi-4:mini",
+        base: "phi-4:mini",
+        args: &[
+            finetune::COMMANDS,
+            "--questions",
+            finetune::COMMANDS_QUESTIONS,
+            "--name",
+            "cmd-risk-phi4",
+            "--epochs",
+            "1",
+        ],
+        expect: Expect::Answers,
+        gain: Gain::Above,
+    },
     // The device and memory limits, on a machine without CUDA: qwen3.8:27b on the CPU, about 260 GB in float32, exits 1
-    // naming that estimate and the machine's memory, and with `--device cuda` exits 1 naming the devices torch finds;
-    // neither run downloads a weight.
+    // naming that estimate and the machine's memory, with `--device cuda` exits 1 naming the devices torch finds, and on
+    // a Mac of 64 GiB or less with `--device mps` exits 1 naming the working set Metal recommends; no run downloads a
+    // weight.
     FinetuneFixture {
         name: "limits",
         base: "qwen3.8:27b",
