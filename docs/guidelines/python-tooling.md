@@ -5,8 +5,9 @@ the `typesafe-sdk` venv and the JevBench venv that `cargo xtask fetch` installs 
 `e2e sdk` and `e2e jevbench` run against `ardana serve`. It also covers the decider research clone in
 `tmp/src/decider` that W2 runs to export goldens, the `tmp/py/thx01-export` venv in which `cargo xtask export-thx01`
 runs the `thx01` package for the THX-01 goldens, and the `tmp/py/onnx` venv in which `cargo xtask onnx` exports the
-browser variants (its pins and recipe live in `onnx.md`). Ardana itself ships no Python; nothing here is a runtime
-dependency.
+browser variants (its pins and recipe live in `onnx.md`). Nothing here is a runtime dependency: the one Python
+Ardana runs itself is the training environment `ardana finetune` builds in `$ARDANA_HOME/finetune/` with a uv of its
+own (0.13.1, CPython 3.12, the Q29 pins), which `finetune.md` covers, and which none of the harnesses below shares.
 
 ## Versions
 - `uv` 0.7.3 — the only installer and venv manager for Python work; the dev machine's uv, run inside the sandbox env.

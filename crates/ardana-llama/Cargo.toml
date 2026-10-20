@@ -15,3 +15,4 @@ vulkan = ["llama-cpp-2/vulkan"]
 anyhow.workspace = true
 ardana-core.workspace = true
 llama-cpp-2.workspace = true
+llama-cpp-sys-2.workspace = true

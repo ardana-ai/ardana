@@ -1,8 +1,10 @@
-//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`, and `update`.
-//! `main.rs` only parses arguments and reports errors.
+//! The `ardana` commands, shaped like Ollama's: `serve`, `run`, `pull`, `list`, `show`, `ps`, `rm`, plus `finetune`,
+//! `push` and `update`. `main.rs` only parses arguments and reports errors.
 
 mod ask;
+pub mod finetune;
 mod help;
+mod push;
 mod render;
 pub mod update;
 
@@ -18,7 +20,7 @@ use ardana_core::{DecideError, Decider, Layout, Limits, LoadOptions, Loaded, Run
 use ardana_registry::library::{
     DEFAULT_MODEL, LibraryClient, LibraryPick, LibrarySource, MODELS_PAGE,
 };
-use ardana_registry::{LayoutKind, Named, PullOptions, Registry, RegistryError, ResolvedModel};
+use ardana_registry::{LayoutKind, Named, PullOptions, Registry, ResolvedModel};
 use clap::{ArgAction, ArgMatches, Args, Parser, Subcommand, ValueEnum};
 use serde_json::json;
 use tokenizers::Tokenizer;
@@ -66,6 +68,12 @@ pub enum Command {
     /// Remove models
     #[command(after_help = help::rm())]
     Rm(RmArgs),
+    /// Fine-tune a model on labelled data into a model of your own
+    #[command(after_help = help::finetune())]
+    Finetune(finetune::FinetuneArgs),
+    /// Upload a model ardana finetune made to Hugging Face
+    #[command(after_help = help::push())]
+    Push(push::PushArgs),
     /// Update ardana to the latest release
     #[command(after_help = help::update())]
     Update,
@@ -171,7 +179,8 @@ pub struct PullArgs {
     /// The name to pull it as; default the library model's canonical name or the repository name
     #[arg(long)]
     pub name: Option<String>,
-    /// plain for decider models, chat for instruct models; default plain when decider_config.json is present
+    /// plain for decider models, chat for instruct models; default the layout decider_config.json names (plain unless
+    /// it says chat), else chat
     #[arg(long, value_enum)]
     pub layout: Option<LayoutArg>,
 }
@@ -255,6 +264,8 @@ pub fn run(cli: Cli, matches: &ArgMatches) -> Result<()> {
         Command::Show(args) => show(&args),
         Command::Ps(args) => ps(&args),
         Command::Rm(args) => rm(&args),
+        Command::Finetune(args) => finetune::finetune(&args),
+        Command::Push(args) => push::push(&args),
         Command::Update => update::update(),
     }
 }
@@ -565,9 +576,11 @@ fn get_json(host: &str, port: u16, path: &str) -> Result<serde_json::Value> {
     serde_json::from_str(body).with_context(|| format!("{url}{path} did not answer JSON"))
 }
 
-/// `ardana rm`: the entries only, every name checked before any is removed.
+/// `ardana rm`: the entries, every name checked before any is removed. A model `ardana finetune` made also loses its
+/// directory, `$ARDANA_HOME/models/<name>/` (Q20); the files of every other stay where they are.
 fn rm(args: &RmArgs) -> Result<()> {
-    let mut registry = Registry::open_default()?;
+    let home = Registry::home()?;
+    let mut registry = Registry::open(&home)?;
     let mut names: Vec<&str> = Vec::new();
     for name in &args.names {
         registry.entry(name)?;
@@ -581,6 +594,11 @@ fn rm(args: &RmArgs) -> Result<()> {
     }
     registry.save()?;
     for model in removed {
+        if let Some(dir) = finetune::made(&home, &model)? {
+            std::fs::remove_dir_all(&dir).with_context(|| format!("removing {}", dir.display()))?;
+            println!("removed {} and its files in {}", model.name, dir.display());
+            continue;
+        }
         let kept = if model.source.starts_with("hf.co/") {
             "its weights stay in the Hugging Face cache".to_string()
         } else if model.source.starts_with("ollama:") {
@@ -696,23 +714,7 @@ fn run_named(name: &str, args: &RunArgs, request: &SystemOneRequest) -> Result<A
     let registry = Registry::open_default()?;
     let name = match named(&registry, name)? {
         Named::Pulled(model) => model.name.clone(),
-        Named::Library(pick) => {
-            eprintln!(
-                "pulling {} ({}, {})",
-                pick.name(),
-                pick.reference(),
-                human_size(pick.quant.bytes)
-            );
-            let opts = PullOptions {
-                progress: true,
-                ..PullOptions::default()
-            };
-            let pulled: Result<ResolvedModel, RegistryError> =
-                block_on(ardana_registry::pull_library(&pick, &opts, &runtimes()))?;
-            let (model, _) = record(pulled?)?;
-            eprintln!("pulled {}", model.name);
-            model.name
-        }
+        Named::Library(pick) => block_on(pull_first(&pick))??.name,
     };
     let model = Registry::open_default()?.resolve(&name)?;
     let tokenizer = ardana_registry::load_tokenizer(&model.tokenizer)?;
@@ -720,6 +722,25 @@ fn run_named(name: &str, args: &RunArgs, request: &SystemOneRequest) -> Result<A
     decide(tokenizer, model.profile.clone(), args, request, |opts| {
         Ok(model.load(&runtimes, opts)?)
     })
+}
+
+/// Pulls `pick`, a library model not pulled yet, as `ardana run` does before it answers with it: its progress on
+/// stderr, recorded under its canonical name.
+async fn pull_first(pick: &LibraryPick) -> Result<ResolvedModel> {
+    eprintln!(
+        "pulling {} ({}, {})",
+        pick.name(),
+        pick.reference(),
+        human_size(pick.quant.bytes)
+    );
+    let opts = PullOptions {
+        progress: true,
+        ..PullOptions::default()
+    };
+    let pulled = ardana_registry::pull_library(pick, &opts, &runtimes()).await?;
+    let (model, _) = record(pulled)?;
+    eprintln!("pulled {}", model.name);
+    Ok(model)
 }
 
 /// `ardana run --gguf`: the profile from `--config` and `--layout`, then the weights.

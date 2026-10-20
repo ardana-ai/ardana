@@ -3,7 +3,10 @@
 Ardana is a local-first tool that pulls and runs open System 1 decision models (decider-style one-pass readouts) the
 way Ollama does, from one `ardana` Rust binary that serves them over an HTTP API (compatible with Jev and TypeSafe
 clients) and bundles a Rust/WASM playground. llama.cpp is the first runtime behind the `Runtime` abstraction (GGUF
-files) and Candle the second (safetensors causal LMs, and the THX-01 decision model); Qwen3.5 is the first model family. Planning documents live in
+files) and Candle the second (safetensors causal LMs, and the THX-01 decision model); Qwen3.5 is the first model family.
+`ardana finetune` turns any model it runs into a calibrated model of the user's own (TRL in a venv it builds, llama.cpp's
+converter and the linked quantizer, or a safetensors checkpoint Candle runs, temperatures fitted and a test report
+against the base), and `ardana push` publishes one to Hugging Face. Planning documents live in
 gitignored `*-prd/` folders; when one is present locally, its Decisions and Contracts are binding (as its Amendments
 change them) and its Requirements are the definition of done.
 
@@ -13,10 +16,10 @@ change them) and its Requirements are the definition of done.
 |-------|------|----------------------------------|
 | `crates/ardana` | binary, wires runtimes into registry and server | any |
 | `crates/ardana-api` | Jev wire types and error bodies, compiles for `wasm32-unknown-unknown` | none |
-| `crates/ardana-core` | prompts, tokenizer, readout, runtime traits (causal and decision models), THX-01's sequences, safetensors snapshot files | `ardana-api` |
-| `crates/ardana-llama` | llama.cpp runtime | `ardana-core` |
+| `crates/ardana-core` | prompts, tokenizer, readout, runtime traits (causal and decision models), THX-01's sequences, safetensors snapshot files, fine-tuning data and rows | `ardana-api` |
+| `crates/ardana-llama` | llama.cpp runtime and GGUF quantization | `ardana-core` |
 | `crates/ardana-candle` | Candle runtime for safetensors causal LMs and THX-01, by `config.json#architectures` | `ardana-core` |
-| `crates/ardana-registry` | refs, the model library, `models.toml`, HF and Ollama resolution | `ardana-core` |
+| `crates/ardana-registry` | refs, the model library, `models.toml`, HF and Ollama resolution, a fine-tune's base | `ardana-core` |
 | `crates/ardana-server` | axum server, model lifecycle, embedded playground | anything but the runtimes (`ardana-llama`, `ardana-candle`) |
 | `crates/ardana-playground` | Leptos CSR playground built by trunk, running browser models in the tab (onnxruntime-web) | `ardana-api` |
 | `crates/ardana-engine` | the in-tab engine's tokenizer, planner and readout (ardana-core), a second wasm module | `ardana-api`, `ardana-core` |
@@ -34,9 +37,10 @@ change them) and its Requirements are the definition of done.
   `cargo xtask fetch --check` verifies them. It also runs `npm ci` in `e2e/playground` (`@playwright/test`,
   `lz-string`, `@typesafe-ai/sdk`) and copies the impeccable binary to `tmp/impeccable/bin/0.1.5/impeccable`. Run it
   before `cargo test`: plain tests read the library models' (decider:2b, Qwen3.5, SmolLM3, Gemma 4, Qwen3.8,
-  Llama 3.2, Spark X2.5, Granite 4.2, Nemotron 3 Nano, Apertus) tokenizers, configs and chat templates, and
-  Qwen3-1.7B's, from `tmp/hf`. `cargo xtask fetch --tests`
-  installs only those files (every `[[hf]]` file but the GGUF, ONNX and safetensors weights, no token), which is what
+  Llama 3.2, Spark X2.5, Granite 4.2, Nemotron 3 Nano, Apertus) tokenizers, configs and chat templates (Qwen3.5-0.8B's
+  `config.json`, whose architecture `ardana finetune --format safetensors` refuses, among them), and Qwen3-1.7B's (with
+  its GGUF repository's card, `README.md`, whose `base_model` `ardana finetune` reads), from `tmp/hf`.
+  `cargo xtask fetch --tests` installs only those files (every `[[hf]]` file but the GGUF, ONNX and safetensors weights, no token), which is what
   CI runs. No fetch installs weights: `[[hf]]` pins them, and the `cargo xtask e2e` suite that reads them downloads
   them into `tmp/hf` and removes them when it ends (`xtask/src/hub.rs`).
 - CI (`.github/workflows/ci.yml`) checks every pull request and push to `main`: `cargo fmt --check`, clippy with
@@ -187,7 +191,61 @@ change them) and its Requirements are the definition of done.
   also when a check failed,
   the row's registry entries and every file it added under `tmp/hf/hub` are removed, the files that were there
   before staying, and after the last row the suite runs `cargo clean`: no `target/` is left, and the next cargo
-  command builds from nothing. A failed row does not stop the others; the suite fails naming it).
+  command builds from nothing. A failed row does not stop the others; the suite fails naming it); and the fine-tune
+  suite `finetune` (`cargo xtask e2e finetune`: each `xtask/src/e2e.rs#FINETUNE_FIXTURES` row in turn with the
+  release binary, online, on one home `tmp/e2e/finetune/home` that keeps the training environment from row to row and
+  is removed when the suite ends, also on failure; the suite writes the first 1,000 lines of decider@23579f7's
+  `teacher_data/commands.jsonl` as `commands.jsonl` and their two shared questions, `risk` (safe, caution,
+  destructive) and the noul `outside`, as `commands.questions.json`, and the first 200 lines of its
+  `teacher_data/custom_questions.jsonl`, each with its own noul, choice and score questions, as `custom.jsonl` in
+  `tmp/e2e/finetune/`, then starts one `ardana serve` on the home that runs until the suite ends. A row that answers
+  fine-tunes its model three times: stopped by SIGINT past the trainer's first step (row `qwen3:0.6b`'s is the run
+  that installs uv 0.13.1, CPython 3.12, the Q29 pins, torch the machine's build, `2.14.1` from PyPI on macOS and
+  `2.14.1+cpu` on Linux, and the converter, which the row then checks), then with
+  `trl/scripts/sft.py` moved out of the venv so the trainer exits 1, neither leaving an entry, `models/<name>/` or a
+  working directory, then to the end: `ardana list` lists it, its directory holds `<name>-<QUANT>.gguf` (that file
+  type), the base's tokenizer and chat template files, `decider_config.json` (the base's layout, the temperatures the
+  run says it fitted, by Q30, which `ardana show --json` prints) and `finetune.json` (the split's lines, the device
+  and dtype the run trained on, its `--device`, else `mps` in bfloat16 on a Mac and `cpu` in float32 elsewhere, the
+  suite's machine having no CUDA, and the report its stdout prints: the base, pulled from its default quant, and the
+  model per answer type and overall), the
+  model's overall test accuracy is as the row's `Gain` says against the base's, `ardana run <name> --request -`
+  answers the first data line's questions, the running server lists the model in `/v1/models` and answers the same
+  request at `/v1/systemone` with the answers `ardana run --json` gave, `ardana push <name>
+  hf.co/ardana-e2e/<name> --dry-run` lists every file of its directory but `finetune.json` with its bytes on disk and
+  `README.md` with the card's, `private` (R6.4, rows `qwen3:0.6b` and `safetensors` among them), and `ardana rm`
+  removes the entry and the directory; every row after the first that answers finds the environment's files unchanged and downloads none of
+  it. Rows: `qwen3:0.6b` (`cmd-risk` on the commands data, chat, Q8_0, above the base; 81 to 90 minutes of training
+  on 8 CPU cores, 12 on the M1 Max's GPU), `thx-01` (`hf.co/doofz/THX-01` exits 1 named a decision model, no weight file reaching `tmp/hf`),
+  `decider:0.8b` (`custom-decider` on the custom data, plain with isolated score levels, Q8_0, `--epochs 1`, at least
+  the base's accuracy minus 0.05) and `qwen3.5:0.8b` (`cmd-risk-qwen3.5` on the commands data, the multimodal
+  `Qwen3_5ForConditionalGeneration` trained as its text tower, chat, Q4_0, above the base), `hf.co-gguf`
+  (`cmd-risk-gguf` from `hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` on `commands.csv`, the same lines as CSV, `--device cpu`,
+  so a Mac trains this row on its CPU and the others on its GPU: trained from
+  `Qwen/Qwen3-0.6B`, the `base_model` of the repository's card, recorded with its commit, the base answering as
+  `ardana pull` resolves the reference, not recorded; then `cmd-risk-gguf-local` from that GGUF's file in `tmp/hf`
+  with `--checkpoint <the checkpoint's snapshot directory>` and `--epochs 1`, recorded as `{"path"}`) and
+  `spark-x2.5:1.7b` (`cmd-risk-spark`, `--epochs 1`, refused: without `--trust-remote-code` it exits 1 naming the flag
+  with no weight file reaching `tmp/hf`, as `XHToken/Spark-X2.5-1.7B`'s `config.json` has `auto_map`; then the same
+  run with the flag reaches the trainer, which imports the checkpoint's own code (its log names
+  `transformers_modules`), and stops there leaving nothing, that code targeting transformers 4.57, not the pinned
+  5.18); `hf.co-gguf` checks that the model answers, not its accuracy; and `safetensors`
+  (`cmd-risk-st` from `hf.co/Qwen/Qwen3-0.6B` on the commands data, `--format safetensors`: its directory holds the
+  checkpoint's `config.json` in the training dtype and the merged `model.safetensors`, every tensor in it, F32 on the
+  CPU and BF16 on a Mac's GPU, besides the tokenizer
+  files, `decider_config.json` and `finetune.json` (`"format": "safetensors"`, `quant` null), `ardana show` prints
+  runtime `candle`, the run says it calibrated through `candle`, the base answering as `ardana pull` resolves the
+  checkpoint, through Candle too, above the base), `gemma-3:1b` (`cmd-risk-gemma3`, the text-only checkpoint whose
+  `tokenizer_config.json` names `Gemma3Processor`), `gemma-4:e2b` (`cmd-risk-gemma4`, the multimodal
+  `Gemma4ForConditionalGeneration` trained as its text tower through the key mapping) and `phi-4:mini`
+  (`cmd-risk-phi4`, `Phi3ForCausalLM`, whose `config.json` has `auto_map`, trained by transformers' own class without
+  `--trust-remote-code`), each on the commands data, `--epochs 1`, above the base, and `limits` (on a machine without
+  CUDA: `qwen3.8:27b` with `--device cuda` exits 1 naming the devices torch finds, `cpu` or `mps, cpu`, and with
+  `--device cpu` exits 1 naming the memory estimate, about 260 GB in float32, and the machine's memory, the first the
+  larger, and on a Mac of 64 GiB or less with `--device mps` exits 1 naming the estimate above the working set Metal recommends Apple's
+  GPU and that below the machine's memory; no run puts a weight file into `tmp/hf`). Every row's run says the runtime it calibrated through, llama.cpp for a GGUF. Each row removes
+  every entry it added (its model, the base it pulled), its model directory and every path it added under
+  `tmp/hf/hub` when its checks end, also when one failed; a failed row does not stop the others).
 - `ardana pull <name|ref> [--tokenizer hf.co/<org>/<repo>|<path>] [--name N] [--layout plain|chat]` records a model
   in `$ARDANA_HOME/models.toml` (default `~/.ardana`; `tmp/ardana` under cargo), printing download progress on
   stderr. The library is a list of families with their sizes inside (`decider`: `0.8b`, `2b`, `4b`), each size one
@@ -212,7 +270,9 @@ change them) and its Requirements are the definition of done.
   family's. A size's browser variant is its `browser` table (decider:0.8b, decider:2b and qwen3.5:0.8b today,
   `browser_default` decider:0.8b); refs are
   `hf.co/<org>/<repo>[:<quant>]` (default Q4_K_M), `hf.co/<org>/<repo>:<file>.gguf`, `ollama:[<ns>/]<name>[:<tag>]`
-  (read in place from `$OLLAMA_MODELS`) and local GGUF paths. `hf.co/<org>/<repo>` of a repository with no GGUF and a
+  (read in place from `$OLLAMA_MODELS`) and local GGUF paths. A model pulled without `--layout` is read in the layout
+  its `decider_config.json` names (plain unless it says chat, as a model `ardana push` published may), else in chat.
+  `hf.co/<org>/<repo>` of a repository with no GGUF and a
   `config.json` pulls that safetensors checkpoint at `main` (`config.json`, the shards its index names or its
   `model.safetensors`, the root tokenizer files), recorded with its snapshot directory as the weights and runtime
   `candle` when `config.json#architectures` names one Candle implements (`Qwen3ForCausalLM`, `Qwen2ForCausalLM`,
@@ -233,8 +293,9 @@ change them) and its Requirements are the definition of done.
   go to the
   standard HF cache (`$HF_HOME/hub`); `HF_HUB_OFFLINE=1` resolves `hf.co/` refs from the hub cache only. `ardana list`
   (`ls`: name, size, pull date, source), `ardana show <name> [--json]` (Model, Calibration and Files sections; a
-  library model not pulled yet says how to get it) and `ardana rm <name>...` (the entries only, named as `list` prints
-  them, never model files; every name is checked first) manage
+  library model not pulled yet says how to get it) and `ardana rm <name>...` (the entries, named as `list` prints
+  them, every name checked first; a model `ardana finetune` made also loses its `$ARDANA_HOME/models/<name>/`, any
+  other's files stay) manage
   it; `ardana ps [--host] [--port]` lists the models a running `serve` has loaded (from `/health`).
 - `ardana run <name> [STATE] [--noul Q] [--choice Q OPTION...] [--score Q LEVEL...]` asks inline questions (`q1`,
   `q2`, ... in the order given; the state is read from stdin when left out), or `ardana run <name> --request
@@ -285,6 +346,112 @@ change them) and its Requirements are the definition of done.
   server.
   `models.toml` is reread when it changes, so a model `ardana pull` adds while `serve` runs is servable at once;
   models load on their first request and unload after `--keep-alive` idle.
+- `ardana finetune <base> <data.jsonl|data.csv> --name N [--questions F] [--epochs 2] [--format gguf|safetensors]
+  [--quant Q] [--checkpoint hf.co/<org>/<repo>|<dir>] [--trust-remote-code] [--device auto|cuda|mps|cpu]` (Linux, and
+  macOS on Apple Silicon, PyTorch 2.14.1 shipping no Intel macOS wheels; elsewhere exit 1)
+  trains a LoRA of the base's transformers checkpoint into a System One model (Q7). The base is any model `ardana`
+  runs, looked up as a library size, then a registry entry, then a reference: a library size trains from its pinned
+  checkpoint (a decider size's
+  `source`, an instruct size's `tokenizer` repository), an `hf.co/<org>/<repo>` safetensors checkpoint from itself
+  (at `main`), an `hf.co/` GGUF reference and an entry pulled from one from the `base_model` its repository's card
+  (`README.md` front matter: a scalar, a flow or a block list) names when it names exactly one repository;
+  `--checkpoint` names it for any base (a Hub repository at `main`, or a directory with `config.json` and its
+  safetensors, recorded `{"path"}`), and an `ollama:` reference, a local GGUF file, decider:4b or a card naming none or
+  several are refused naming `--checkpoint`. A checkpoint whose `tokenizer_config.json` has `auto_map` is refused
+  naming `--trust-remote-code` before any weight downloads; one whose `config.json` has it trains by transformers'
+  own classes when the venv's transformers implements its `model_type` (`native.py`, asked once the environment is
+  built and before any weight: phi-4:mini's `phi3`, nemotron-3-nano:4b's `nemotron_h`; without the flag transformers
+  never runs a checkpoint's code), and is refused naming the flag, before any weight, when it does not (spark-x2.5's
+  `spark2_5`). With the flag the trainer and `merge.py` get `trust_remote_code` and the converter (which loads
+  tokenizers with `trust_remote_code=True`) the checkpoint's `*.py`, copied beside the merged model under the flag
+  alone. A base other than a library size reads its
+  tokenizer and profile as `ardana pull` derives them (an entry's as recorded; a GGUF without a `tokenizer.json`
+  beside it the checkpoint's), its license from its card, else the checkpoint's, and its quant from the reference or
+  the GGUF's file name, else `q4_k_m`. A data line is `{"state", "questions"?, "answers": {<id>: <label>}}`, a line
+  without questions asking `--questions` (a map, or a `/v1/systemone` body), a label the option's name,
+  `true`/`false`, a level's index or legend key, or `null`; a `.csv` file holds the same lines as a `state` column and
+  a column per question id of `--questions` (required), each cell a label, an empty cell unlabelled, a missing
+  `state`, an unknown or repeated column refused; the lines are split by line, seeded, 80/10/10 into train,
+  calibration and test, under 100 labelled lines refused and an option under 50 training examples warned (a question
+  being its id and spec: one line each for those labelled on 50 training lines or more, one line counting the
+  questions labelled on fewer). The name (an entry's, a library family's or a library name's is refused, Q27), the
+  base's checkpoint (its listing and `config.json`; a checkpoint with `rl_agent_config.json` refused as a decision
+  model), its tokenizer and profile and every line (errors name `<file>:<line>` and the question) are checked before
+  anything heavy. Then the first run builds
+  `$ARDANA_HOME/finetune/` (uv 0.13.1 from its GitHub release and llama.cpp 26394b4's source archive for
+  `convert_hf_to_gguf.py`, `conversion/` and `gguf-py/`, both sha256-checked against digests compiled in; uv's
+  CPython 3.12 and a venv with the Q29 pins, its torch the machine's build: CUDA's wheels (uv's `--torch-backend
+  auto`) with bitsandbytes 0.50.2 on Linux where `nvidia-smi` answers, PyPI's on macOS arm64, PyTorch's CPU wheels
+  on any other Linux, a venv made for another build created again), which later runs reuse. torch in it then says
+  which devices it finds: `--device auto` takes cuda, then mps, then cpu, and `--device cuda` (or `mps`) torch does
+  not find exits 1 naming the devices it does; cuda and mps train in bfloat16 (mps from macOS 14, transformers' rule),
+  cpu in float32. Before the checkpoint downloads, a memory estimate (the checkpoint's safetensors bytes from its Hub
+  listing at the training dtype, the LoRA adapter
+  with Adam's state, and the activations of 8 rows of the longest row, 23·(hidden + intermediate) values a token and
+  layer, every layer's on the CPU and with gradient checkpointing one layer's on cuda and mps, plus 1 GB, 4 GB on mps)
+  is held against the GPU's memory on cuda, the working set Metal recommends Apple's GPU on mps
+  (`torch.mps.recommended_max_memory()`, 55.7 GB of the M1 Max's 68.7 GB) and the machine's memory on cpu: on cuda a
+  run that fits only with its weights in
+  4-bit trains with QLoRA (TRL's `--load_in_4bit --bnb_4bit_quant_type nf4`) and says so, and any other run that does
+  not fit exits 1 naming the estimate and the memory. The checkpoint
+  downloads to the HF cache; TRL's `sft` script (`train.py` runs it) trains on the very rows `Decider::plan` builds
+  (LoRA r16, alpha 32, all linear layers, lr 1e-4, the epochs, seed 0, the epoch with the lowest calibration loss
+  kept, offline); on mps its fused LM head scores the vocabulary in tiles of 16,384, not 32,768: Metal hangs at random
+  on the float32 product of a 32,768-long sum its backward makes off CUDA, and torch then trains on zeros. Every Python
+  step is stopped, failing the run, as soon as its stderr says a Metal command buffer failed; the LoRA of a model type
+  PEFT treats as Mamba (nemotron-3-nano:4b's `nemotron_h`) leaves its Mamba `out_proj` and `conv1d` out, which PEFT
+  refuses to adapt;
+  `merge.py` merges (`merge_and_unload`, on the CPU at the training dtype); the converter (`convert.py` runs it,
+  reading a NemotronH that declares no `num_experts_per_tok` as the dense model it is, which transformers 5.18's
+  `AutoConfig` would make a mixture of experts) writes an f32 GGUF and the
+  linked `llama_model_quantize` the `--quant` (`llama-quantize`'s aliases too: phi-4:14b's `q4_k` is Q4_K_M), default
+  the base's own GGUF quant. `--format safetensors` writes no GGUF: the model is the merged checkpoint, its
+  safetensors at the training dtype beside the checkpoint's own
+  `config.json` (that dtype;
+  transformers 5's `save_pretrained` config, `rope_parameters` for `rope_theta`, does not read in Candle), registered
+  with its directory as the weights and runtime `candle`. It takes exactly the causal architectures of
+  `ardana_candle::ARCHITECTURES` (all but `THXDecisionModel`, so it grows with Candle): any other, read from the
+  checkpoint's `config.json` (qwen3.5:0.8b's `Qwen3_5ForConditionalGeneration`), is refused before any weight
+  downloads, naming it and `--format gguf`, and `--quant` with it is refused (no GGUF to quantize). A multimodal
+  checkpoint (`*ForConditionalGeneration` with a `text_config`: Qwen3.5's, Gemma 3's, Gemma 4's) trains, merges and
+  converts as its text tower alone, loaded through a `key_mapping` from the multimodal tensor names
+  (`model.language_model.`, `language_model.model.`) to the text model's, merged under the text model's own names and
+  converted named as its checkpoint is (llama.cpp registers every multimodal name for its text model, not every
+  `*ForCausalLM`: b11074 lacks `Gemma4UnifiedForCausalLM`);
+  a checkpoint whose `tokenizer_config.json` names a `processor_class` (every Gemma) is read through a copy without
+  it, so TRL builds the tokenizer, not a multimodal processor.
+  The base the report reads comes after the checkpoint: a library size pulled as `ardana run <base>` pulls it (its
+  default quant and profile), an entry as recorded, a reference resolved as `ardana pull` resolves it, not recorded. The
+  model's temperatures are then fitted on the calibration split through the model itself, the GGUF through llama.cpp
+  and a checkpoint through Candle, the run saying `calibrated <name> through <runtime>` (Q11, Q30, decider's
+  `fit_by_type`: `temperature` over every answer, a `temperature_by_type` entry for a type with 50 answers or more, by
+  NLL over a log grid of 0.05 to 20 refined by golden section), and the base and the model answer the test split:
+  stdout prints accuracy (noul: P(yes) ≥ 0.5), NLL, Brier and 15-bin ECE per answer type and overall for both.
+  `$ARDANA_HOME/models/<name>/` then holds `<name>-<QUANT>.gguf` (or `config.json` and the safetensors), the base's
+  tokenizer and chat template files, `decider_config.json` (the base's layout and score-level mode, the fitted
+  temperatures, which `ardana show` prints) and `finetune.json`
+  (`{base, checkpoint, format, quant, device, dtype, qlora, epochs, rows, license, report}`, the device, dtype and QLoRA
+  it trained with, `report` the same numbers), and it is registered as `<name>`, which `ardana run` and a running
+  `ardana serve` answer. The model is built in `$ARDANA_HOME/finetune/work/<name>-<pid>/`, removed whatever the end;
+  SIGINT (listened for, children killed) and a failing step leave no entry and no `models/<name>/`. The venv compiles
+  its bytecode at install and Python runs with `-B`, so later runs change none of the environment's files.
+- `ardana push <name> hf.co/<org>/<repo> [--public] [--dry-run]` uploads a model `ardana finetune` made (an entry
+  whose weights are in `$ARDANA_HOME/models/<name>/` beside a `finetune.json`; any other entry is refused) to that
+  repository through hf-hub 1.0.0 (`ardana_registry::hub::push`, async on a runtime of its own): every file of the
+  directory but `finetune.json` (`<name>-<QUANT>.gguf`, or `config.json` and the safetensors, the tokenizer and chat
+  template files, `decider_config.json`), at the root where `ardana pull hf.co/<org>/<repo>[:<QUANT>]` reads them,
+  and a model card, `README.md`, made from `finetune.json`: front matter `license` (the base's, lowercased as the Hub writes it, left out when it
+  names none), `base_model` (the checkpoint's repository; a `{"path"}` checkpoint only when it is a hub cache snapshot,
+  `models--<org>--<repo>/snapshots/<commit>`), `base_model_relation: finetune` and `tags` `ardana`, `system-one` and
+  the format; a body with `ardana pull hf.co/<org>/<repo>:<QUANT>` (the repository alone for a checkpoint) and `ardana
+  run <repo> --request request.json`, the Q23 settings, the device and dtype, the split's lines and the test report
+  as a table (a local base by its file name alone). It prints the repository and `private` (or `public`), every file
+  with its bytes, the total and the card; `--dry-run` stops there and sends nothing, needing no token. The
+  repository is created private unless `--public` (Q19); one that exists is pushed to (one commit) only when its
+  visibility is the one asked for. Refused with exit 1 before anything is sent: a target that is no
+  `hf.co/<org>/<repo>` (a quant, a URL), an entry without `finetune.json`, and, without `--dry-run`, no token
+  (`HF_TOKEN`, else `$HF_HOME/token`, which `hf auth login` writes), the message naming both. Never run without
+  `--dry-run` from an agent session; a real push is a by-hand step.
 - `ardana update` installs the latest GitHub Release over an ardana the installers placed, through axoupdater: it
   reads dist's install receipt (`ardana-receipt.json` in `$XDG_CONFIG_HOME/ardana`, then `~/.config/ardana`;
   `%LOCALAPPDATA%\ardana` on Windows), looks ardana-ai/ardana's `releases/latest` up once and prints `ardana is up to
@@ -373,3 +540,4 @@ pinned version, library, pattern or rule), update the matching guideline in the 
 - [Playwright end-to-end tests](docs/guidelines/playwright.md)
 - [Python tooling: uv venvs and tools](docs/guidelines/python-tooling.md)
 - [ONNX browser variants: the model builder, the ardana-ai repositories, onnxruntime-web](docs/guidelines/onnx.md)
+- [Fine-tuning: uv, the venv's pins, TRL and PEFT, the converter and the quantizer](docs/guidelines/finetune.md)

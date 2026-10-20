@@ -2,7 +2,10 @@
 //!
 //! A loaded model lives on its own worker thread, which owns the `LlamaModel` and the one `LlamaContext` borrowing it
 //! (the two cannot share a struct). [`LlamaModelHandle`] is the `Send` side: it sends one prompt per job over a channel and
-//! waits for the label logits, so no `unsafe` is needed to satisfy `LoadedModel: Send`.
+//! waits for the label logits, so no `unsafe` is needed to satisfy `LoadedModel: Send`. [`quantize`] writes the GGUFs
+//! `ardana finetune` builds in the quant asked for.
+
+pub mod quantize;
 
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
@@ -18,6 +21,8 @@ use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::LlamaModel;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::token::LlamaToken;
+
+pub use quantize::{QUANTS, is_quant, quantize};
 
 /// decider's micro-batch: `n_ubatch = min(2048, n_ctx)` (`engine_gguf.py`).
 const MAX_UBATCH: u32 = 2048;

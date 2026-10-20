@@ -153,6 +153,34 @@ pub const GUIDELINES: &[Guideline] = &[
             "https://huggingface.co/docs/",
         ],
     },
+    Guideline {
+        file: "finetune.md",
+        pins: &[
+            ("uv", "0.13.1"),
+            ("CPython", "3.12"),
+            ("llama.cpp", "26394b4"),
+            ("torch", "2.14.1"),
+            ("transformers", "5.18.0"),
+            ("peft", "0.21.2"),
+            ("trl", "1.16.0"),
+            ("accelerate", "1.15.0"),
+            ("datasets", "5.1.0"),
+            ("safetensors", "0.8.0"),
+            ("tokenizers", "0.23.2"),
+            ("sentencepiece", "0.2.2"),
+            ("protobuf", "7.36.2"),
+            ("numpy", "2.5.3"),
+            ("bitsandbytes", "0.50.2"),
+        ],
+        official: &[
+            "https://huggingface.co/docs/",
+            "https://github.com/huggingface/",
+            "https://docs.astral.sh/uv/",
+            "https://github.com/astral-sh/uv",
+            "https://github.com/ggml-org/llama.cpp",
+            "https://docs.rs/tokio",
+        ],
+    },
 ];
 
 /// Rules `CLAUDE.md` must state, each recognised by a phrase it contains.

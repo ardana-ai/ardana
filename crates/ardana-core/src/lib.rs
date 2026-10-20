@@ -5,10 +5,14 @@
 //! [`runtime::LoadedModel`], and [`py`] holds the Python semantics (JSON text, rounding, summation) the output
 //! depends on. [`chat`] derives the chat layout of stock instruct models from their chat template, and [`snapshot`]
 //! names the files of a safetensors checkpoint. [`thx01`] builds the question sequences of a decision model
-//! ([`runtime::DecisionModel`], THX-01), which the same [`engine::Decider`] plans and answers.
+//! ([`runtime::DecisionModel`], THX-01), which the same [`engine::Decider`] plans and answers. [`finetune`] reads the
+//! labelled lines `ardana finetune` trains on into the rows the same planner builds, and [`calibrate`] fits its model's
+//! temperatures and grades its answers.
 
+pub mod calibrate;
 pub mod chat;
 pub mod engine;
+pub mod finetune;
 pub mod profile;
 pub mod prompt;
 pub mod py;
@@ -26,8 +30,8 @@ pub use ardana_api::{
 pub use chat::{ChatTemplateError, TemplateSpecials, chat_layout, read_template};
 pub use engine::{DecideError, Decider, DecisionSequence, Decode, Limits, Plan};
 pub use profile::{
-    AnswerType, DecisionFormat, Layout, ModelProfile, ProfileError, from_decider_config,
-    from_rl_agent_config,
+    AnswerType, DecisionFormat, Layout, ModelProfile, ProfileError, decider_layout,
+    from_decider_config, from_rl_agent_config,
 };
 pub use runtime::{DecisionModel, LoadOptions, Loaded, LoadedModel, Runtime, Runtimes};
 /// The tokenizer a [`Decider`] reads with, for the playground, which builds one from `tokenizer.json`'s bytes on its
